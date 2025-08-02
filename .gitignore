@@ -1,0 +1,213 @@
+# KireMisu - Manga Reader & Library Management System
+# Generated for Python FastAPI + Next.js + Docker stack
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+
+# Python Backend
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# FastAPI & Uvicorn
+.coverage
+htmlcov/
+.tox/
+.nox/
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Virtual Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Next.js Frontend
+.next/
+out/
+build/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Package Manager Lock Files (keep one, comment out others based on your choice)
+package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+postgres_data/
+pgdata/
+
+# Manga Library & Media Files
+# Note: You may want to include sample files for testing
+manga_library/
+test_manga/
+media/
+uploads/
+thumbnails/
+cache/
+*.cbz
+*.cbr
+*.pdf
+# Keep sample files for testing
+!sample_manga/
+!test_fixtures/*.cbz
+!test_fixtures/*.cbr
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+# Keep main docker-compose files
+# docker-compose.yml
+# docker-compose.prod.yml
+
+# Container Volumes
+postgres_data/
+thumbnail_cache/
+redis_data/
+
+# Kubernetes
+k8s/secrets/
+*.kubeconfig
+
+# IDE & Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.tmp
+*.temp
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Runtime & Temporary Files
+pids
+*.pid
+*.seed
+*.pid.lock
+.grunt
+.lock-wscript
+.nyc_output
+.node_repl_history
+*.tgz
+.yarn-integrity
+.yarn-cache/
+
+# Testing
+.coverage
+.nyc_output
+coverage/
+.pytest_cache/
+test-results/
+playwright-report/
+test-results/
+results.xml
+
+# Monitoring & Observability
+prometheus_data/
+grafana_data/
+elasticsearch_data/
+
+# Backup Files
+*.bak
+*.backup
+*.old
+backups/
+
+# MCP Server Files (if any local state)
+.mcp/
+
+# Claude Code specific (if any)
+.claude/logs/
+
+# Temporary Development Files
+TODO.md
+NOTES.md
+dev_notes/
+scratch/
+temp/
