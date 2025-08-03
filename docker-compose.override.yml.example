@@ -1,0 +1,43 @@
+# Example Docker Compose override file
+# Copy this to docker-compose.override.yml to customize your development environment
+# This file is automatically used by docker-compose if it exists
+
+version: '3.8'
+
+services:
+  postgres:
+    # Uncomment to use custom port if 5432 is occupied
+    # ports:
+    #   - "5433:5432"
+    
+    # Uncomment to change restart policy
+    # restart: "no"
+    
+    # Uncomment to add custom environment variables
+    # environment:
+    #   POSTGRES_DB: kiremisu_custom
+    #   POSTGRES_USER: custom_user
+    #   POSTGRES_PASSWORD: custom_password
+
+  backend:
+    # Uncomment to use custom port if 8000 is occupied
+    # ports:
+    #   - "8001:8000"
+    
+    # Uncomment to mount additional volumes
+    # volumes:
+    #   - ./custom-manga-library:/custom-manga:ro
+    
+    # Uncomment to add custom environment variables
+    # environment:
+    #   - DEBUG=true
+    #   - LOG_LEVEL=debug
+
+  frontend:
+    # Uncomment to use custom port if 3000 is occupied
+    # ports:
+    #   - "3001:3000"
+    
+    # Uncomment to add custom environment variables
+    # environment:
+    #   - NEXT_PUBLIC_API_URL=http://localhost:8001

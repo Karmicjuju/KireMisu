@@ -1,0 +1,92 @@
+# Docker Compose file for KireMisu production environment
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kiremisu-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-kiremisu}
+      POSTGRES_USER: ${POSTGRES_USER:-kiremisu}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kiremisu}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kiremisu} -d ${POSTGRES_DB:-kiremisu}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kiremisu
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: kiremisu-backend
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-kiremisu}:${POSTGRES_PASSWORD:-kiremisu}@postgres:5432/${POSTGRES_DB:-kiremisu}
+      - SECRET_KEY=${SECRET_KEY:-change-this-secret-key}
+      - DEBUG=${DEBUG:-false}
+      - HOST=0.0.0.0
+      - PORT=8000
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-["http://localhost:3000"]}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ${MANGA_STORAGE_PATH:-./manga-storage}:/manga-storage:ro
+      - thumbnails:/app/thumbnails
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - kiremisu
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: kiremisu-frontend
+    environment:
+      - BACKEND_URL=http://backend:8000
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      - backend
+    networks:
+      - kiremisu
+    restart: unless-stopped
+
+  # Optional: Redis for caching (if needed in the future)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: kiremisu-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   networks:
+  #     - kiremisu
+  #   restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  thumbnails:
+    driver: local
+  # redis_data:
+  #   driver: local
+
+networks:
+  kiremisu:
+    driver: bridge
