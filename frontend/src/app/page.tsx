@@ -1,3 +1,7 @@
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { Settings } from 'lucide-react';
+
 export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-24">
@@ -7,12 +11,20 @@ export default function Home() {
           <p className="mb-8 text-xl text-muted-foreground">
             Self-hosted manga reader and library management system
           </p>
-          <div className="space-y-2 text-left">
+          <div className="mb-8 space-y-2 text-left">
             <p className="text-sm">🚧 Under Development</p>
             <p className="text-sm">📚 Manga Library Management</p>
             <p className="text-sm">🔍 MangaDx Integration</p>
             <p className="text-sm">📖 Advanced Reading Experience</p>
             <p className="text-sm">🏷️ Custom Tagging & Organization</p>
+          </div>
+          <div className="flex justify-center">
+            <Link href="/settings">
+              <Button>
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </Button>
+            </Link>
           </div>
         </div>
       </div>

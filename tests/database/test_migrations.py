@@ -21,10 +21,17 @@ def test_migration_file_exists() -> None:
     content = initial_migration.read_text()
 
     # Verify key table creation commands are present
-    assert 'create_table(\n        "series"' in content, "Series table creation should be in migration"
-    assert 'create_table(\n        "chapters"' in content, "Chapters table creation should be in migration"
+    assert 'create_table(\n        "series"' in content, (
+        "Series table creation should be in migration"
+    )
+    assert 'create_table(\n        "chapters"' in content, (
+        "Chapters table creation should be in migration"
+    )
     assert 'create_table(\n        "annotations"' in content, (
         "Annotations table creation should be in migration"
+    )
+    assert 'create_table(\n        "library_paths"' in content, (
+        "Library paths table creation should be in migration"
     )
 
     # Verify essential indexes are created
