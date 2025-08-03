@@ -194,7 +194,10 @@ test.describe('Library Paths API Integration', () => {
 
     // Click delete button (trash icon) - scope to main content to avoid sidebar conflicts
     const mainContent = page.locator('main');
-    await mainContent.locator('button').filter({ has: page.locator('svg') }).click();
+    await mainContent
+      .locator('button')
+      .filter({ has: page.locator('svg') })
+      .click();
 
     // Should show success toast
     await expect(page.getByText('Path deleted')).toBeVisible();
@@ -224,6 +227,8 @@ test.describe('Library Paths API Integration', () => {
     await expect(page).toHaveURL('/settings');
 
     // Should show empty state (component handles errors gracefully)
-    await expect(page.getByText('No library paths configured. Add a path to get started.')).toBeVisible();
+    await expect(
+      page.getByText('No library paths configured. Add a path to get started.')
+    ).toBeVisible();
   });
 });
