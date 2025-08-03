@@ -31,6 +31,7 @@ print_usage() {
     echo "  lint           - Run linting for all code"
     echo "  format         - Format all code"
     echo "  test           - Run all tests"
+    echo "  test-e2e       - Run frontend E2E tests"
     echo "  clean          - Clean build artifacts and dependencies"
     echo ""
     echo "Docker Commands:"
@@ -459,6 +460,16 @@ run_tests() {
     log_success "Tests complete"
 }
 
+run_e2e_tests() {
+    log_info "Running frontend E2E tests..."
+    
+    # Frontend E2E tests
+    cd "$PROJECT_ROOT/frontend"
+    npm run test:e2e
+    
+    log_success "E2E tests complete"
+}
+
 clean_environment() {
     log_info "Cleaning development environment..."
     
@@ -550,6 +561,9 @@ case "$1" in
         ;;
     test)
         run_tests
+        ;;
+    test-e2e)
+        run_e2e_tests
         ;;
     clean)
         clean_environment
