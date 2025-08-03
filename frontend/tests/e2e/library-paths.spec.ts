@@ -5,7 +5,7 @@ test.describe('Library Paths Management', () => {
     // Navigate directly to settings page (which has the app layout with sidebar)
     await page.goto('/settings');
     await expect(page).toHaveURL('/settings');
-    
+
     // Wait for the page to be fully loaded
     await page.waitForLoadState('domcontentloaded');
   });
@@ -114,7 +114,9 @@ test.describe('Library Paths Management', () => {
     });
 
     // Click the directory picker button (folder icon) - target the button next to the input
-    const pathInputGroup = page.locator('input[placeholder*="/path/to/manga/library"]').locator('..');
+    const pathInputGroup = page
+      .locator('input[placeholder*="/path/to/manga/library"]')
+      .locator('..');
     const folderButton = pathInputGroup.getByRole('button').first();
     await folderButton.click();
 
@@ -147,7 +149,7 @@ test.describe('Library Paths Management', () => {
 
     // Wait for the form to be fully visible
     await expect(page.getByRole('heading', { name: 'Add New Library Path' })).toBeVisible();
-    
+
     // Click on the path input to start the focus sequence
     await page.getByLabel('Directory Path').click();
     await expect(page.getByLabel('Directory Path')).toBeFocused();

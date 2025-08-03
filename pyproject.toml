@@ -46,6 +46,8 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py313"
+
+[tool.ruff.lint]
 select = [
     "E",   # pycodestyle errors
     "W",   # pycodestyle warnings
@@ -130,4 +132,9 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "class .*\\bProtocol\\):",
     "@(abc\\.)?abstractmethod",
+]
+
+[dependency-groups]
+dev = [
+    "aiosqlite>=0.21.0",
 ]

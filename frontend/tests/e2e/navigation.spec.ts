@@ -46,7 +46,9 @@ test.describe('Navigation', () => {
 
     // Check for welcome page content (standalone page)
     await expect(page.getByRole('heading', { name: 'Welcome to KireMisu!' })).toBeVisible();
-    await expect(page.getByText('Your self-hosted manga reader and library management system')).toBeVisible();
+    await expect(
+      page.getByText('Your self-hosted manga reader and library management system')
+    ).toBeVisible();
 
     // Check for stats cards on welcome page
     await expect(page.getByText('Total Series')).toBeVisible();
@@ -56,7 +58,9 @@ test.describe('Navigation', () => {
 
     // Check for getting started section
     await expect(page.getByRole('heading', { name: 'Getting Started' })).toBeVisible();
-    await expect(page.getByText('Navigate to Settings to configure your library paths')).toBeVisible();
+    await expect(
+      page.getByText('Navigate to Settings to configure your library paths')
+    ).toBeVisible();
   });
 
   test('should display sidebar elements', async ({ page }) => {
@@ -73,7 +77,7 @@ test.describe('Navigation', () => {
     // Test that collapse button is present and functional
     const collapseButton = page.getByRole('button', { name: 'Collapse' });
     await expect(collapseButton).toBeVisible();
-    
+
     // Just verify the button is clickable (don't test full collapse/expand cycle for now)
     await expect(collapseButton).toBeEnabled();
   });
