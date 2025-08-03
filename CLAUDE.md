@@ -20,15 +20,23 @@ KireMisu is a self-hosted, cloud-first manga reader and library management syste
 ### Refence documentation
 - File found in docs/kiremisu_tech_stack.md
 
-### Tech Stack (Planned)
+### Tech Stack (Current)
 - **Backend**: FastAPI + Python 3.13+ with async performance
 - **Database**: PostgreSQL 16+ + JSONB for flexible metadata and ACID compliance
-- **Frontend**: Next.js 22+ + TypeScript with SSR performance
+- **Frontend**: Next.js 15.4+ + React 19+ + TypeScript with SSR performance
 - **UI Framework**: Tailwind CSS + shadcn/ui components
 - **State Management**: Zustand for optimal reading app performance
 - **File Processing**: PIL + PyMuPDF + rarfile for comprehensive manga format support
 - **Background Jobs**: PostgreSQL-based queue (eliminating Redis dependency)
 - **Deployment**: Docker + Kubernetes for self-hosted flexibility
+
+### Version Requirements
+- **Node.js**: >=18.17.0
+- **npm**: >=9.0.0
+- **Python**: >=3.13
+- **Next.js**: >=15.4.0 (latest stable)
+- **React**: >=19.0.0 (latest stable)
+- **PostgreSQL**: >=16.0
 
 ### System Architecture
 - **Self-Hosted Web Application**: Accessed via browser, avoiding Electron bloat
@@ -188,12 +196,51 @@ This repository currently contains:
 - Support both simple Docker Compose and Kubernetes deployments
 - Externalize all persistent data to volumes/databases
 
-### Testing Strategy
-- Unit tests for core logic (metadata parsing, file processing, API endpoints)
-- Integration tests for workflows (adding series, syncing metadata, watching)
-- End-to-end UI tests with Playwright for user workflows
-- Use mock data for external API dependencies
-- Test file processing with various manga formats
+### Testing Strategy & Standards
+
+#### Test Requirements (Definition of Done)
+Every feature MUST include:
+1. **Backend Tests**: Unit + integration tests with ≥80% coverage
+2. **UI Tests**: Playwright E2E tests covering user workflows
+3. **Build Verification**: `npm run build` must pass without errors
+4. **Manual Testing**: UI functionality verified in development server
+5. **Version Compatibility**: Latest stable versions of dependencies
+
+#### Test Coverage Standards
+- **Backend**: Unit tests for service layer, integration tests for API endpoints
+- **Frontend**: E2E tests for user interactions, form validation, error handling
+- **Integration**: API mocking for reliable testing without backend dependencies
+- **Accessibility**: Keyboard navigation and screen reader compatibility
+- **Error Scenarios**: Network failures, validation errors, loading states
+
+#### Testing Commands
+```bash
+# Backend tests
+./scripts/dev.sh test
+
+# Frontend E2E tests
+./scripts/dev.sh test-e2e
+
+# Build verification
+cd frontend && npm run build
+
+# Development server test
+cd frontend && npm run dev
+```
+
+#### Quality Gates
+Before any feature is considered complete:
+1. ✅ All tests pass
+2. ✅ Build completes without errors
+3. ✅ UI loads without runtime errors
+4. ✅ Latest stable dependency versions
+5. ✅ Linting passes
+6. ✅ Type checking passes
+
+#### Version Management
+- **Always use latest stable versions** of Next.js, React, and other frontend dependencies
+- **Test immediately after updates** to catch breaking changes
+- **Update CLAUDE.md version requirements** when upgrading major versions
 
 ### Development Commands
 

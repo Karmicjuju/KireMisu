@@ -128,14 +128,6 @@ export function LibraryPaths() {
     setFormData({ path: '', enabled: true, scan_interval_hours: 24 });
   };
 
-  if (error) {
-    return (
-      <div className="space-y-4">
-        <div className="text-destructive">Failed to load library paths.</div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -153,6 +145,12 @@ export function LibraryPaths() {
           )}
         </div>
       </div>
+
+      {error && pathsData?.paths?.length && (
+        <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4">
+          <div className="text-destructive">Some library paths may not be displaying correctly.</div>
+        </div>
+      )}
 
       {isAdding && (
         <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border p-4">
