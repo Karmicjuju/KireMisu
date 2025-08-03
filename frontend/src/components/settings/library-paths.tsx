@@ -148,7 +148,9 @@ export function LibraryPaths() {
 
       {error && pathsData?.paths?.length && (
         <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4">
-          <div className="text-destructive">Some library paths may not be displaying correctly.</div>
+          <div className="text-destructive">
+            Some library paths may not be displaying correctly.
+          </div>
         </div>
       )}
 
