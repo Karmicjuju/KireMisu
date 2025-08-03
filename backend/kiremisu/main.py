@@ -38,7 +38,7 @@ async def health():
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         "kiremisu.main:app",
         host=settings.host,

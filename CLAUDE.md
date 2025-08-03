@@ -38,6 +38,68 @@ API SPec for Mangadex is at https://api.mangadex.org/docs/swagger.html
 - **Flexible Metadata Schema**: JSONB fields enable schema evolution without migrations
 - **Background Processing**: Async file processing with thread pool isolation
 
+## §3. Database Schema
+
+### Core Tables
+
+#### Series Table
+The `series` table stores manga series metadata and configuration:
+- **Primary Key**: UUID for distributed system compatibility
+- **Essential Indexes**:
+  - `ix_series_title_primary`: Fast title searches
+  - `ix_series_author`: Author-based filtering
+  - `ix_series_artist`: Artist-based filtering  
+  - `ix_series_publication_status`: Status filtering (ongoing, completed, etc.)
+- **Key Fields**:
+  - `mangadx_id`: External identifier with unique constraint
+  - `source_metadata`/`user_metadata`: JSONB for flexible schema evolution
+  - `watching_*`: Configuration for automated chapter checking
+  - Statistics fields for reading progress tracking
+
+#### Chapters Table
+The `chapters` table stores individual chapter information:
+- **Primary Key**: UUID with foreign key to series
+- **Essential Indexes**:
+  - `ix_chapters_series_id`: Fast series-based queries
+  - `ix_chapters_series_chapter_volume`: Compound index for unique chapter identification
+  - `ix_chapters_series_ordering`: Optimized for chapter ordering within series
+- **Key Fields**:
+  - `chapter_number`: Float to support fractional chapters (1.5, etc.)
+  - `file_path`: Source file location (app doesn't move files)
+  - Reading progress tracking fields
+
+#### Supporting Tables
+- **Annotations**: Per-chapter user notes with page-level precision
+- **Library Paths**: Configured storage locations for scanning
+- **Job Queue**: PostgreSQL-based background task management
+- **User Lists**: Custom collections and reading lists
+
+### Database Design Decisions
+
+#### Synchronous Migrations
+**Decision**: Use synchronous database operations for Alembic migrations while keeping the main application async.
+**Rationale**: 
+- Avoids complex dependencies like `greenlet` for self-hosted deployments
+- Simplifies build process and reduces image size
+- Improves reliability across different architectures (ARM/x86)
+- Migration operations are inherently sequential and don't benefit from async
+
+**Implementation**: 
+- Main app uses `asyncpg` for async PostgreSQL operations
+- Migrations use `psycopg2-binary` for reliable, synchronous operations
+- Database URL automatically converted from async to sync format in Alembic env
+
+#### JSONB for Metadata
+- Enables schema evolution without migrations
+- Supports rich metadata from external sources (MangaDx)
+- Allows user customization and annotation storage
+- Indexed queries on JSON fields when needed
+
+#### UUID Primary Keys
+- Enables distributed system patterns if needed
+- Avoids integer key conflicts during imports
+- Better for API exposure and security
+
 ## Core Features
 
 ### Media Management

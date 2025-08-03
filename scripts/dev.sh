@@ -26,6 +26,7 @@ print_usage() {
     echo "  frontend       - Start frontend development server"
     echo "  db-setup       - Set up PostgreSQL database"
     echo "  db-migrate     - Run database migrations"
+    echo "  db-revision    - Generate new database migration"
     echo "  db-reset       - Reset database (drops and recreates)"
     echo "  lint           - Run linting for all code"
     echo "  format         - Format all code"
@@ -186,16 +187,50 @@ check_and_handle_ports() {
     fi
 }
 
+ensure_venv() {
+    cd "$PROJECT_ROOT"
+    
+    # Check if we're already in a virtual environment
+    if [ -n "$VIRTUAL_ENV" ]; then
+        log_info "Already in virtual environment: $VIRTUAL_ENV"
+        return 0
+    fi
+    
+    # Check if .venv exists
+    if [ ! -d ".venv" ]; then
+        log_info "Creating virtual environment..."
+        python3 -m venv .venv
+    else
+        log_info "Virtual environment already exists"
+    fi
+    
+    # Activate virtual environment
+    log_info "Activating virtual environment..."
+    source .venv/bin/activate
+    
+    # Verify activation
+    if [ -n "$VIRTUAL_ENV" ]; then
+        log_success "Virtual environment activated: $VIRTUAL_ENV"
+    else
+        log_error "Failed to activate virtual environment"
+        return 1
+    fi
+}
+
 setup_backend() {
     log_info "Setting up Python backend..."
     cd "$PROJECT_ROOT"
+    
+    # Ensure we're in a virtual environment
+    ensure_venv || return 1
     
     # Check for uv, fallback to pip
     if command -v uv &> /dev/null; then
         log_info "Installing dependencies with uv..."
         uv sync --dev
     else
-        log_warning "uv not found, using pip..."
+        log_info "Installing dependencies with pip..."
+        python -m pip install --upgrade pip
         python -m pip install -e ".[dev]"
     fi
     
@@ -230,7 +265,8 @@ setup_dev_environment() {
     # Setup frontend
     setup_frontend
     
-    # Setup pre-commit hooks
+    # Setup pre-commit hooks (ensure venv is active)
+    ensure_venv || return 1
     if command -v pre-commit &> /dev/null; then
         log_info "Installing pre-commit hooks..."
         pre-commit install
@@ -257,10 +293,13 @@ start_backend() {
     log_info "Starting backend development server..."
     cd "$PROJECT_ROOT"
     
+    # Ensure we're in a virtual environment
+    ensure_venv || return 1
+    
     if command -v uv &> /dev/null; then
         uv run python -m kiremisu.main
     else
-        python -m backend.kiremisu.main
+        python -m kiremisu.main
     fi
 }
 
@@ -293,6 +332,12 @@ setup_database() {
 
 run_migrations() {
     log_info "Running database migrations..."
+    cd "$PROJECT_ROOT"
+    
+    # Ensure we're in a virtual environment
+    ensure_venv || return 1
+    
+    # Navigate to backend directory for alembic
     cd "$PROJECT_ROOT/backend"
     
     if command -v uv &> /dev/null; then
@@ -302,6 +347,35 @@ run_migrations() {
     fi
     
     log_success "Migrations complete"
+}
+
+generate_migration() {
+    log_info "Generating new database migration..."
+    cd "$PROJECT_ROOT"
+    
+    # Ensure we're in a virtual environment
+    ensure_venv || return 1
+    
+    # Navigate to backend directory for alembic
+    cd "$PROJECT_ROOT/backend"
+    
+    # Check if message was provided as argument
+    local message="$1"
+    if [ -z "$message" ]; then
+        read -p "Enter migration message: " message
+        if [ -z "$message" ]; then
+            log_error "Migration message is required"
+            return 1
+        fi
+    fi
+    
+    if command -v uv &> /dev/null; then
+        uv run alembic revision --autogenerate -m "$message"
+    else
+        alembic revision --autogenerate -m "$message"
+    fi
+    
+    log_success "Migration generated successfully"
 }
 
 reset_database() {
@@ -324,6 +398,10 @@ run_lint() {
     
     # Backend linting
     cd "$PROJECT_ROOT"
+    
+    # Ensure we're in a virtual environment
+    ensure_venv || return 1
+    
     if command -v uv &> /dev/null; then
         uv run ruff check .
     else
@@ -342,6 +420,10 @@ run_format() {
     
     # Backend formatting
     cd "$PROJECT_ROOT"
+    
+    # Ensure we're in a virtual environment
+    ensure_venv || return 1
+    
     if command -v uv &> /dev/null; then
         uv run ruff format .
     else
@@ -360,6 +442,10 @@ run_tests() {
     
     # Backend tests
     cd "$PROJECT_ROOT"
+    
+    # Ensure we're in a virtual environment
+    ensure_venv || return 1
+    
     if command -v uv &> /dev/null; then
         uv run pytest
     else
@@ -449,6 +535,9 @@ case "$1" in
         ;;
     db-migrate)
         run_migrations
+        ;;
+    db-revision)
+        generate_migration "$2"
         ;;
     db-reset)
         reset_database
