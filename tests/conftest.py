@@ -13,8 +13,11 @@ from kiremisu.database.connection import get_db
 from kiremisu.main import app
 
 
-# Test database URL - uses in-memory SQLite for fast tests
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+# Test database URL - uses PostgreSQL test database
+TEST_DATABASE_URL = os.getenv(
+    "TEST_DATABASE_URL",
+    "postgresql+asyncpg://kiremisu:kiremisu@localhost:5432/kiremisu_test"
+)
 
 
 @pytest.fixture(scope="session")

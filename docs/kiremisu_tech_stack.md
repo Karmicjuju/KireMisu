@@ -6,7 +6,7 @@
 |-----------|------------|-------------------|
 | **Backend API** | FastAPI + Python 3.13+ | Async performance, auto-generated docs, type safety |
 | **Database** | PostgreSQL + JSONB | ACID compliance with flexible metadata support |
-| **Frontend** | Next.js 22+ + TypeScript | SSR performance, React ecosystem maturity |
+| **Frontend** | Next.js 15.4+ + React 19+ + TypeScript | SSR performance, React ecosystem maturity |
 | **UI Framework** | Tailwind CSS + shadcn/ui | Non-UI developer friendly with component library |
 | **State Management** | Zustand | Minimal API, excellent performance for reading apps |
 | **HTTP Client** | HTTPX | Unified async/sync interface, HTTP/2 support |
@@ -78,7 +78,7 @@ CREATE INDEX idx_series_watching ON series USING GIN (watching_config);
 
 ## Frontend Architecture
 
-### Next.js 22+ + TypeScript
+### Next.js 15.4+ + React 19+ + TypeScript
 **Why:** Server-side rendering improves initial load performance for large manga libraries. TypeScript prevents runtime errors critical in file management applications. App Router provides modern React patterns.
 
 **Key Architecture Pattern:**

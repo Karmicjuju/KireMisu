@@ -31,9 +31,29 @@ export interface LibraryPathList {
   total: number;
 }
 
+export interface LibraryScanRequest {
+  library_path_id?: string;
+}
+
+export interface LibraryScanStats {
+  series_found: number;
+  series_created: number;
+  series_updated: number;
+  chapters_found: number;
+  chapters_created: number;
+  chapters_updated: number;
+  errors: number;
+}
+
+export interface LibraryScanResponse {
+  status: string;
+  message: string;
+  stats: LibraryScanStats;
+}
+
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
-  timeout: 10000,
+  timeout: 60000, // Increased timeout for library scanning operations
 });
 
 export const libraryApi = {
@@ -61,8 +81,8 @@ export const libraryApi = {
     await api.delete(`/api/library/paths/${id}`);
   },
 
-  async triggerScan(): Promise<{ message: string; paths_to_scan: number; status: string }> {
-    const response = await api.post('/api/library/scan');
+  async triggerScan(data?: LibraryScanRequest): Promise<LibraryScanResponse> {
+    const response = await api.post<LibraryScanResponse>('/api/library/scan', data);
     return response.data;
   },
 };

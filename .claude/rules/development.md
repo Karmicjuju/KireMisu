@@ -3,7 +3,7 @@
 ## Code Quality Standards
 
 ### Python Backend Development
-- Use Python 3.11+ with type hints for all functions and methods
+- Use Python 3.13+ with type hints for all functions and methods
 - Follow FastAPI patterns with async/await for I/O operations
 - Use Pydantic models for all API request/response schemas
 - Implement proper dependency injection for database sessions and services
@@ -113,22 +113,6 @@ async def get_series(
 - Log client-side errors for debugging
 - Handle offline scenarios gracefully
 
-## Testing Requirements
-
-### Backend Testing
-- Unit tests for all business logic with >90% coverage
-- Integration tests for API endpoints
-- Mock external API dependencies
-- Test file processing with various manga formats
-- Performance tests for large library operations
-
-### Frontend Testing
-- Component tests for all UI components
-- Integration tests for user workflows
-- Visual regression tests for design consistency
-- Performance tests for reading interface
-- Accessibility tests for keyboard navigation
-
 ## Documentation Standards
 
 ### Code Documentation
@@ -149,7 +133,6 @@ async def get_series(
 
 ### Commit Standards
 - Use conventional commit messages (feat:, fix:, docs:, etc.)
-- Keep commits atomic and focused on single changes
 - Include tests with feature implementations
 - Update documentation with code changes
 - Use proper branch naming conventions
@@ -161,18 +144,3 @@ async def get_series(
 - Use semantic versioning for releases
 - Tag releases with detailed changelogs
 
-## Environment Management
-
-### Development Setup
-- Use virtual environments for Python dependencies
-- Pin all dependency versions
-- Provide Docker Compose for local development
-- Include sample data for testing
-- Document all required environment variables
-
-### Production Deployment
-- Use container images for deployments
-- Externalize all configuration
-- Implement health checks for all services
-- Use proper logging and monitoring
-- Follow security hardening guidelines

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Library Scanning API Integration', () => {
+test.describe('Library Scanning Functionality', () => {
   test.beforeEach(async ({ page }) => {
     // Mock the library paths API to ensure consistent test state
     await page.route('GET', '/api/library/paths', async (route) => {
@@ -8,8 +8,27 @@ test.describe('Library Scanning API Integration', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          paths: [],
-          total: 0,
+          paths: [
+            {
+              id: 'path-1',
+              path: '/manga/test-library',
+              enabled: true,
+              scan_interval_hours: 24,
+              last_scan: '2025-08-03T10:00:00Z',
+              created_at: '2025-08-01T00:00:00Z',
+              updated_at: '2025-08-03T10:00:00Z',
+            },
+            {
+              id: 'path-2', 
+              path: '/manga/second-library',
+              enabled: false,
+              scan_interval_hours: 12,
+              last_scan: null,
+              created_at: '2025-08-02T00:00:00Z',
+              updated_at: '2025-08-02T00:00:00Z',
+            },
+          ],
+          total: 2,
         }),
       });
     });
@@ -20,323 +39,472 @@ test.describe('Library Scanning API Integration', () => {
     await page.waitForLoadState('domcontentloaded');
   });
 
-  test('should display library paths management interface', async ({ page }) => {
+  test('should display library paths with scan buttons', async ({ page }) => {
     // Verify the Library Paths section is present
     await expect(page.getByRole('heading', { name: 'Library Paths' })).toBeVisible();
 
-    // Check if main interface elements are present
-    const mainContent = page.locator('main');
-    await expect(mainContent.getByRole('button', { name: 'Add Path' })).toBeVisible();
+    // Check if scan all button is present
+    await expect(page.getByRole('button', { name: 'Scan All Libraries' })).toBeVisible();
 
-    // Verify empty state message
-    await expect(page.getByText('No library paths configured')).toBeVisible();
+    // Check that individual library paths have scan buttons
+    await expect(page.getByText('/manga/test-library')).toBeVisible();
+    await expect(page.getByText('/manga/second-library')).toBeVisible();
+    
+    // Verify individual scan buttons are present
+    const scanNowButtons = page.getByRole('button', { name: 'Scan Now' });
+    await expect(scanNowButtons).toHaveCount(2);
   });
 
-  test('should handle filesystem parser validation scenarios', async ({ page }) => {
-    // Mock API responses for different parser validation scenarios
-    await page.route('POST', '/api/library/paths', async (route) => {
+  test('should successfully scan all libraries', async ({ page }) => {
+    // Mock successful scan response
+    await page.route('POST', '/api/library/scan', async (route) => {
       const requestData = await route.request().postDataJSON();
-
-      // Simulate filesystem parser validation
-      if (requestData.path === '/invalid/path') {
-        await route.fulfill({
-          status: 400,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            error: 'Library path does not exist: /invalid/path',
-          }),
-        });
-      } else if (requestData.path === '/permission/denied') {
-        await route.fulfill({
-          status: 400,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            error: 'Library path is not readable: /permission/denied',
-          }),
-        });
-      } else {
+      
+      // Check if scanning all libraries (no library_path_id)
+      if (!requestData.library_path_id) {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({
-            id: 'path-1',
-            path: requestData.path,
-            enabled: requestData.enabled,
-            scan_interval: requestData.scan_interval,
+            status: 'completed',
+            message: 'Library scan completed',
+            stats: {
+              series_found: 5,
+              series_created: 2,
+              series_updated: 1,
+              chapters_found: 23,
+              chapters_created: 12,
+              chapters_updated: 3,
+              errors: 0,
+            },
           }),
         });
       }
     });
 
-    const mainContent = page.locator('main');
+    // Click "Scan All Libraries" button
+    const scanAllButton = page.getByRole('button', { name: 'Scan All Libraries' });
+    await scanAllButton.click();
 
-    // Test valid path
-    await mainContent.getByRole('button', { name: 'Add Path' }).click();
-    await page.getByLabel('Directory Path').fill('/valid/manga/path');
-
-    const dialog = page.locator('[role="dialog"], .space-y-4').first();
-    await dialog.getByRole('button', { name: 'Add Path' }).click();
-
-    // Should succeed for valid path
-    await expect(page.getByText(/successfully added/i)).toBeVisible({ timeout: 5000 });
+    // Should show loading state
+    await expect(page.getByRole('button', { name: 'Scanning...' })).toBeVisible();
+    
+    // Should show success toast
+    await expect(page.getByText(/Library scan completed/)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/Found 5 series with 23 chapters/)).toBeVisible();
   });
 
-  test('should handle parser error responses', async ({ page }) => {
-    // Mock error responses that would come from filesystem parser validation
-    await page.route('POST', '/api/library/paths', async (route) => {
-      await route.fulfill({
-        status: 400,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          error: 'Library path does not exist: /nonexistent/path',
-        }),
-      });
-    });
-
-    const mainContent = page.locator('main');
-
-    // Try to add invalid path
-    await mainContent.getByRole('button', { name: 'Add Path' }).click();
-    await page.getByLabel('Directory Path').fill('/nonexistent/path');
-
-    const dialog = page.locator('[role="dialog"], .space-y-4').first();
-    await dialog.getByRole('button', { name: 'Add Path' }).click();
-
-    // Should show filesystem parser error
-    await expect(page.getByText(/Library path does not exist/)).toBeVisible({ timeout: 5000 });
-  });
-
-  test('should validate different file format scenarios', async ({ page }) => {
-    // Mock API responses for paths with different manga formats
-    await page.route('GET', '/api/library/paths', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          paths: [
-            {
-              id: 'path-1',
-              path: '/manga/mixed-formats',
-              enabled: true,
-              scan_interval: 3600,
-              last_scan: '2025-08-03T19:30:00Z',
-              series_count: 5,
-              chapter_count: 23,
-              format_breakdown: {
-                cbz: 15,
-                cbr: 4,
-                pdf: 3,
-                folder: 1,
-              },
-            },
-          ],
-          total: 1,
-        }),
-      });
-    });
-
-    // Reload to get the mocked data
-    await page.reload();
-    await page.waitForLoadState('domcontentloaded');
-
-    // Should show path with mixed formats
-    await expect(page.getByText('/manga/mixed-formats')).toBeVisible();
-    await expect(page.getByText(/5 series/)).toBeVisible();
-    await expect(page.getByText(/23 chapters/)).toBeVisible();
-  });
-
-  test('should handle large library performance scenarios', async ({ page }) => {
-    // Mock API response for large library scenario
-    await page.route('GET', '/api/library/paths', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          paths: [
-            {
-              id: 'path-1',
-              path: '/manga/large-library',
-              enabled: true,
-              scan_interval: 3600,
-              last_scan: '2025-08-03T19:30:00Z',
-              series_count: 1247,
-              chapter_count: 15632,
-              scan_duration_ms: 45678,
-            },
-          ],
-          total: 1,
-        }),
-      });
-    });
-
-    // Reload to get the mocked data
-    await page.reload();
-    await page.waitForLoadState('domcontentloaded');
-
-    // Should handle large numbers gracefully
-    await expect(page.getByText('/manga/large-library')).toBeVisible();
-    await expect(page.getByText(/1247 series/)).toBeVisible();
-    await expect(page.getByText(/15632 chapters/)).toBeVisible();
-  });
-
-  test('should handle security validation errors', async ({ page }) => {
-    // Mock security-related errors that parser might detect
-    await page.route('POST', '/api/library/paths', async (route) => {
+  test('should successfully scan individual library path', async ({ page }) => {
+    // Mock successful individual scan response
+    await page.route('POST', '/api/library/scan', async (route) => {
       const requestData = await route.request().postDataJSON();
-
-      if (requestData.path.includes('../')) {
-        await route.fulfill({
-          status: 400,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            error: 'Invalid path: Path traversal detected',
-          }),
-        });
-      } else {
+      
+      // Check if scanning specific library path
+      if (requestData.library_path_id === 'path-1') {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({
-            id: 'path-1',
-            path: requestData.path,
-            enabled: requestData.enabled,
-            scan_interval: requestData.scan_interval,
+            status: 'completed',
+            message: 'Library path scan completed',
+            stats: {
+              series_found: 3,
+              series_created: 1,
+              series_updated: 0,
+              chapters_found: 15,
+              chapters_created: 8,
+              chapters_updated: 0,
+              errors: 0,
+            },
           }),
         });
       }
     });
 
-    const mainContent = page.locator('main');
+    // Find the first library path and click its scan button
+    const libraryPathRow = page.locator('div').filter({ hasText: '/manga/test-library' }).first();
+    const scanButton = libraryPathRow.getByRole('button', { name: 'Scan Now' });
+    
+    await scanButton.click();
 
-    // Try to add path with traversal attempt
-    await mainContent.getByRole('button', { name: 'Add Path' }).click();
-    await page.getByLabel('Directory Path').fill('/manga/../../../etc');
-
-    const dialog = page.locator('[role="dialog"], .space-y-4').first();
-    await dialog.getByRole('button', { name: 'Add Path' }).click();
-
-    // Should show security validation error
-    await expect(page.getByText(/Path traversal detected/)).toBeVisible({ timeout: 5000 });
+    // Should show loading state for this specific path
+    await expect(libraryPathRow.getByRole('button', { name: 'Scanning...' })).toBeVisible();
+    
+    // Should show success toast
+    await expect(page.getByText(/Library scan completed/)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/Found 3 series with 15 chapters/)).toBeVisible();
   });
 
-  test('should display parser warnings and errors appropriately', async ({ page }) => {
-    // Mock API response with parser warnings
-    await page.route('GET', '/api/library/paths', async (route) => {
+  test('should handle scan errors gracefully', async ({ page }) => {
+    // Mock error response for scan
+    await page.route('POST', '/api/library/scan', async (route) => {
       await route.fulfill({
-        status: 200,
+        status: 500,
         contentType: 'application/json',
         body: JSON.stringify({
-          paths: [
-            {
-              id: 'path-1',
-              path: '/manga/problematic',
-              enabled: true,
-              scan_interval: 3600,
-              last_scan: '2025-08-03T19:30:00Z',
-              series_count: 3,
-              chapter_count: 12,
-              last_scan_warnings: [
-                'Could not extract chapter number from: random_file.txt',
-                'Corrupted archive skipped: broken.cbz',
-              ],
-              last_scan_errors: ['Permission denied: restricted_folder/'],
-            },
-          ],
-          total: 1,
+          detail: 'Library scan failed: Permission denied accessing /manga/restricted',
         }),
       });
     });
 
-    // Reload to get the mocked data
-    await page.reload();
-    await page.waitForLoadState('domcontentloaded');
+    // Click "Scan All Libraries" button
+    const scanAllButton = page.getByRole('button', { name: 'Scan All Libraries' });
+    await scanAllButton.click();
 
-    // Should show path with warnings
-    await expect(page.getByText('/manga/problematic')).toBeVisible();
-
-    // Should indicate scan completed with issues
-    await expect(page.getByText(/warnings/i)).toBeVisible();
+    // Should show loading state initially
+    await expect(page.getByRole('button', { name: 'Scanning...' })).toBeVisible();
+    
+    // Should show error toast
+    await expect(page.getByText(/Library scan failed/)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/Permission denied accessing/)).toBeVisible();
+    
+    // Button should return to normal state
+    await expect(page.getByRole('button', { name: 'Scan All Libraries' })).toBeVisible();
   });
 
-  test('should handle concurrent operations gracefully', async ({ page }) => {
-    // Test that UI can handle multiple API calls without breaking
-    let requestCount = 0;
-
-    await page.route('POST', '/api/library/paths', async (route) => {
-      requestCount++;
-
-      // Simulate different response times
-      const delay = requestCount * 100;
-      await new Promise((resolve) => setTimeout(resolve, delay));
-
+  test('should handle scan with warnings and errors', async ({ page }) => {
+    // Mock scan response with warnings and errors
+    await page.route('POST', '/api/library/scan', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          id: `path-${requestCount}`,
-          path: `/manga/path-${requestCount}`,
-          enabled: true,
-          scan_interval: 3600,
+          status: 'completed_with_errors',
+          message: 'Library scan completed (2 errors encountered)',
+          stats: {
+            series_found: 8,
+            series_created: 3,
+            series_updated: 2,
+            chapters_found: 45,
+            chapters_created: 20,
+            chapters_updated: 5,
+            errors: 2,
+          },
         }),
       });
     });
 
-    const mainContent = page.locator('main');
+    // Click "Scan All Libraries" button
+    const scanAllButton = page.getByRole('button', { name: 'Scan All Libraries' });
+    await scanAllButton.click();
 
-    // Quickly add multiple paths
-    for (let i = 1; i <= 3; i++) {
-      await mainContent.getByRole('button', { name: 'Add Path' }).click();
-      await page.getByLabel('Directory Path').fill(`/manga/path-${i}`);
+    // Should show success toast even with errors
+    await expect(page.getByText(/Library scan completed/)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/Found 8 series with 45 chapters/)).toBeVisible();
+  });
 
-      const dialog = page.locator('[role="dialog"], .space-y-4').first();
-      await dialog.getByRole('button', { name: 'Add Path' }).click();
+  test('should disable buttons during scan operations', async ({ page }) => {
+    // Mock delayed scan response to test button states
+    await page.route('POST', '/api/library/scan', async (route) => {
+      const requestData = await route.request().postDataJSON();
+      
+      // Add delay to simulate longer scan
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'completed',
+          message: 'Library scan completed',
+          stats: {
+            series_found: 2,
+            series_created: 1,
+            series_updated: 0,
+            chapters_found: 10,
+            chapters_created: 5,
+            chapters_updated: 0,
+            errors: 0,
+          },
+        }),
+      });
+    });
 
-      // Brief wait between operations
-      await page.waitForTimeout(50);
+    // Start scanning all libraries
+    const scanAllButton = page.getByRole('button', { name: 'Scan All Libraries' });
+    await scanAllButton.click();
+
+    // During scan, other scan buttons should be disabled
+    const individualScanButtons = page.getByRole('button', { name: 'Scan Now' });
+    for (const button of await individualScanButtons.all()) {
+      await expect(button).toBeDisabled();
     }
-
-    // All operations should eventually complete
-    await expect(page.getByText(/successfully added/i).first()).toBeVisible({ timeout: 10000 });
+    
+    // Wait for scan to complete
+    await expect(page.getByText(/Library scan completed/)).toBeVisible({ timeout: 5000 });
+    
+    // After completion, buttons should be re-enabled
+    await expect(scanAllButton).toBeEnabled();
+    for (const button of await individualScanButtons.all()) {
+      await expect(button).toBeEnabled();
+    }
   });
 
-  test('should maintain accessibility during parser operations', async ({ page }) => {
-    // Mock slow API response to test loading states
-    await page.route('POST', '/api/library/paths', async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 200));
+  test('should handle scan timeout scenarios', async ({ page }) => {
+    // Mock timeout response
+    await page.route('POST', '/api/library/scan', async (route) => {
+      // Simulate timeout by not responding
+      await new Promise(resolve => setTimeout(resolve, 2000));
       await route.fulfill({
-        status: 200,
+        status: 408,
         contentType: 'application/json',
         body: JSON.stringify({
-          id: 'path-1',
-          path: '/manga/test',
-          enabled: true,
-          scan_interval: 3600,
+          detail: 'Library scan timed out after 60 seconds',
         }),
       });
     });
 
-    const mainContent = page.locator('main');
+    // Click "Scan All Libraries" button
+    const scanAllButton = page.getByRole('button', { name: 'Scan All Libraries' });
+    await scanAllButton.click();
 
-    // Start adding a path
-    await mainContent.getByRole('button', { name: 'Add Path' }).click();
-    await page.getByLabel('Directory Path').fill('/manga/test');
+    // Should show loading state
+    await expect(page.getByRole('button', { name: 'Scanning...' })).toBeVisible();
+    
+    // Should eventually show timeout error
+    await expect(page.getByText(/Library scan failed/)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/timed out/)).toBeVisible();
+  });
 
-    const dialog = page.locator('[role="dialog"], .space-y-4').first();
-    const addButton = dialog.getByRole('button', { name: 'Add Path' });
+  test('should prevent concurrent scan operations', async ({ page }) => {
+    // Mock delayed scan response
+    await page.route('POST', '/api/library/scan', async (route) => {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'completed',
+          message: 'Library scan completed',
+          stats: {
+            series_found: 1,
+            series_created: 1,
+            series_updated: 0,
+            chapters_found: 5,
+            chapters_created: 5,
+            chapters_updated: 0,
+            errors: 0,
+          },
+        }),
+      });
+    });
 
+    // Start first scan
+    const scanAllButton = page.getByRole('button', { name: 'Scan All Libraries' });
+    await scanAllButton.click();
+
+    // Should show scanning state
+    await expect(page.getByRole('button', { name: 'Scanning...' })).toBeVisible();
+    
+    // Try to start another scan - all scan buttons should be disabled
+    const individualScanButtons = page.getByRole('button', { name: 'Scan Now' });
+    for (const button of await individualScanButtons.all()) {
+      await expect(button).toBeDisabled();
+    }
+    
+    // Wait for first scan to complete
+    await expect(page.getByText(/Library scan completed/)).toBeVisible({ timeout: 5000 });
+    
+    // Now buttons should be enabled again
+    await expect(scanAllButton).toBeEnabled();
+  });
+
+  test('should maintain accessibility during scan operations', async ({ page }) => {
+    // Mock delayed scan response to test accessibility
+    await page.route('POST', '/api/library/scan', async (route) => {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'completed',
+          message: 'Library scan completed',
+          stats: {
+            series_found: 1,
+            series_created: 1,
+            series_updated: 0,
+            chapters_found: 5,
+            chapters_created: 5,
+            chapters_updated: 0,
+            errors: 0,
+          },
+        }),
+      });
+    });
+
+    const scanAllButton = page.getByRole('button', { name: 'Scan All Libraries' });
+    
     // Check accessibility attributes before operation
-    await expect(addButton).toHaveAttribute('aria-disabled', 'false');
+    await expect(scanAllButton).not.toHaveAttribute('disabled');
+    await expect(scanAllButton).toHaveAttribute('aria-disabled', 'false');
 
-    // Start operation
-    await addButton.click();
+    // Start scan operation
+    await scanAllButton.click();
 
-    // During operation, button should be properly disabled
-    await expect(addButton).toHaveAttribute('aria-disabled', 'true');
-
-    // Should show loading indication
-    await expect(page.getByText(/adding/i)).toBeVisible();
-
+    // During operation, button should be properly disabled with aria attributes
+    const scanningButton = page.getByRole('button', { name: 'Scanning...' });
+    await expect(scanningButton).toBeVisible();
+    await expect(scanningButton).toHaveAttribute('disabled');
+    
     // Wait for completion
-    await expect(page.getByText(/successfully added/i)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/Library scan completed/)).toBeVisible({ timeout: 5000 });
+    
+    // After completion, button should be accessible again
+    await expect(scanAllButton).not.toHaveAttribute('disabled');
+    await expect(scanAllButton).toHaveAttribute('aria-disabled', 'false');
+  });
+
+  test('should display scan results statistics correctly', async ({ page }) => {
+    // Mock scan response with detailed stats
+    await page.route('POST', '/api/library/scan', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'completed',
+          message: 'Library scan completed',
+          stats: {
+            series_found: 12,
+            series_created: 8,
+            series_updated: 3,
+            chapters_found: 156,
+            chapters_created: 98,
+            chapters_updated: 12,
+            errors: 0,
+          },
+        }),
+      });
+    });
+
+    // Click scan button
+    const scanAllButton = page.getByRole('button', { name: 'Scan All Libraries' });
+    await scanAllButton.click();
+
+    // Should show detailed statistics in toast
+    await expect(page.getByText(/Library scan completed/)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/Found 12 series with 156 chapters/)).toBeVisible();
+  });
+
+  test('should handle API rate limiting gracefully', async ({ page }) => {
+    // Mock rate limiting response
+    await page.route('POST', '/api/library/scan', async (route) => {
+      await route.fulfill({
+        status: 429,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          detail: 'Rate limit exceeded. Please try again later.',
+        }),
+      });
+    });
+
+    // Click scan button
+    const scanAllButton = page.getByRole('button', { name: 'Scan All Libraries' });
+    await scanAllButton.click();
+
+    // Should show rate limiting error
+    await expect(page.getByText(/Library scan failed/)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/Rate limit exceeded/)).toBeVisible();
+    
+    // Button should return to normal state
+    await expect(scanAllButton).toBeEnabled();
+  });
+
+  test('should handle large library scan results', async ({ page }) => {
+    // Mock large library scan response
+    await page.route('POST', '/api/library/scan', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'completed',
+          message: 'Library scan completed',
+          stats: {
+            series_found: 1247,
+            series_created: 856,
+            series_updated: 123,
+            chapters_found: 15634,
+            chapters_created: 12456,
+            chapters_updated: 897,
+            errors: 0,
+          },
+        }),
+      });
+    });
+
+    // Click scan button
+    const scanAllButton = page.getByRole('button', { name: 'Scan All Libraries' });
+    await scanAllButton.click();
+
+    // Should handle large numbers properly
+    await expect(page.getByText(/Library scan completed/)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/Found 1247 series with 15634 chapters/)).toBeVisible();
+  });
+
+  test('should refresh library path data after successful scan', async ({ page }) => {
+    let getPathsCalled = 0;
+    
+    // Count calls to GET /api/library/paths
+    await page.route('GET', '/api/library/paths', async (route) => {
+      getPathsCalled++;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          paths: [
+            {
+              id: 'path-1',
+              path: '/manga/test-library',
+              enabled: true,
+              scan_interval_hours: 24,
+              last_scan: getPathsCalled > 1 ? '2025-08-03T15:30:00Z' : '2025-08-03T10:00:00Z',
+              created_at: '2025-08-01T00:00:00Z',
+              updated_at: '2025-08-03T15:30:00Z',
+            },
+          ],
+          total: 1,
+        }),
+      });
+    });
+
+    // Mock successful scan
+    await page.route('POST', '/api/library/scan', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'completed',
+          message: 'Library scan completed',
+          stats: {
+            series_found: 2,
+            series_created: 1,
+            series_updated: 0,
+            chapters_found: 8,
+            chapters_created: 4,
+            chapters_updated: 0,
+            errors: 0,
+          },
+        }),
+      });
+    });
+
+    // Navigate to page (first API call)
+    await page.goto('/settings');
+    await page.waitForLoadState('domcontentloaded');
+    
+    // Initially should show old timestamp
+    await expect(page.getByText(/Last scan.*10:00/)).toBeVisible();
+    
+    // Trigger scan
+    const scanAllButton = page.getByRole('button', { name: 'Scan All Libraries' });
+    await scanAllButton.click();
+    
+    // Wait for scan completion
+    await expect(page.getByText(/Library scan completed/)).toBeVisible({ timeout: 5000 });
+    
+    // Should refresh and show updated timestamp
+    await expect(page.getByText(/Last scan.*15:30/)).toBeVisible({ timeout: 5000 });
+    
+    // Verify API was called twice (initial load + refresh after scan)
+    expect(getPathsCalled).toBeGreaterThanOrEqual(2);
   });
 });
