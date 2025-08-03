@@ -3,6 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from kiremisu.api.library import router as library_router
 from kiremisu.core.config import settings
 
 app = FastAPI(
@@ -22,6 +23,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include API routers
+app.include_router(library_router)
 
 
 @app.get("/")
