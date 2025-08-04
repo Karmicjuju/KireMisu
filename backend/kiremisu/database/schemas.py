@@ -1,10 +1,66 @@
 """Pydantic schemas for API requests and responses."""
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Generic, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+# Generic type for paginated responses
+T = TypeVar('T')
+
+
+class PaginationParams(BaseModel):
+    """Schema for pagination parameters."""
+    
+    page: int = Field(default=1, ge=1, description="Page number (1-based)")
+    per_page: int = Field(default=20, ge=1, le=100, description="Items per page (1-100)")
+    
+    @property
+    def offset(self) -> int:
+        """Calculate offset for database queries."""
+        return (self.page - 1) * self.per_page
+    
+    @property 
+    def limit(self) -> int:
+        """Get limit for database queries."""
+        return self.per_page
+
+
+class PaginationMeta(BaseModel):
+    """Schema for pagination metadata."""
+    
+    page: int = Field(..., description="Current page number")
+    per_page: int = Field(..., description="Items per page")
+    total_items: int = Field(..., description="Total number of items")
+    total_pages: int = Field(..., description="Total number of pages")
+    has_prev: bool = Field(..., description="Whether there's a previous page")
+    has_next: bool = Field(..., description="Whether there's a next page")
+    prev_page: Optional[int] = Field(None, description="Previous page number")
+    next_page: Optional[int] = Field(None, description="Next page number")
+    
+    @classmethod
+    def create(cls, page: int, per_page: int, total_items: int) -> "PaginationMeta":
+        """Create pagination metadata from parameters."""
+        total_pages = (total_items + per_page - 1) // per_page  # Ceiling division
+        
+        return cls(
+            page=page,
+            per_page=per_page,
+            total_items=total_items,
+            total_pages=total_pages,
+            has_prev=page > 1,
+            has_next=page < total_pages,
+            prev_page=page - 1 if page > 1 else None,
+            next_page=page + 1 if page < total_pages else None,
+        )
+
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    """Generic schema for paginated API responses."""
+    
+    items: List[T] = Field(..., description="List of items")
+    pagination: PaginationMeta = Field(..., description="Pagination metadata")
 
 
 class LibraryPathBase(BaseModel):
@@ -380,3 +436,59 @@ class ChapterPagesInfoResponse(BaseModel):
     chapter_id: UUID = Field(..., description="Chapter unique identifier")
     total_pages: int = Field(..., description="Total number of pages")
     pages: List[PageInfoResponse] = Field(..., description="List of page information")
+
+
+# Reader-specific schemas
+class ChapterProgressUpdate(BaseModel):
+    """Schema for updating chapter reading progress."""
+
+    last_read_page: int = Field(..., ge=0, description="Last read page number (0-indexed)")
+    is_read: Optional[bool] = Field(None, description="Whether chapter is marked as read")
+
+    @field_validator("last_read_page")
+    @classmethod
+    def validate_page_number(cls, v):
+        """Validate page number is non-negative."""
+        if v < 0:
+            raise ValueError("Page number must be non-negative")
+        return v
+
+
+class ChapterProgressResponse(ChapterResponse):
+    """Schema for chapter progress update responses."""
+    pass
+
+
+class ChapterInfoResponse(BaseModel):
+    """Schema for reader chapter info responses."""
+
+    id: UUID = Field(..., description="Chapter unique identifier")
+    series_id: UUID = Field(..., description="Parent series ID")
+    series_title: str = Field(..., description="Parent series title")
+
+    # Chapter identification
+    chapter_number: float = Field(..., description="Chapter number")
+    volume_number: Optional[int] = Field(None, description="Volume number")
+    title: Optional[str] = Field(None, description="Chapter title")
+
+    # File system information
+    file_size: int = Field(..., description="File size in bytes")
+    page_count: int = Field(..., description="Number of pages")
+
+    # Reading progress
+    is_read: bool = Field(..., description="Whether chapter is marked as read")
+    last_read_page: int = Field(..., description="Last read page number")
+    read_at: Optional[datetime] = Field(None, description="When chapter was read")
+
+    # Timestamps
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SeriesChaptersResponse(BaseModel):
+    """Schema for series chapters response."""
+
+    series: SeriesResponse = Field(..., description="Series information")
+    chapters: List[ChapterResponse] = Field(..., description="List of chapters in order")

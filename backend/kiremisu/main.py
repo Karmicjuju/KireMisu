@@ -10,7 +10,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from kiremisu.api.library import router as library_router
 from kiremisu.api.jobs import router as jobs_router, set_worker_runner
 from kiremisu.api.chapters import router as chapters_router
+from kiremisu.api.reader import router as reader_router
+from kiremisu.api.series import router as series_router
 from kiremisu.core.config import settings
+from kiremisu.core.error_handler import global_exception_handler
+from kiremisu.core.rate_limiter import RateLimiter, RateLimitMiddleware
 from kiremisu.database.connection import get_db_session_factory
 from kiremisu.services.job_worker import JobWorkerRunner
 from kiremisu.services.job_scheduler import SchedulerRunner
@@ -78,6 +82,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Add global exception handler for security
+app.add_exception_handler(Exception, global_exception_handler)
+
+# Rate limiting middleware (add before CORS)
+rate_limiter = RateLimiter(
+    requests_per_minute=120,  # Allow more requests for development
+    requests_per_hour=3600,   # Generous hourly limit
+    burst_limit=20,           # Allow reasonable bursts
+)
+app.add_middleware(RateLimitMiddleware, rate_limiter=rate_limiter)
+
 # CORS middleware for frontend integration
 app.add_middleware(
     CORSMiddleware,
@@ -91,6 +106,8 @@ app.add_middleware(
 app.include_router(library_router)
 app.include_router(jobs_router)
 app.include_router(chapters_router)
+app.include_router(reader_router)
+app.include_router(series_router)
 
 
 @app.get("/")

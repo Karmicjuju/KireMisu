@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from kiremisu.database.connection import get_db_session
+from kiremisu.database.connection import get_db
 from kiremisu.database.models import Series, Chapter
 from kiremisu.database.schemas import SeriesResponse, ChapterResponse
 
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/series", tags=["series"])
 
 @router.get("/", response_model=List[SeriesResponse])
 async def get_series_list(
-    db: AsyncSession = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0, description="Number of series to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of series to return"),
     search: Optional[str] = Query(None, description="Search term for series title"),
@@ -40,7 +40,7 @@ async def get_series_list(
 
 
 @router.get("/{series_id}", response_model=SeriesResponse)
-async def get_series(series_id: UUID, db: AsyncSession = Depends(get_db_session)) -> SeriesResponse:
+async def get_series(series_id: UUID, db: AsyncSession = Depends(get_db)) -> SeriesResponse:
     """Get series details by ID."""
     result = await db.execute(select(Series).where(Series.id == series_id))
     series = result.scalar_one_or_none()
@@ -54,7 +54,7 @@ async def get_series(series_id: UUID, db: AsyncSession = Depends(get_db_session)
 @router.get("/{series_id}/chapters", response_model=List[ChapterResponse])
 async def get_series_chapters(
     series_id: UUID,
-    db: AsyncSession = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0, description="Number of chapters to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of chapters to return"),
 ) -> List[ChapterResponse]:

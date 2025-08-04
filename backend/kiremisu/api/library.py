@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from kiremisu.core.error_handler import create_secure_http_exception
 from kiremisu.database.connection import get_db
 from kiremisu.database.schemas import (
     LibraryPathCreate,
@@ -38,9 +39,9 @@ async def get_library_path(
     """Get a specific library path by ID."""
     path = await LibraryPathService.get_by_id(db, path_id)
     if not path:
-        raise HTTPException(
+        raise create_secure_http_exception(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Library path not found: {path_id}",
+            error_message=f"Library path not found: {path_id}",
         )
     return LibraryPathResponse.model_validate(path)
 
@@ -54,9 +55,9 @@ async def create_library_path(
         path = await LibraryPathService.create(db, library_path_data)
         return LibraryPathResponse.model_validate(path)
     except ValueError as e:
-        raise HTTPException(
+        raise create_secure_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            error_message=str(e),
         )
 
 
