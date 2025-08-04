@@ -288,7 +288,7 @@ export function MangaReader({ chapterId, initialPage = 1, className }: MangaRead
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
-              <h1 className="font-semibold">{chapter.series?.title_primary}</h1>
+              <h1 className="font-semibold">{chapter.series_title}</h1>
               <p className="text-sm text-white/70">
                 Chapter {chapter.chapter_number}
                 {chapter.title && ` - ${chapter.title}`}
@@ -313,7 +313,7 @@ export function MangaReader({ chapterId, initialPage = 1, className }: MangaRead
         <div className="relative max-w-full">
           <MangaPage
             src={currentPageUrl}
-            alt={`Page ${currentPage} of ${chapter.series?.title_primary} Chapter ${chapter.chapter_number}`}
+            alt={`Page ${currentPage} of ${chapter.series_title} Chapter ${chapter.chapter_number}`}
             pageNumber={currentPage}
             priority={true}
             className="max-h-[calc(100vh-2rem)]"

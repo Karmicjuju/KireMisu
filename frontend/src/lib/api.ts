@@ -107,6 +107,7 @@ export interface WorkerStatusResponse {
 export interface ChapterResponse {
   id: string;
   series_id: string;
+  series_title: string;
   chapter_number: number;
   volume_number?: number;
   title?: string;
@@ -237,17 +238,30 @@ export const jobsApi = {
 
 export const chaptersApi = {
   async getChapter(chapterId: string): Promise<ChapterResponse> {
-    const response = await api.get<ChapterResponse>(`/api/chapters/${chapterId}`);
+    const response = await api.get<ChapterResponse>(`/api/reader/chapter/${chapterId}/info`);
     return response.data;
   },
 
   async getChapterPages(chapterId: string): Promise<ChapterPagesInfo> {
-    const response = await api.get<ChapterPagesInfo>(`/api/chapters/${chapterId}/pages`);
-    return response.data;
+    // Get chapter info first to know page count
+    const chapterResponse = await api.get<ChapterResponse>(`/api/reader/chapter/${chapterId}/info`);
+    const chapter = chapterResponse.data;
+    
+    // Generate pages info based on chapter page count
+    const pages = Array.from({ length: chapter.page_count }, (_, i) => ({
+      page_number: i + 1,
+      url: `${api.defaults.baseURL}/api/reader/chapter/${chapterId}/page/${i}`,
+    }));
+    
+    return {
+      chapter_id: chapterId,
+      total_pages: chapter.page_count,
+      pages,
+    };
   },
 
   getChapterPageUrl(chapterId: string, pageNumber: number): string {
-    return `${api.defaults.baseURL}/api/chapters/${chapterId}/pages/${pageNumber}`;
+    return `${api.defaults.baseURL}/api/reader/chapter/${chapterId}/page/${pageNumber}`;
   },
 
   async getSeriesChapters(
@@ -268,8 +282,8 @@ export const chaptersApi = {
     chapterId: string,
     progress: ChapterProgressUpdate
   ): Promise<ChapterResponse> {
-    const response = await api.patch<ChapterResponse>(
-      `/api/chapters/${chapterId}/progress`,
+    const response = await api.put<ChapterResponse>(
+      `/api/reader/chapter/${chapterId}/progress`,
       progress
     );
     return response.data;
