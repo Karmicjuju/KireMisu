@@ -21,26 +21,49 @@ from kiremisu.services.job_worker import JobWorkerRunner
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
-# Global worker instance (will be set by main application)
-_worker_runner: Optional[JobWorkerRunner] = None
+
+class JobWorkerDependency:
+    """Dependency provider for job worker runner."""
+    
+    def __init__(self):
+        self._worker_runner: Optional[JobWorkerRunner] = None
+    
+    def set_worker_runner(self, worker_runner: JobWorkerRunner):
+        """Set the worker runner instance."""
+        self._worker_runner = worker_runner
+    
+    def get_worker_runner(self) -> Optional[JobWorkerRunner]:
+        """Get the worker runner instance."""
+        return self._worker_runner
+
+
+# Global dependency instance
+job_worker_dependency = JobWorkerDependency()
+
+
+def get_worker_runner() -> Optional[JobWorkerRunner]:
+    """Dependency function to get worker runner."""
+    return job_worker_dependency.get_worker_runner()
 
 
 def set_worker_runner(worker_runner: JobWorkerRunner):
     """Set the global worker runner instance."""
-    global _worker_runner
-    _worker_runner = worker_runner
+    job_worker_dependency.set_worker_runner(worker_runner)
 
 
 @router.get("/status", response_model=JobStatsResponse)
-async def get_job_status(db: AsyncSession = Depends(get_db)) -> JobStatsResponse:
+async def get_job_status(
+    db: AsyncSession = Depends(get_db),
+    worker_runner: Optional[JobWorkerRunner] = Depends(get_worker_runner)
+) -> JobStatsResponse:
     """Get job queue status and statistics."""
     # Get queue statistics
     queue_stats = await JobScheduler.get_queue_stats(db)
     
     # Get worker status
     worker_status = None
-    if _worker_runner:
-        worker_status = await _worker_runner.get_worker_status()
+    if worker_runner:
+        worker_status = await worker_runner.get_worker_status()
     
     return JobStatsResponse(
         queue_stats=queue_stats,
@@ -167,9 +190,11 @@ async def cleanup_old_jobs(
 
 
 @router.get("/worker/status", response_model=WorkerStatusResponse)
-async def get_worker_status() -> WorkerStatusResponse:
+async def get_worker_status(
+    worker_runner: Optional[JobWorkerRunner] = Depends(get_worker_runner)
+) -> WorkerStatusResponse:
     """Get current worker status."""
-    if not _worker_runner:
+    if not worker_runner:
         return WorkerStatusResponse(
             running=False,
             active_jobs=0,
@@ -178,5 +203,5 @@ async def get_worker_status() -> WorkerStatusResponse:
             message="Worker not initialized"
         )
     
-    status = await _worker_runner.get_worker_status()
+    status = await worker_runner.get_worker_status()
     return WorkerStatusResponse(**status)

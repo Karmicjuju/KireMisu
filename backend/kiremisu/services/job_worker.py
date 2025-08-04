@@ -29,6 +29,8 @@ class JobWorker:
     async def execute_job(self, db: AsyncSession, job: JobQueue) -> Dict[str, Any]:
         """Execute a single job and update its status.
         
+        Uses a single transaction for all database operations to ensure consistency.
+        
         Args:
             db: Database session
             job: JobQueue model to execute
@@ -41,17 +43,17 @@ class JobWorker:
         """
         logger.info(f"Starting execution of job {job.id} (type: {job.job_type})")
         
-        # Mark job as running
-        await self._update_job_status(db, job.id, "running", started_at=datetime.utcnow())
-        
         try:
+            # Start transaction - mark job as running
+            await self._update_job_status(db, job.id, "running", started_at=datetime.utcnow())
+            
             # Execute job based on type
             if job.job_type == "library_scan":
                 result = await self._execute_library_scan(db, job)
             else:
                 raise JobExecutionError(f"Unknown job type: {job.job_type}")
             
-            # Mark job as completed
+            # Complete job successfully - mark as completed
             await self._update_job_status(
                 db, 
                 job.id, 
@@ -60,13 +62,33 @@ class JobWorker:
                 error_message=None
             )
             
+            # Commit all changes in single transaction
+            await db.commit()
+            
             logger.info(f"Job {job.id} completed successfully")
             return result
             
         except Exception as e:
+            # Rollback any partial changes
+            await db.rollback()
+            
             error_msg = str(e)
             logger.error(f"Job {job.id} failed: {error_msg}", exc_info=True)
             
+            # Handle retry logic in separate transaction
+            await self._handle_job_failure(db, job, error_msg)
+            
+            raise JobExecutionError(f"Job execution failed: {error_msg}")
+    
+    async def _handle_job_failure(self, db: AsyncSession, job: JobQueue, error_msg: str):
+        """Handle job failure with retry logic in separate transaction.
+        
+        Args:
+            db: Database session
+            job: Failed job
+            error_msg: Error message
+        """
+        try:
             # Determine if we should retry
             should_retry = job.retry_count < job.max_retries
             
@@ -91,7 +113,12 @@ class JobWorker:
                 )
                 logger.error(f"Job {job.id} failed permanently after {job.retry_count} retries")
             
-            raise JobExecutionError(f"Job execution failed: {error_msg}")
+            # Commit failure status update
+            await db.commit()
+            
+        except Exception as retry_error:
+            await db.rollback()
+            logger.error(f"Failed to update job failure status: {retry_error}", exc_info=True)
 
     async def _execute_library_scan(self, db: AsyncSession, job: JobQueue) -> Dict[str, Any]:
         """Execute a library scan job.
@@ -126,7 +153,7 @@ class JobWorker:
         result = {
             "job_type": "library_scan",
             "library_path_id": library_path_id_str,
-            "stats": stats.to_dict()
+            "stats": stats if isinstance(stats, dict) else stats.to_dict()
         }
         
         logger.info(f"Library scan completed: {result}")
@@ -172,7 +199,7 @@ class JobWorker:
             .where(JobQueue.id == job_id)
             .values(**update_values)
         )
-        await db.commit()
+        # Note: Commit is handled by caller for transaction consistency
 
     async def _update_library_path_last_scan(self, db: AsyncSession, library_path_id: UUID):
         """Update last_scan timestamp for a specific library path.
@@ -189,7 +216,7 @@ class JobWorker:
                 updated_at=datetime.utcnow()
             )
         )
-        await db.commit()
+        # Note: Commit is handled by caller for transaction consistency
 
     async def _update_all_library_paths_last_scan(self, db: AsyncSession):
         """Update last_scan timestamp for all enabled library paths.
@@ -205,7 +232,7 @@ class JobWorker:
                 updated_at=datetime.utcnow()
             )
         )
-        await db.commit()
+        # Note: Commit is handled by caller for transaction consistency
 
 
 class JobWorkerRunner:

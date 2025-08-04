@@ -14,17 +14,18 @@ interface JobStatusDashboardProps {
 }
 
 export function JobStatusDashboard({ className }: JobStatusDashboardProps) {
+  // Stagger polling intervals to reduce server load
   const { data: jobStats, error: statsError } = useSWR('job-stats', jobsApi.getJobStatus, {
-    refreshInterval: 10000, // Poll every 10 seconds
+    refreshInterval: 8000, // Poll every 8 seconds (primary data)
   });
 
   const { data: recentJobs, error: jobsError } = useSWR('recent-jobs-dashboard', () => 
     jobsApi.getRecentJobs(undefined, 15), {
-    refreshInterval: 10000, // Poll every 10 seconds
+    refreshInterval: 12000, // Poll every 12 seconds (secondary data)
   });
 
   const { data: workerStatus } = useSWR('worker-status', jobsApi.getWorkerStatus, {
-    refreshInterval: 10000, // Poll every 10 seconds
+    refreshInterval: 15000, // Poll every 15 seconds (least critical)
   });
 
   const formatJobDuration = (job: JobResponse) => {

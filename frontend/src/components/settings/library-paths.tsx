@@ -48,7 +48,7 @@ export function LibraryPaths() {
 
   const { data: pathsData, error, isLoading } = useSWR('library-paths', libraryApi.getPaths);
   const { data: recentJobs } = useSWR('recent-jobs', () => jobsApi.getRecentJobs('library_scan', 20), {
-    refreshInterval: 10000, // Poll every 10 seconds for real-time updates
+    refreshInterval: 10000, // Poll every 10 seconds for library path updates
   });
 
   // Helper functions for job status
