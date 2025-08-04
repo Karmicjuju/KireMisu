@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { libraryApi, type LibraryPath } from '@/lib/api';
+import { libraryApi, type LibraryPath, type LibraryScanResponse } from '@/lib/api';
 import useSWR, { mutate } from 'swr';
 
 interface LibraryPathFormData {
@@ -36,6 +36,8 @@ export function LibraryPaths() {
   const { toast } = useToast();
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isScanningAll, setIsScanningAll] = useState(false);
+  const [scanningPathId, setScanningPathId] = useState<string | null>(null);
   const [formData, setFormData] = useState<LibraryPathFormData>({
     path: '',
     enabled: true,
@@ -67,9 +69,12 @@ export function LibraryPaths() {
       setFormData({ path: '', enabled: true, scan_interval_hours: 24 });
       mutate('library-paths');
     } catch (error: any) {
+      const errorMessage = typeof error.response?.data?.detail === 'string' 
+        ? error.response.data.detail 
+        : error.response?.data?.detail?.[0]?.msg || 'Failed to save library path.';
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to save library path.',
+        description: errorMessage,
         variant: 'destructive',
       });
     }
@@ -98,27 +103,67 @@ export function LibraryPaths() {
       });
       mutate('library-paths');
     } catch (error: any) {
+      const errorMessage = typeof error.response?.data?.detail === 'string' 
+        ? error.response.data.detail 
+        : error.response?.data?.detail?.[0]?.msg || 'Failed to delete library path.';
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to delete library path.',
+        description: errorMessage,
         variant: 'destructive',
       });
     }
   };
 
-  const handleScanNow = async () => {
+  const formatScanResults = (stats: LibraryScanResponse['stats']): string => {
+    const { series_found, chapters_found } = stats;
+    return `Found ${series_found} series with ${chapters_found} chapters`;
+  };
+
+  const handleScanAll = async () => {
+    setIsScanningAll(true);
     try {
       const result = await libraryApi.triggerScan();
       toast({
-        title: 'Scan initiated',
-        description: `Scanning ${result.paths_to_scan} library paths...`,
+        title: 'Library scan completed',
+        description: formatScanResults(result.stats),
       });
+      // Refresh the library paths data to get updated last_scan times
+      mutate('library-paths');
     } catch (error: any) {
+      const errorMessage = typeof error.response?.data?.detail === 'string' 
+        ? error.response.data.detail 
+        : error.response?.data?.detail?.[0]?.msg || 'Failed to scan libraries.';
       toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to trigger scan.',
+        title: 'Library scan failed',
+        description: errorMessage,
         variant: 'destructive',
       });
+    } finally {
+      setIsScanningAll(false);
+    }
+  };
+
+  const handleScanPath = async (pathId: string) => {
+    setScanningPathId(pathId);
+    try {
+      const result = await libraryApi.triggerScan({ library_path_id: pathId });
+      toast({
+        title: 'Library scan completed',
+        description: formatScanResults(result.stats),
+      });
+      // Refresh the library paths data to get updated last_scan times
+      mutate('library-paths');
+    } catch (error: any) {
+      const errorMessage = typeof error.response?.data?.detail === 'string' 
+        ? error.response.data.detail 
+        : error.response?.data?.detail?.[0]?.msg || 'Failed to scan library path.';
+      toast({
+        title: 'Library scan failed',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setScanningPathId(null);
     }
   };
 
@@ -133,9 +178,14 @@ export function LibraryPaths() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Library Paths</h2>
         <div className="flex gap-2">
-          <Button onClick={handleScanNow} variant="outline" size="sm">
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Scan Now
+          <Button 
+            onClick={handleScanAll} 
+            variant="outline" 
+            size="sm" 
+            disabled={isScanningAll || scanningPathId !== null}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${isScanningAll ? 'animate-spin' : ''}`} />
+            {isScanningAll ? 'Scanning...' : 'Scan All Libraries'}
           </Button>
           {!isAdding && (
             <Button onClick={() => setIsAdding(true)} size="sm">
@@ -263,6 +313,17 @@ export function LibraryPaths() {
                 </div>
 
                 <div className="flex gap-1">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => handleScanPath(path.id)}
+                    disabled={isScanningAll || scanningPathId !== null}
+                  >
+                    <RefreshCw 
+                      className={`mr-2 h-4 w-4 ${scanningPathId === path.id ? 'animate-spin' : ''}`} 
+                    />
+                    {scanningPathId === path.id ? 'Scanning...' : 'Scan Now'}
+                  </Button>
                   <Button variant="outline" size="sm" onClick={() => handleEdit(path)}>
                     Edit
                   </Button>

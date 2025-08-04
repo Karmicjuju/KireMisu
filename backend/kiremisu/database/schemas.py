@@ -101,3 +101,32 @@ class SeriesInfo(BaseModel):
     def total_chapters(self) -> int:
         """Get total chapter count."""
         return len(self.chapters)
+
+
+# Library scan schemas
+class LibraryScanRequest(BaseModel):
+    """Schema for library scan request."""
+    
+    library_path_id: Optional[UUID] = Field(
+        None, description="Optional specific library path ID to scan. If not provided, scans all enabled paths"
+    )
+
+
+class LibraryScanStats(BaseModel):
+    """Schema for library scan statistics."""
+    
+    series_found: int = Field(..., description="Total series found during scan")
+    series_created: int = Field(..., description="Number of new series created")
+    series_updated: int = Field(..., description="Number of existing series updated")
+    chapters_found: int = Field(..., description="Total chapters found during scan")
+    chapters_created: int = Field(..., description="Number of new chapters created")
+    chapters_updated: int = Field(..., description="Number of existing chapters updated")
+    errors: int = Field(..., description="Number of errors encountered during scan")
+
+
+class LibraryScanResponse(BaseModel):
+    """Schema for library scan response."""
+    
+    status: str = Field(..., description="Scan status (completed, failed)")
+    message: str = Field(..., description="Human-readable status message")
+    stats: LibraryScanStats = Field(..., description="Detailed scan statistics")

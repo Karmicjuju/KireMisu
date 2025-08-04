@@ -1,6 +1,5 @@
 """Library management API endpoints."""
 
-from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -12,7 +11,11 @@ from kiremisu.database.schemas import (
     LibraryPathList,
     LibraryPathResponse,
     LibraryPathUpdate,
+    LibraryScanRequest,
+    LibraryScanResponse,
+    LibraryScanStats,
 )
+from kiremisu.services.importer import ImporterService
 from kiremisu.services.library_path import LibraryPathService
 
 router = APIRouter(prefix="/api/library", tags=["library"])
@@ -90,14 +93,62 @@ async def delete_library_path(path_id: UUID, db: AsyncSession = Depends(get_db))
         )
 
 
-@router.post("/scan", status_code=status.HTTP_202_ACCEPTED)
-async def trigger_library_scan(db: AsyncSession = Depends(get_db)) -> dict:
-    """Trigger a manual scan of all enabled library paths."""
-    # This will be implemented in LL-4 when we add the importer
-    # For now, just return a placeholder response
-    enabled_paths = await LibraryPathService.get_enabled_paths(db)
-    return {
-        "message": "Library scan initiated",
-        "paths_to_scan": len(enabled_paths),
-        "status": "queued",
-    }
+@router.post("/scan", response_model=LibraryScanResponse)
+async def scan_library(
+    scan_request: LibraryScanRequest, db: AsyncSession = Depends(get_db)
+) -> LibraryScanResponse:
+    """Scan library paths and import/update series and chapters.
+    
+    Args:
+        scan_request: Request containing optional library_path_id to scan specific path
+        db: Database session
+        
+    Returns:
+        LibraryScanResponse: Scan results with statistics
+    """
+    # Validate library_path_id exists if provided
+    if scan_request.library_path_id:
+        library_path = await LibraryPathService.get_by_id(db, scan_request.library_path_id)
+        if not library_path:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Library path not found: {scan_request.library_path_id}",
+            )
+    
+    importer = ImporterService()
+    
+    try:
+        # Execute the scan (synchronous for now, will be async job in LL-5)
+        stats = await importer.scan_library_paths(
+            db=db,
+            library_path_id=scan_request.library_path_id
+        )
+        
+        # Determine status based on errors
+        status_text = "completed" if stats.errors == 0 else "completed_with_errors"
+        
+        # Build message
+        if scan_request.library_path_id:
+            message = f"Library path scan {status_text}"
+        else:
+            message = f"Library scan {status_text}"
+            
+        if stats.errors > 0:
+            message += f" ({stats.errors} errors encountered)"
+        
+        return LibraryScanResponse(
+            status=status_text,
+            message=message,
+            stats=LibraryScanStats(**stats.to_dict())
+        )
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Library scan failed: {str(e)}"
+        )

@@ -20,7 +20,8 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: false,
   },
-  output: 'standalone',
+  // Only use standalone output for production builds
+  ...(process.env.NODE_ENV === 'production' && { output: 'standalone' }),
 };
 
 module.exports = nextConfig;

@@ -5,12 +5,12 @@
 ### Multi-Stage Docker Build
 ```dockerfile
 # Example Dockerfile structure for KireMisu
-FROM python:3.11-slim as backend-base
+FROM python:3.13-slim as backend-base
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-FROM node:18-alpine as frontend-build
+FROM node:22-alpine as frontend-build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production
@@ -94,8 +94,6 @@ class Settings(BaseSettings):
 ### Production Docker Compose
 ```yaml
 # docker-compose.prod.yml
-version: '3.8'
-
 services:
   kiremisu:
     image: kiremisu/app:latest

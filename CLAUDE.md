@@ -17,96 +17,33 @@ KireMisu is a self-hosted, cloud-first manga reader and library management syste
 - **Offline Capability**: Download and export content for offline reading
 
 ## Architecture Overview
-### Refence documentation
-- File found in docs/kiremisu_tech_stack.md
+### Reference Documentation
+- **Tech Stack**: See docs/kiremisu_tech_stack.md for complete architecture decisions and rationale
+- **Database Schema**: See docs/kiremisu_data_model.md for comprehensive schema documentation
+- **Testing Guidelines**: See .claude/rules/testing.md for detailed test strategy
 
-### Tech Stack (Current)
+### Key Technologies
 - **Backend**: FastAPI + Python 3.13+ with async performance
-- **Database**: PostgreSQL 16+ + JSONB for flexible metadata and ACID compliance
-- **Frontend**: Next.js 15.4+ + React 19+ + TypeScript with SSR performance
-- **UI Framework**: Tailwind CSS + shadcn/ui components
-- **State Management**: Zustand for optimal reading app performance
-- **File Processing**: PIL + PyMuPDF + rarfile for comprehensive manga format support
-- **Background Jobs**: PostgreSQL-based queue (eliminating Redis dependency)
+- **Database**: PostgreSQL 16+ with JSONB for flexible metadata
+- **Frontend**: Next.js 15.4+ + React 19+ + TypeScript
 - **Deployment**: Docker + Kubernetes for self-hosted flexibility
 
-### Version Requirements
-- **Node.js**: >=18.17.0
-- **npm**: >=9.0.0
-- **Python**: >=3.13
-- **Next.js**: >=15.4.0 (latest stable)
-- **React**: >=19.0.0 (latest stable)
-- **PostgreSQL**: >=16.0
+### Core Principles
+- **Self-Hosted First**: All features work in isolated environments
+- **File System as Source of Truth**: Never modify user files without permission
+- **Graceful Degradation**: Core features work even if external APIs are unavailable
+- **Performance for Large Libraries**: Design for thousands of series and chapters
 
-### System Architecture
-- **Self-Hosted Web Application**: Accessed via browser, avoiding Electron bloat
-- **File-Based Storage**: User-designated storage locations as source of truth
-- **External API Integration**: Mangadex for metadata enrichment and content discovery
 API SPec for Mangadex is at https://api.mangadex.org/docs/swagger.html
-- **Flexible Metadata Schema**: JSONB fields enable schema evolution without migrations
-- **Background Processing**: Async file processing with thread pool isolation
 
-## §3. Database Schema
+## Database Design
 
-### Core Tables
+### Key Decisions
+- **PostgreSQL + JSONB**: ACID compliance with flexible metadata schema
+- **UUID Primary Keys**: Distributed system compatibility and security
+- **Synchronous Migrations**: Simplified deployment and reliability
 
-#### Series Table
-The `series` table stores manga series metadata and configuration:
-- **Primary Key**: UUID for distributed system compatibility
-- **Essential Indexes**:
-  - `ix_series_title_primary`: Fast title searches
-  - `ix_series_author`: Author-based filtering
-  - `ix_series_artist`: Artist-based filtering  
-  - `ix_series_publication_status`: Status filtering (ongoing, completed, etc.)
-- **Key Fields**:
-  - `mangadx_id`: External identifier with unique constraint
-  - `source_metadata`/`user_metadata`: JSONB for flexible schema evolution
-  - `watching_*`: Configuration for automated chapter checking
-  - Statistics fields for reading progress tracking
-
-#### Chapters Table
-The `chapters` table stores individual chapter information:
-- **Primary Key**: UUID with foreign key to series
-- **Essential Indexes**:
-  - `ix_chapters_series_id`: Fast series-based queries
-  - `ix_chapters_series_chapter_volume`: Compound index for unique chapter identification
-  - `ix_chapters_series_ordering`: Optimized for chapter ordering within series
-- **Key Fields**:
-  - `chapter_number`: Float to support fractional chapters (1.5, etc.)
-  - `file_path`: Source file location (app doesn't move files)
-  - Reading progress tracking fields
-
-#### Supporting Tables
-- **Annotations**: Per-chapter user notes with page-level precision
-- **Library Paths**: Configured storage locations for scanning
-- **Job Queue**: PostgreSQL-based background task management
-- **User Lists**: Custom collections and reading lists
-
-### Database Design Decisions
-
-#### Synchronous Migrations
-**Decision**: Use synchronous database operations for Alembic migrations while keeping the main application async.
-**Rationale**: 
-- Avoids complex dependencies like `greenlet` for self-hosted deployments
-- Simplifies build process and reduces image size
-- Improves reliability across different architectures (ARM/x86)
-- Migration operations are inherently sequential and don't benefit from async
-
-**Implementation**: 
-- Main app uses `asyncpg` for async PostgreSQL operations
-- Migrations use `psycopg2-binary` for reliable, synchronous operations
-- Database URL automatically converted from async to sync format in Alembic env
-
-#### JSONB for Metadata
-- Enables schema evolution without migrations
-- Supports rich metadata from external sources (MangaDx)
-- Allows user customization and annotation storage
-- Indexed queries on JSON fields when needed
-
-#### UUID Primary Keys
-- Enables distributed system patterns if needed
-- Avoids integer key conflicts during imports
-- Better for API exposure and security
+*See docs/kiremisu_data_model.md for complete schema documentation*
 
 ## Core Features
 
@@ -201,51 +138,24 @@ This repository currently contains:
 - Support both simple Docker Compose and Kubernetes deployments
 - Externalize all persistent data to volumes/databases
 
-### Testing Strategy & Standards
+### Testing & Quality Assurance
 
-#### Test Requirements (Definition of Done)
-Every feature MUST include:
-1. **Backend Tests**: Unit + integration tests with ≥80% coverage
-2. **UI Tests**: Playwright E2E tests covering user workflows
-3. **Build Verification**: `npm run build` must pass without errors
-4. **Manual Testing**: UI functionality verified in development server
-5. **Version Compatibility**: Latest stable versions of dependencies
+#### Definition of Done
+Every feature MUST include comprehensive test coverage and pass all quality gates.
 
-#### Test Coverage Standards
-- **Backend**: Unit tests for service layer, integration tests for API endpoints
-- **Frontend**: E2E tests for user interactions, form validation, error handling
-- **Integration**: API mocking for reliable testing without backend dependencies
-- **Accessibility**: Keyboard navigation and screen reader compatibility
-- **Error Scenarios**: Network failures, validation errors, loading states
+*See .claude/rules/testing.md for detailed testing strategies, patterns, and requirements*
 
-#### Testing Commands
+#### Essential Commands
 ```bash
 # Backend tests
 ./scripts/dev.sh test
 
-# Frontend E2E tests
+# Frontend E2E tests  
 ./scripts/dev.sh test-e2e
 
 # Build verification
 cd frontend && npm run build
-
-# Development server test
-cd frontend && npm run dev
 ```
-
-#### Quality Gates
-Before any feature is considered complete:
-1. ✅ All tests pass
-2. ✅ Build completes without errors
-3. ✅ UI loads without runtime errors
-4. ✅ Latest stable dependency versions
-5. ✅ Linting passes
-6. ✅ Type checking passes
-
-#### Version Management
-- **Always use latest stable versions** of Next.js, React, and other frontend dependencies
-- **Test immediately after updates** to catch breaking changes
-- **Update CLAUDE.md version requirements** when upgrading major versions
 
 ### Development Commands
 
@@ -471,4 +381,49 @@ Session hand-off note appended to CLAUDE.md under "Recently Completed Sessions".
 **What's next:**
 - LL-4: Importer service to write parsed data to database
 - Parser is ready for integration with library scanning endpoints
+
+### LL-4 Importer & Manual Scan Endpoint - 2025-08-03
+
+**What was completed:**
+- ✅ **Importer Service**: Complete implementation at `backend/kiremisu/services/importer.py`
+  - Idempotent database operations for series and chapter management
+  - Transaction-per-series pattern for robust error handling
+  - Proper JSONB metadata updates with SQLAlchemy change detection
+  - Comprehensive error handling and statistics tracking
+  - Integration with filesystem parser from LL-3
+- ✅ **API Endpoint**: POST `/api/library/scan` endpoint in `backend/kiremisu/api/library.py`
+  - Accepts optional `library_path_id` for targeted scans
+  - Returns detailed statistics (series/chapters found/created/updated)
+  - Input validation for library path existence
+  - Synchronous execution (job queue coming in LL-5)
+- ✅ **Frontend UI**: Complete scanning interface in settings page
+  - "Scan All Libraries" button at top of library paths section
+  - Individual "Scan Now" buttons for each library path
+  - Loading states with spinning refresh icons and disabled buttons
+  - Toast notifications showing scan results with actual counts
+  - Automatic data refresh after successful scans
+- ✅ **Critical Fixes Applied**: All code review issues addressed
+  - Database transaction safety with per-series transactions
+  - JSONB mutation handling for proper change detection
+  - SQL injection vulnerability fixed with parameter binding
+  - N+1 query optimization confirmed
+  - API input validation for library path existence
+- ✅ **Comprehensive Testing**: Full test suite created
+  - Unit tests for ImporterService (16 tests covering all scenarios)
+  - API integration tests for scan endpoint (16 comprehensive tests)
+  - E2E tests for UI functionality (13 scenarios across 3 browsers)
+  - Test infrastructure updated to use PostgreSQL instead of SQLite
+
+**Architecture Highlights:**
+- **Idempotent Operations**: Safe to run scans multiple times without data duplication
+- **Error Resilience**: Individual file/series failures don't stop entire scan
+- **Performance**: Optimized database queries, thread pool for file operations
+- **User Experience**: Clear visual feedback during long-running operations
+- **Security**: Path validation, SQL injection prevention, proper error handling
+
+**What's next:**
+- LL-5: Automatic path scan via background jobs (builds on manual scan foundation)
+- Real series now appear in library grid after scanning
+- Manual scan functionality ready for user testing
+- Database populated with actual manga data from file system
 
