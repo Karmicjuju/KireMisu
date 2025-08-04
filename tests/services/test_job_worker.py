@@ -13,6 +13,7 @@ from kiremisu.services.job_worker import JobWorker, JobWorkerRunner, JobExecutio
 from kiremisu.services.importer import ImportStats
 
 
+@pytest.mark.unit
 class TestJobWorker:
     """Test cases for JobWorker service."""
 
@@ -239,6 +240,7 @@ class TestJobWorker:
         assert path3.last_scan is None
 
 
+@pytest.mark.unit
 class TestJobWorkerRunner:
     """Test cases for JobWorkerRunner background service."""
 

@@ -254,18 +254,53 @@ Kubernetes manifests will be provided in future releases for cloud-native deploy
 
 ## 🧪 Testing
 
-Run the test suite:
+### Running Tests
 
 ```bash
-# All tests
+# All tests with overall coverage
 ./scripts/dev.sh test
 
-# Backend only
+# Frontend E2E tests
+./scripts/dev.sh test-e2e
+
+# Backend only (without dev script)
 cd backend && pytest
 
 # Frontend type checking
 cd frontend && npm run type-check
 ```
+
+### Coverage Reports by Test Suite
+
+Generate separate coverage reports for different test types:
+
+```bash
+# Unit tests only → htmlcov/unit/
+./scripts/dev.sh test-coverage-unit
+
+# Integration tests only → htmlcov/integration/
+./scripts/dev.sh test-coverage-integration
+
+# API endpoint tests → htmlcov/api/
+./scripts/dev.sh test-coverage-api
+
+# Security tests → htmlcov/security/
+./scripts/dev.sh test-coverage-security
+
+# All tests combined → htmlcov/combined/
+./scripts/dev.sh test-coverage-all
+
+# Generate comparison report → htmlcov/comparison/
+./scripts/dev.sh test-coverage-compare
+```
+
+### Coverage Analysis Benefits
+
+- **Unit Test Coverage**: See which modules have isolated test coverage
+- **Integration Coverage**: Identify component interaction coverage
+- **API Coverage**: Track endpoint-specific test coverage
+- **Security Coverage**: Monitor security-focused test coverage
+- **Coverage Overlap**: Find redundant or missing coverage areas
 
 ## 📋 Roadmap
 

@@ -4,6 +4,7 @@ import pytest
 from pathlib import Path
 
 
+@pytest.mark.unit
 def test_migration_file_exists() -> None:
     """Test that the initial migration file exists and is readable."""
     project_root = Path(__file__).parent.parent.parent

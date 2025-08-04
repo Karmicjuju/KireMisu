@@ -101,6 +101,7 @@ async def existing_series(db_session: AsyncSession, sample_series_info: SeriesIn
     return series
 
 
+@pytest.mark.unit
 class TestImportStats:
     """Test ImportStats class."""
 
@@ -136,6 +137,7 @@ class TestImportStats:
         assert stats.to_dict() == expected
 
 
+@pytest.mark.unit
 class TestImporterService:
     """Test ImporterService functionality."""
 

@@ -12,6 +12,7 @@ from kiremisu.database.models import JobQueue, LibraryPath
 from kiremisu.services.job_scheduler import JobScheduler, SchedulerRunner
 
 
+@pytest.mark.unit
 class TestJobScheduler:
     """Test cases for JobScheduler service."""
 
@@ -279,6 +280,7 @@ class TestJobScheduler:
         assert not JobScheduler._should_schedule_scan(path)
 
 
+@pytest.mark.unit
 class TestSchedulerRunner:
     """Test cases for SchedulerRunner background service."""
 

@@ -91,6 +91,7 @@ def parser():
     return FilesystemParser(max_cpu_workers=1, max_io_workers=1)
 
 
+@pytest.mark.unit
 class TestFilesystemParser:
     """Test cases for FilesystemParser class."""
 
@@ -240,6 +241,7 @@ class TestFilesystemParser:
         assert parser.io_pool._shutdown
 
 
+@pytest.mark.unit
 class TestConvenienceFunction:
     """Test the convenience parse_library_path function."""
 
@@ -254,6 +256,7 @@ class TestConvenienceFunction:
         assert len(series.chapters) == 2
 
 
+@pytest.mark.unit
 class TestEdgeCases:
     """Test edge cases and error handling."""
 
@@ -334,6 +337,7 @@ class TestEdgeCases:
             assert chapter_numbers == [1.5, 2.5, 3.0]
 
 
+@pytest.mark.unit
 class TestFileFormatSupport:
     """Test different file format support."""
 
@@ -389,6 +393,7 @@ async def test_real_fixtures_parsing():
                 assert chapter.file_path is not None
 
 
+@pytest.mark.unit
 class TestSeriesInfoDataClass:
     """Test SeriesInfo data class functionality."""
 
@@ -405,6 +410,7 @@ class TestSeriesInfoDataClass:
         assert series.total_chapters == 2
 
 
+@pytest.mark.unit
 class TestPDFSupport:
     """Test PDF file format support."""
 
@@ -450,6 +456,7 @@ class TestPDFSupport:
             assert chapter_info.chapter_number == 1.0
 
 
+@pytest.mark.unit
 class TestRARSupport:
     """Test RAR/CBR file format support."""
 
@@ -496,6 +503,7 @@ class TestRARSupport:
             assert chapter_info.chapter_number == 1.0
 
 
+@pytest.mark.security
 class TestSecurityTests:
     """Test security aspects of the filesystem parser."""
 
@@ -600,6 +608,7 @@ class TestSecurityTests:
                 assert chapter_info.chapter_number is not None
 
 
+@pytest.mark.performance
 class TestPerformanceAndScalability:
     """Test performance aspects and scalability of the parser."""
 
@@ -672,6 +681,7 @@ class TestPerformanceAndScalability:
             assert all(result is not None for result in results)
 
 
+@pytest.mark.unit
 class TestErrorHandlingAndRobustness:
     """Test comprehensive error handling scenarios."""
 
@@ -754,6 +764,7 @@ class TestErrorHandlingAndRobustness:
                 assert result == expected, f"Failed for input: {input_name}"
 
 
+@pytest.mark.unit
 class TestAdvancedFeatures:
     """Test advanced parsing features and metadata extraction."""
 

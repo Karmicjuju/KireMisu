@@ -32,6 +32,12 @@ print_usage() {
     echo "  format         - Format all code"
     echo "  test           - Run all tests"
     echo "  test-e2e       - Run frontend E2E tests"
+    echo "  test-coverage-unit        - Run unit tests with coverage report"
+    echo "  test-coverage-integration - Run integration tests with coverage report"
+    echo "  test-coverage-api         - Run API tests with coverage report"
+    echo "  test-coverage-security    - Run security tests with coverage report"
+    echo "  test-coverage-all         - Run all tests with combined coverage report"
+    echo "  test-coverage-compare     - Generate coverage comparison report"
     echo "  clean          - Clean build artifacts and dependencies"
     echo ""
     echo "Docker Commands:"
@@ -441,11 +447,14 @@ run_format() {
 run_tests() {
     log_info "Running tests..."
     
-    # Backend tests
+    # Backend tests - use combined coverage context for overall report
     cd "$PROJECT_ROOT"
     
     # Ensure we're in a virtual environment
     ensure_venv || return 1
+    
+    # Set coverage context to combined for overall coverage report
+    export COVERAGE_CONTEXT="combined"
     
     if command -v uv &> /dev/null; then
         uv run pytest
@@ -458,6 +467,7 @@ run_tests() {
     npm run type-check
     
     log_success "Tests complete"
+    log_info "Overall coverage report generated in htmlcov/combined/"
 }
 
 run_e2e_tests() {
@@ -468,6 +478,78 @@ run_e2e_tests() {
     npm run test:e2e
     
     log_success "E2E tests complete"
+}
+
+run_coverage_tests() {
+    local test_type="$1"
+    local marker_filter="$2"
+    
+    log_info "Running $test_type tests with coverage..."
+    cd "$PROJECT_ROOT"
+    
+    # Ensure we're in a virtual environment
+    ensure_venv || return 1
+    
+    # Set coverage context
+    export COVERAGE_CONTEXT="$test_type"
+    
+    # Run tests with coverage
+    if command -v uv &> /dev/null; then
+        if [ -n "$marker_filter" ]; then
+            uv run pytest -m "$marker_filter" --cov=kiremisu --cov-report=html --cov-report=term-missing
+        else
+            uv run pytest --cov=kiremisu --cov-report=html --cov-report=term-missing
+        fi
+    else
+        if [ -n "$marker_filter" ]; then
+            pytest -m "$marker_filter" --cov=kiremisu --cov-report=html --cov-report=term-missing
+        else
+            pytest --cov=kiremisu --cov-report=html --cov-report=term-missing
+        fi
+    fi
+    
+    log_success "$test_type coverage report generated in htmlcov/$test_type/"
+}
+
+run_coverage_unit() {
+    run_coverage_tests "unit" "unit"
+}
+
+run_coverage_integration() {
+    run_coverage_tests "integration" "integration"
+}
+
+run_coverage_api() {
+    run_coverage_tests "api" "api"
+}
+
+run_coverage_security() {
+    run_coverage_tests "security" "security"
+}
+
+run_coverage_all() {
+    run_coverage_tests "combined" ""
+}
+
+run_coverage_compare() {
+    log_info "Generating coverage comparison report..."
+    cd "$PROJECT_ROOT"
+    
+    # Ensure we're in a virtual environment
+    ensure_venv || return 1
+    
+    # Run the comparison script
+    if [ -f "scripts/compare_coverage.py" ]; then
+        if command -v uv &> /dev/null; then
+            uv run python scripts/compare_coverage.py
+        else
+            python scripts/compare_coverage.py
+        fi
+        log_success "Coverage comparison report generated in htmlcov/comparison/"
+    else
+        log_error "Coverage comparison script not found at scripts/compare_coverage.py"
+        return 1
+    fi
 }
 
 clean_environment() {
@@ -564,6 +646,24 @@ case "$1" in
         ;;
     test-e2e)
         run_e2e_tests
+        ;;
+    test-coverage-unit)
+        run_coverage_unit
+        ;;
+    test-coverage-integration)
+        run_coverage_integration
+        ;;
+    test-coverage-api)
+        run_coverage_api
+        ;;
+    test-coverage-security)
+        run_coverage_security
+        ;;
+    test-coverage-all)
+        run_coverage_all
+        ;;
+    test-coverage-compare)
+        run_coverage_compare
         ;;
     clean)
         clean_environment

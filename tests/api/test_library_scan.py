@@ -84,6 +84,7 @@ async def sample_series_info():
     )
 
 
+@pytest.mark.api
 class TestLibraryScanAPI:
     """Test library scan API endpoints."""
 
