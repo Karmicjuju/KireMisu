@@ -9,6 +9,7 @@ Generates side-by-side comparison showing:
 - Overall coverage statistics by test suite
 """
 
+import html
 import json
 import os
 import sqlite3
@@ -16,55 +17,60 @@ from pathlib import Path
 from typing import Dict, List, Set, Tuple
 import sys
 
+try:
+    import coverage
+except ImportError:
+    print("Error: coverage package not found. Please install with: pip install coverage")
+    sys.exit(1)
 
-def load_coverage_data(context: str) -> Dict:
-    """Load coverage data for a specific context."""
+
+def load_coverage_data(context: str) -> Dict[str, Set[int]]:
+    """Load coverage data for a specific context using coverage.py API."""
     coverage_file = f".coverage.{context}"
     if not os.path.exists(coverage_file):
-        print(f"Warning: Coverage file {coverage_file} not found. Run coverage tests first.")
         return {}
     
     try:
-        conn = sqlite3.connect(coverage_file)
-        cursor = conn.cursor()
-        
-        # Get file coverage data
-        cursor.execute("""
-            SELECT file.path, context.context, line_bits.numbits, line_bits.data
-            FROM coverage_schema 
-            JOIN file ON coverage_schema.file_id = file.id
-            JOIN context ON coverage_schema.context_id = context.id  
-            JOIN line_bits ON coverage_schema.id = line_bits.coverage_id
-            WHERE context.context = ?
-        """, (context,))
-        
-        results = cursor.fetchall()
-        conn.close()
+        # Use coverage.py API for proper data parsing
+        cov = coverage.Coverage(data_file=coverage_file)
+        cov.load()
         
         coverage_data = {}
-        for file_path, ctx, numbits, data in results:
-            if file_path not in coverage_data:
-                coverage_data[file_path] = set()
-            
-            # Parse line coverage data (this is a simplified approach)
-            # In practice, coverage.py stores this in a complex binary format
-            # For now, we'll return a placeholder structure
-            coverage_data[file_path] = set(range(1, 100))  # Placeholder
-            
+        
+        # Get list of measured files
+        measured_files = cov.get_data().measured_files()
+        
+        for file_path in measured_files:
+            # Get executed lines for this file
+            analysis = cov.analysis2(file_path)
+            if analysis:
+                _, executed_lines, _, _ = analysis
+                # Convert relative paths to project-relative paths
+                rel_path = os.path.relpath(file_path, os.getcwd())
+                coverage_data[rel_path] = set(executed_lines)
+        
         return coverage_data
         
     except Exception as e:
         print(f"Error loading coverage data for {context}: {e}")
+        print(f"Make sure to run: make test-coverage-{context}")
         return {}
 
 
 def get_coverage_files() -> List[str]:
     """Get list of available coverage files."""
+    # Define allowed contexts for security
+    allowed_contexts = {"unit", "integration", "api", "security", "performance", "combined"}
+    
     coverage_files = []
     for file in os.listdir("."):
         if file.startswith(".coverage.") and not file.endswith(".lock"):
             context = file.replace(".coverage.", "")
-            coverage_files.append(context)
+            # Validate context name for security
+            if context in allowed_contexts:
+                coverage_files.append(context)
+            else:
+                print(f"Warning: Skipping unknown coverage context: {context}")
     return sorted(coverage_files)
 
 
@@ -185,7 +191,7 @@ def generate_html_report(analysis: Dict, output_dir: str) -> None:
     for file_path, file_data in analysis["files"].items():
         html_content += f"""
             <tr>
-                <td>{file_path}</td>"""
+                <td>{html.escape(file_path)}</td>"""
         
         for context in analysis["contexts"]:
             if context in file_data["covered_by"]:
@@ -245,17 +251,40 @@ def main():
     # Get available coverage files
     coverage_files = get_coverage_files()
     if not coverage_files:
-        print("No coverage files found. Please run coverage tests first:")
-        print("  make test-coverage-unit")
-        print("  make test-coverage-integration") 
-        print("  make test-coverage-api")
-        print("  make test-coverage-all")
+        print("\nNo coverage files found. Please run coverage tests first:")
+        print("\nAvailable commands:")
+        print("  make test-coverage-unit       # Generate unit test coverage")
+        print("  make test-coverage-integration # Generate integration test coverage")
+        print("  make test-coverage-api        # Generate API test coverage")
+        print("  make test-coverage-security   # Generate security test coverage")
+        print("  make test-coverage-all        # Generate combined coverage")
+        print("\nThen run: make test-coverage-compare")
         sys.exit(1)
     
     print(f"Found coverage data for contexts: {', '.join(coverage_files)}")
     
+    # Validate that we have actual coverage data
+    total_coverage_files = 0
+    for context in coverage_files:
+        data = load_coverage_data(context)
+        if data:
+            total_coverage_files += 1
+        else:
+            print(f"Warning: No coverage data found for context '{context}'")
+            print(f"Run: make test-coverage-{context}")
+    
+    if total_coverage_files == 0:
+        print("\nError: No valid coverage data found in any context.")
+        print("Please run the coverage commands listed above first.")
+        sys.exit(1)
+    
     # Analyze coverage
     analysis = analyze_coverage_overlap(coverage_files)
+    
+    # Validate analysis results
+    if analysis['total_files'] == 0:
+        print("\nWarning: No files found in coverage analysis.")
+        print("This may indicate an issue with coverage data collection.")
     
     # Generate HTML report
     output_dir = "htmlcov/comparison"

@@ -54,16 +54,29 @@ test-coverage-all:
 	COVERAGE_CONTEXT=combined pytest --cov=kiremisu --cov-report=html --cov-report=term-missing
 	@echo "Combined test coverage report generated in htmlcov/combined/"
 
-# Generate comparison report
+# Generate comparison report (depends on having some coverage data)
 test-coverage-compare:
 	@echo "Generating coverage comparison report..."
 	@mkdir -p htmlcov/comparison
-	@if command -v python3 >/dev/null 2>&1; then \
-		python3 scripts/compare_coverage.py; \
-	else \
-		echo "Python 3 not found. Please install Python 3 to generate comparison reports."; \
+	@echo "Checking for coverage dependencies..."
+	@if ! command -v python3 >/dev/null 2>&1; then \
+		echo "Error: Python 3 not found. Please install Python 3."; \
 		exit 1; \
 	fi
+	@if ! python3 -c "import coverage" >/dev/null 2>&1; then \
+		echo "Error: coverage package not found. Please install with: pip install coverage"; \
+		exit 1; \
+	fi
+	@if ! ls .coverage.* >/dev/null 2>&1; then \
+		echo "Error: No coverage files found. Please run one of the following first:"; \
+		echo "  make test-coverage-unit"; \
+		echo "  make test-coverage-integration"; \
+		echo "  make test-coverage-api"; \
+		echo "  make test-coverage-security"; \
+		echo "  make test-coverage-all"; \
+		exit 1; \
+	fi
+	python3 scripts/compare_coverage.py
 	@echo "Coverage comparison report generated in htmlcov/comparison/"
 
 # Clean coverage reports and build artifacts
