@@ -108,13 +108,17 @@ addopts = [
 ]
 asyncio_mode = "auto"
 markers = [
-    "unit: marks tests as unit tests",
-    "integration: marks tests as integration tests",
-    "slow: marks tests as slow",
+    "unit: Unit tests for individual functions/classes",
+    "integration: Integration tests for component interactions",
+    "api: API endpoint tests with database",
+    "security: Security-focused tests (path traversal, validation)",
+    "performance: Performance and load tests",
+    "slow: Long-running tests"
 ]
 
 [tool.coverage.run]
 source = ["kiremisu"]
+context = "${COVERAGE_CONTEXT}"
 omit = [
     "*/tests/*",
     "*/migrations/*",
@@ -134,6 +138,9 @@ exclude_lines = [
     "class .*\\bProtocol\\):",
     "@(abc\\.)?abstractmethod",
 ]
+
+[tool.coverage.html]
+directory = "htmlcov/${COVERAGE_CONTEXT:-combined}"
 
 [dependency-groups]
 dev = [

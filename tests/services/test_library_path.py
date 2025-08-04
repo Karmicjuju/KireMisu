@@ -32,6 +32,7 @@ async def sample_library_path(db_session: AsyncSession, temp_directory: str):
     return library_path
 
 
+@pytest.mark.unit
 class TestLibraryPathService:
     """Test library path service functionality."""
 

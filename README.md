@@ -254,6 +254,8 @@ Kubernetes manifests will be provided in future releases for cloud-native deploy
 
 ## 🧪 Testing
 
+### Running Tests
+
 Run the test suite:
 
 ```bash
@@ -265,6 +267,58 @@ cd backend && pytest
 
 # Frontend type checking
 cd frontend && npm run type-check
+```
+
+### Coverage Reports
+
+KireMisu supports separate coverage reports by test suite type for better testing insights:
+
+```bash
+# Generate coverage reports by test type
+make test-coverage-unit          # Unit tests only → htmlcov/unit/
+make test-coverage-integration   # Integration tests → htmlcov/integration/
+make test-coverage-api          # API endpoint tests → htmlcov/api/
+make test-coverage-security     # Security tests → htmlcov/security/
+make test-coverage-all          # All tests → htmlcov/combined/
+
+# Generate comparison report
+make test-coverage-compare      # Coverage comparison → htmlcov/comparison/
+
+# Clean coverage reports
+make clean
+```
+
+#### Test Markers
+
+Tests are organized using pytest markers:
+
+- `@pytest.mark.unit` - Unit tests for individual functions/classes
+- `@pytest.mark.integration` - Integration tests for component interactions  
+- `@pytest.mark.api` - API endpoint tests with database
+- `@pytest.mark.security` - Security-focused tests (path traversal, validation)
+- `@pytest.mark.performance` - Performance and load tests
+- `@pytest.mark.slow` - Long-running tests
+
+#### Coverage Analysis
+
+The separate coverage reports help identify:
+
+- **Unit vs Integration Coverage**: Which components have good unit test coverage vs only integration coverage
+- **Coverage Gaps**: Areas that need more focused testing
+- **Test Quality**: Better understanding of test pyramid health
+- **Security Coverage**: Dedicated tracking of security-sensitive functions
+
+Example workflow:
+```bash
+# Check unit test coverage quality
+make test-coverage-unit
+
+# Verify API endpoints are well-tested  
+make test-coverage-api
+
+# Generate comprehensive comparison
+make test-coverage-compare
+# Open htmlcov/comparison/index.html in browser
 ```
 
 ## 📋 Roadmap

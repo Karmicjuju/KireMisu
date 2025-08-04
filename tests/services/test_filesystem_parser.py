@@ -91,6 +91,7 @@ def parser():
     return FilesystemParser(max_cpu_workers=1, max_io_workers=1)
 
 
+@pytest.mark.unit
 class TestFilesystemParser:
     """Test cases for FilesystemParser class."""
 
@@ -496,6 +497,7 @@ class TestRARSupport:
             assert chapter_info.chapter_number == 1.0
 
 
+@pytest.mark.security
 class TestSecurityTests:
     """Test security aspects of the filesystem parser."""
 
@@ -600,6 +602,7 @@ class TestSecurityTests:
                 assert chapter_info.chapter_number is not None
 
 
+@pytest.mark.performance
 class TestPerformanceAndScalability:
     """Test performance aspects and scalability of the parser."""
 
