@@ -37,6 +37,7 @@ MANIFEST
 # FastAPI & Uvicorn
 .coverage
 htmlcov/
+backend/htmlcov/
 .tox/
 .nox/
 .coverage.*

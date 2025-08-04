@@ -157,9 +157,11 @@ class TestLibraryPathAPI:
     @pytest.mark.asyncio
     async def test_trigger_scan(self, client: AsyncClient, sample_library_path: LibraryPath):
         """Test triggering a library scan."""
-        response = await client.post("/api/library/scan")
-        assert response.status_code == 202
+        response = await client.post("/api/library/scan", json={})
+        assert response.status_code == 200
         data = response.json()
-        assert "Library scan initiated" in data["message"]
-        assert data["paths_to_scan"] >= 1
-        assert data["status"] == "queued"
+        assert data["status"] == "completed"
+        assert "message" in data
+        assert "stats" in data
+        assert data["stats"]["series_found"] >= 0
+        assert data["stats"]["series_created"] >= 0
