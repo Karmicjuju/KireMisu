@@ -20,7 +20,7 @@ from kiremisu.database.models import Series, Chapter
 async def create_test_data():
     """Create test series and chapter data."""
     db_session_factory = get_db_session_factory()
-    
+
     async with db_session_factory() as db:
         # Create test series
         series = Series(
@@ -29,12 +29,12 @@ async def create_test_data():
             author="Test Author",
             description="A test manga series for manual testing the reader",
             total_chapters=1,
-            file_path="/test/manga/series"
+            file_path="/test/manga/series",
         )
         db.add(series)
         await db.flush()
-        
-        # Create test chapter  
+
+        # Create test chapter
         chapter = Chapter(
             id=uuid4(),
             series_id=series.id,
@@ -45,13 +45,13 @@ async def create_test_data():
             file_size=1024000,
             page_count=5,
             is_read=False,
-            last_read_page=0
+            last_read_page=0,
         )
         db.add(chapter)
         await db.commit()
         await db.refresh(series)
         await db.refresh(chapter)
-        
+
         print(f"✅ Created test series: {series.id}")
         print(f"✅ Created test chapter: {chapter.id}")
         print(f"\n🔗 Test reader URL:")
@@ -59,7 +59,7 @@ async def create_test_data():
         print(f"\n📊 API endpoints to test:")
         print(f"   http://localhost:8000/api/chapters/{chapter.id}")
         print(f"   http://localhost:8000/api/chapters/{chapter.id}/pages")
-        
+
         return series.id, chapter.id
 
 

@@ -3,7 +3,7 @@ import { test, expect, Page } from '@playwright/test';
 test.describe('Reader Smoke Tests', () => {
   // Use real test chapter ID from test data
   const TEST_CHAPTER_ID = '5e331adb-4a29-4e96-97fb-519d6e95171a';
-  
+
   // Mock chapter data for testing
   const mockChapterInfo = {
     id: TEST_CHAPTER_ID,

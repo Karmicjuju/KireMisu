@@ -7,21 +7,21 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Generic type for paginated responses
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class PaginationParams(BaseModel):
     """Schema for pagination parameters."""
-    
+
     page: int = Field(default=1, ge=1, description="Page number (1-based)")
     per_page: int = Field(default=20, ge=1, le=100, description="Items per page (1-100)")
-    
+
     @property
     def offset(self) -> int:
         """Calculate offset for database queries."""
         return (self.page - 1) * self.per_page
-    
-    @property 
+
+    @property
     def limit(self) -> int:
         """Get limit for database queries."""
         return self.per_page
@@ -29,7 +29,7 @@ class PaginationParams(BaseModel):
 
 class PaginationMeta(BaseModel):
     """Schema for pagination metadata."""
-    
+
     page: int = Field(..., description="Current page number")
     per_page: int = Field(..., description="Items per page")
     total_items: int = Field(..., description="Total number of items")
@@ -38,12 +38,12 @@ class PaginationMeta(BaseModel):
     has_next: bool = Field(..., description="Whether there's a next page")
     prev_page: Optional[int] = Field(None, description="Previous page number")
     next_page: Optional[int] = Field(None, description="Next page number")
-    
+
     @classmethod
     def create(cls, page: int, per_page: int, total_items: int) -> "PaginationMeta":
         """Create pagination metadata from parameters."""
         total_pages = (total_items + per_page - 1) // per_page  # Ceiling division
-        
+
         return cls(
             page=page,
             per_page=per_page,
@@ -58,7 +58,7 @@ class PaginationMeta(BaseModel):
 
 class PaginatedResponse(BaseModel, Generic[T]):
     """Generic schema for paginated API responses."""
-    
+
     items: List[T] = Field(..., description="List of items")
     pagination: PaginationMeta = Field(..., description="Pagination metadata")
 
@@ -456,6 +456,7 @@ class ChapterProgressUpdate(BaseModel):
 
 class ChapterProgressResponse(ChapterResponse):
     """Schema for chapter progress update responses."""
+
     pass
 
 
@@ -492,3 +493,50 @@ class SeriesChaptersResponse(BaseModel):
 
     series: SeriesResponse = Field(..., description="Series information")
     chapters: List[ChapterResponse] = Field(..., description="List of chapters in order")
+
+
+# Mark-read and progress schemas
+class ChapterMarkReadResponse(BaseModel):
+    """Schema for mark-read toggle response."""
+
+    id: UUID = Field(..., description="Chapter unique identifier")
+    is_read: bool = Field(..., description="Updated read status")
+    read_at: Optional[datetime] = Field(None, description="When chapter was marked as read")
+    series_read_chapters: int = Field(..., description="Updated series read chapter count")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SeriesProgressResponse(BaseModel):
+    """Schema for series progress information."""
+
+    series_id: UUID = Field(..., description="Series unique identifier")
+    total_chapters: int = Field(..., description="Total number of chapters")
+    read_chapters: int = Field(..., description="Number of read chapters")
+    progress_percentage: float = Field(..., description="Progress percentage (0-100)")
+    recent_chapters: List[ChapterResponse] = Field(
+        default_factory=list, description="Recently read chapters (up to 5)"
+    )
+    last_read_at: Optional[datetime] = Field(None, description="Most recent read timestamp")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DashboardStatsResponse(BaseModel):
+    """Schema for dashboard statistics."""
+
+    total_series: int = Field(..., description="Total number of series in library")
+    total_chapters: int = Field(..., description="Total number of chapters in library")
+    read_chapters: int = Field(..., description="Total number of read chapters")
+    reading_progress_percentage: float = Field(
+        ..., description="Overall reading progress percentage (0-100)"
+    )
+    recent_activity: List[ChapterResponse] = Field(
+        default_factory=list, description="Recently read chapters (up to 10)"
+    )
+    series_by_status: dict = Field(
+        default_factory=dict, description="Series counts by reading status"
+    )
+    last_updated: datetime = Field(..., description="Statistics calculation timestamp")
+
+    model_config = ConfigDict(from_attributes=True)

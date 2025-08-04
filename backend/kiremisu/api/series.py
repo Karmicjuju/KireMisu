@@ -5,12 +5,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
 from kiremisu.database.connection import get_db
 from kiremisu.database.models import Series, Chapter
-from kiremisu.database.schemas import SeriesResponse, ChapterResponse
+from kiremisu.database.schemas import SeriesResponse, ChapterResponse, SeriesProgressResponse
 
 router = APIRouter(prefix="/api/series", tags=["series"])
 
@@ -77,3 +77,47 @@ async def get_series_chapters(
     chapters = result.scalars().all()
 
     return [ChapterResponse.from_model(chapter) for chapter in chapters]
+
+
+@router.get("/{series_id}/progress", response_model=SeriesProgressResponse)
+async def get_series_progress(
+    series_id: UUID, db: AsyncSession = Depends(get_db)
+) -> SeriesProgressResponse:
+    """Get detailed progress information for a series."""
+    # Get series
+    series_result = await db.execute(select(Series).where(Series.id == series_id))
+    series = series_result.scalar_one_or_none()
+
+    if not series:
+        raise HTTPException(status_code=404, detail="Series not found")
+
+    # Get recent read chapters (up to 5, ordered by read_at desc)
+    recent_chapters_result = await db.execute(
+        select(Chapter)
+        .where(Chapter.series_id == series_id, Chapter.is_read == True)
+        .order_by(Chapter.read_at.desc().nulls_last())
+        .limit(5)
+    )
+    recent_chapters = recent_chapters_result.scalars().all()
+
+    # Get most recent read timestamp
+    last_read_result = await db.execute(
+        select(func.max(Chapter.read_at)).where(
+            Chapter.series_id == series_id, Chapter.is_read == True
+        )
+    )
+    last_read_at = last_read_result.scalar()
+
+    # Calculate progress percentage
+    progress_percentage = 0.0
+    if series.total_chapters > 0:
+        progress_percentage = (series.read_chapters / series.total_chapters) * 100
+
+    return SeriesProgressResponse(
+        series_id=series_id,
+        total_chapters=series.total_chapters,
+        read_chapters=series.read_chapters,
+        progress_percentage=round(progress_percentage, 2),
+        recent_chapters=[ChapterResponse.from_model(chapter) for chapter in recent_chapters],
+        last_read_at=last_read_at,
+    )
