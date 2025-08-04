@@ -44,3 +44,38 @@ export function calculateReadingProgress(readChapters: number, totalChapters: nu
   if (totalChapters === 0) return 0;
   return Math.round((readChapters / totalChapters) * 100);
 }
+
+export function formatRelativeTime(date: string | Date): string {
+  const now = new Date();
+  const target = new Date(date);
+  const diffMs = now.getTime() - target.getTime();
+  
+  // If in the future or exactly now
+  if (diffMs <= 0) {
+    return 'just now';
+  }
+  
+  const diffSeconds = Math.floor(diffMs / 1000);
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  const diffWeeks = Math.floor(diffDays / 7);
+  const diffMonths = Math.floor(diffDays / 30);
+  const diffYears = Math.floor(diffDays / 365);
+  
+  if (diffYears > 0) {
+    return `${diffYears} year${diffYears > 1 ? 's' : ''} ago`;
+  } else if (diffMonths > 0) {
+    return `${diffMonths} month${diffMonths > 1 ? 's' : ''} ago`;
+  } else if (diffWeeks > 0) {
+    return `${diffWeeks} week${diffWeeks > 1 ? 's' : ''} ago`;
+  } else if (diffDays > 0) {
+    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  } else if (diffHours > 0) {
+    return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+  } else if (diffMinutes > 0) {
+    return `${diffMinutes} minute${diffMinutes > 1 ? 's' : ''} ago`;
+  } else {
+    return 'just now';
+  }
+}

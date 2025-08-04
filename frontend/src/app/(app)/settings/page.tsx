@@ -1,6 +1,7 @@
 'use client';
 
 import { LibraryPaths } from '@/components/settings/library-paths';
+import { JobStatusDashboard } from '@/components/settings/job-status-dashboard';
 
 export default function SettingsPage() {
   return (
@@ -10,6 +11,7 @@ export default function SettingsPage() {
 
         <div className="space-y-8">
           <LibraryPaths />
+          <JobStatusDashboard />
         </div>
       </div>
     </div>

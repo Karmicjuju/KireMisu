@@ -98,7 +98,7 @@ This repository currently contains:
 - **Documentation**: Comprehensive PRD and tech stack specifications
 - **UI Mockup**: React component demonstrating the planned interface design
 - **Active Implementation**: Database schema, FastAPI backend, and Next.js frontend
-- **Completed Features**: LL-1 (Database schema), LL-2 (Library path CRUD), LL-3 (Filesystem parser)
+- **Completed Features**: LL-1 (Database schema), LL-2 (Library path CRUD), LL-3 (Filesystem parser), LL-4 (Importer & manual scan), LL-5 (Automatic path scan via jobs)
 
 ### When Implementation Begins
 
@@ -233,7 +233,7 @@ cd frontend && npm run type-check
 | **LL-2**<br>*Library-path CRUD* ✅             | LL-1                    | • DB structures for paths + scan interval<br>• API endpoints (list, create, update, delete)<br>• Settings UI with directory picker & interval dropdown<br>• Unit + UI tests | User can store a path in the app       |
 | **LL-3**<br>*Filesystem parser utility* ✅    | LL-2                    | • Pure-Python parser that returns structured series/chapter info<br>• Fixture test covering CBZ & folder input<br>• Docs link added to CLAUDE.md §1                         | Parser usable by importer              |
 | **LL-4**<br>*Importer & manual scan endpoint* | LL-3                    | • Importer writes/updates rows idempotently<br>• POST `/library/scan` enqueues/imports scan<br>• Settings “Scan Now” button + toast<br>• Tests validating counts returned   | Real series appear in Library grid     |
-| **LL-5**<br>*Automatic path scan via jobs*    | LL-4, BQ-1              | • Scan jobs scheduled per path interval<br>• UI shows last-run time<br>• CI integration test: job runs in worker                                                            | Library stays up-to-date automatically |
+| **LL-5**<br>*Automatic path scan via jobs* ✅ | LL-4, BQ-1              | • Scan jobs scheduled per path interval<br>• UI shows last-run time<br>• CI integration test: job runs in worker                                                            | Library stays up-to-date automatically |
 | **R-1**<br>*Page streaming + basic reader*    | LL-4                    | • Endpoint streams page images<br>• Simple reader component (keys/swipe)<br>• Smoke test opens first page                                                                   | User can read a chapter                |
 | **R-2**<br>*Mark-read & progress bars*        | R-1                     | • API toggles read state; triggers aggregate update<br>• Progress bar & dashboard stats update in UI<br>• Unit + E2E tests                                                  | Reading progress visible               |
 | **TL-1**<br>*Tagging system*                  | LL-4                    | • Tag + junction schema<br>• Tag CRUD endpoints<br>• Chip editor in series detail<br>• Filtered Library view                                                                | User organizes series via tags         |
@@ -426,4 +426,68 @@ Session hand-off note appended to CLAUDE.md under "Recently Completed Sessions".
 - Real series now appear in library grid after scanning
 - Manual scan functionality ready for user testing
 - Database populated with actual manga data from file system
+
+### LL-5 Automatic Path Scan via Jobs - 2025-08-04
+
+**What was completed:**
+- ✅ **Job Scheduling Service**: Complete implementation at `backend/kiremisu/services/job_scheduler.py`
+  - Automatic scheduling based on library path `scan_interval_hours` configuration
+  - Manual job scheduling with priority support for immediate scans
+  - Job queue statistics and monitoring capabilities
+  - Cleanup functionality for old completed jobs
+  - Intelligent scheduling logic that respects intervals and prevents duplicate jobs
+- ✅ **Job Execution Service**: Complete implementation at `backend/kiremisu/services/job_worker.py`
+  - Async worker with configurable concurrency limits (default: 3 concurrent jobs)
+  - Comprehensive error handling with retry logic and exponential backoff
+  - Integration with existing library scan logic from LL-4
+  - Automatic `last_scan` timestamp updates for library paths
+  - Job status tracking throughout execution lifecycle
+- ✅ **Job API Endpoints**: Complete REST API at `backend/kiremisu/api/jobs.py`
+  - `GET /api/jobs/status` - Job queue statistics and worker status
+  - `GET /api/jobs/recent` - Recent job history with filtering options
+  - `GET /api/jobs/{job_id}` - Specific job details and status
+  - `POST /api/jobs/schedule` - Manual job scheduling with priority control
+  - `POST /api/jobs/cleanup` - Clean up old completed jobs
+  - `GET /api/jobs/worker/status` - Background worker status and metrics
+- ✅ **Background Service Integration**: Full integration with FastAPI application lifecycle
+  - JobWorkerRunner with 10-second polling interval and 3 concurrent job limit
+  - SchedulerRunner with 5-minute check interval for automatic scheduling
+  - Proper startup/shutdown handling with graceful service termination
+  - Service status monitoring and health checks
+- ✅ **Comprehensive Testing**: Full test coverage for all job system components
+  - Unit tests for JobScheduler (16 tests) covering scheduling logic and edge cases
+  - Unit tests for JobWorker (12 tests) covering execution, retries, and error handling
+  - Integration tests for job API endpoints (15 tests) covering all REST operations
+  - Async component testing with proper mocking and isolation
+  - Database transaction handling and job lifecycle validation
+
+**Architecture Highlights:**
+- **PostgreSQL Job Queue**: Reliable job persistence using existing database infrastructure
+- **Async/Await Throughout**: Non-blocking job processing with proper resource management
+- **Configurable Concurrency**: Adjustable worker limits to prevent system overload
+- **Intelligent Scheduling**: Respects library path intervals and prevents duplicate scheduling
+- **Comprehensive Monitoring**: Full visibility into job queue status and worker health
+- **Error Resilience**: Retry logic with configurable limits and detailed error tracking
+- **Resource Cleanup**: Automatic cleanup of old completed jobs to prevent database bloat
+
+**Job System Features:**
+- **Automatic Scheduling**: Library paths scanned automatically based on `scan_interval_hours`
+- **Manual Scheduling**: High-priority manual scans for immediate execution
+- **Job Prioritization**: Higher priority jobs execute before lower priority ones
+- **Retry Logic**: Failed jobs automatically retry up to 3 times with exponential backoff
+- **Status Tracking**: Complete job lifecycle tracking from creation to completion
+- **Worker Management**: Background worker with health monitoring and graceful shutdown
+- **Queue Statistics**: Real-time metrics on pending, running, and failed jobs
+
+**Database Integration:**
+- **JobQueue Model**: Complete job persistence with payload, status, and execution tracking
+- **Library Path Updates**: Automatic `last_scan` timestamp updates after successful scans
+- **Transaction Safety**: Proper database transaction handling with rollback on failures
+- **Query Optimization**: Efficient job queries with proper indexing on status and scheduled_at
+
+**What's next:**
+- Library paths now automatically stay up-to-date based on configured scan intervals
+- Manual scan functionality enhanced with background job processing
+- Job queue provides foundation for future features (MD-2 downloads, W-1 watching)
+- Background service architecture ready for additional job types
 

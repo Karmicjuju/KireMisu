@@ -39,3 +39,8 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency for database session."""
     async with get_db_session() as session:
         yield session
+
+
+def get_db_session_factory():
+    """Get database session factory for background services."""
+    return get_db_session

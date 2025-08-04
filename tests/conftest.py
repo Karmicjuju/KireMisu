@@ -7,6 +7,7 @@ from typing import AsyncGenerator
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import NullPool
+from sqlalchemy import text
 
 from kiremisu.database.models import Base
 from kiremisu.database.connection import get_db
@@ -47,7 +48,7 @@ async def engine():
 
 @pytest.fixture
 async def db_session(engine) -> AsyncGenerator[AsyncSession, None]:
-    """Create test database session."""
+    """Create test database session with proper isolation."""
     async_session = async_sessionmaker(
         bind=engine,
         class_=AsyncSession,
@@ -55,14 +56,25 @@ async def db_session(engine) -> AsyncGenerator[AsyncSession, None]:
     )
 
     async with async_session() as session:
-        # Start a transaction
-        transaction = await session.begin()
-
-        try:
-            yield session
-        finally:
-            # Rollback transaction to clean up
-            await transaction.rollback()
+        # Clear all tables before each test for complete isolation
+        await session.execute(text("TRUNCATE TABLE chapters CASCADE"))
+        await session.execute(text("TRUNCATE TABLE series CASCADE"))
+        await session.execute(text("TRUNCATE TABLE library_paths CASCADE"))
+        await session.execute(text("TRUNCATE TABLE job_queue CASCADE"))
+        await session.execute(text("TRUNCATE TABLE annotations CASCADE"))
+        await session.execute(text("TRUNCATE TABLE user_lists CASCADE"))
+        await session.commit()
+        
+        yield session
+        
+        # Clean up after test
+        await session.execute(text("TRUNCATE TABLE chapters CASCADE"))
+        await session.execute(text("TRUNCATE TABLE series CASCADE"))
+        await session.execute(text("TRUNCATE TABLE library_paths CASCADE"))
+        await session.execute(text("TRUNCATE TABLE job_queue CASCADE"))
+        await session.execute(text("TRUNCATE TABLE annotations CASCADE"))
+        await session.execute(text("TRUNCATE TABLE user_lists CASCADE"))
+        await session.commit()
 
 
 @pytest.fixture
@@ -74,7 +86,10 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
     app.dependency_overrides[get_db] = override_get_db
 
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    # Use the correct AsyncClient initialization for httpx 0.28+
+    import httpx
+    transport = httpx.ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
     app.dependency_overrides.clear()
