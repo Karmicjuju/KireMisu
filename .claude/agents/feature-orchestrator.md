@@ -97,7 +97,7 @@ SUB-AGENT TASK TEMPLATES:
 
 Backend Task Assignment:
 ```
-@fastapi-backend-architect Please implement the following:
+fastapi-backend-architect Please implement the following:
 - Endpoint: [specific endpoint]
 - Models: [required models]
 - Services: [business logic]
@@ -108,7 +108,7 @@ Backend Task Assignment:
 
 Frontend Task Assignment:
 ```
-@react-frontend-developer Please implement:
+react-frontend-developer Please implement:
 - Components: [specific components]
 - Routes: [pages/routes needed]
 - State: [Zustand stores required]
@@ -119,7 +119,7 @@ Frontend Task Assignment:
 
 Testing Task Assignment:
 ```
-@tqa-test-specialist Please create:
+qa-test-specialist Please create:
 - Test type: [unit/integration/E2E]
 - Coverage targets: [specific functions/flows]
 - Test data: [fixtures needed]
@@ -148,6 +148,7 @@ PARALLEL EXECUTION RULES:
 - Integration tests to verify contract compliance
 
 4. Testing Parallelization:
+- Testing patterns established in CLAUDE.md:185-200
 - Unit tests parallel with implementation
 - Integration tests after component completion
 - E2E tests after feature integration
