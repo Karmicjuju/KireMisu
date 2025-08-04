@@ -19,29 +19,30 @@ class TestJobScheduler:
         """Test scheduling scans for paths that are due."""
         # Create test library paths - one due, one not due
         import uuid
+
         path1 = LibraryPath(
             path=f"/test/path1_{uuid.uuid4()}",
             enabled=True,
-            scan_interval_hours=1,  
-            last_scan=datetime.utcnow() - timedelta(hours=2)  # Due for scan
+            scan_interval_hours=1,
+            last_scan=datetime.utcnow() - timedelta(hours=2),  # Due for scan
         )
         path2 = LibraryPath(
             path=f"/test/path2_{uuid.uuid4()}",
             enabled=True,
             scan_interval_hours=24,
-            last_scan=datetime.utcnow() - timedelta(hours=1)  # Not due
+            last_scan=datetime.utcnow() - timedelta(hours=1),  # Not due
         )
         path3 = LibraryPath(
             path=f"/test/path3_{uuid.uuid4()}",
             enabled=True,
             scan_interval_hours=1,
-            last_scan=None  # Never scanned, should be scheduled
+            last_scan=None,  # Never scanned, should be scheduled
         )
         path4 = LibraryPath(
             path=f"/test/path4_{uuid.uuid4()}",
             enabled=False,  # Disabled, should not be scheduled
             scan_interval_hours=1,
-            last_scan=datetime.utcnow() - timedelta(hours=2)
+            last_scan=datetime.utcnow() - timedelta(hours=2),
         )
 
         db_session.add(path1)
@@ -59,9 +60,7 @@ class TestJobScheduler:
         assert result["total_paths"] == 3  # path4 disabled, not counted
 
         # Verify jobs were created
-        jobs = await db_session.execute(
-            "SELECT * FROM job_queue WHERE job_type = 'library_scan'"
-        )
+        jobs = await db_session.execute("SELECT * FROM job_queue WHERE job_type = 'library_scan'")
         job_list = jobs.fetchall()
         assert len(job_list) == 2
 
@@ -72,16 +71,14 @@ class TestJobScheduler:
             path="/test/path",
             enabled=True,
             scan_interval_hours=1,
-            last_scan=datetime.utcnow() - timedelta(hours=2)  # Due for scan
+            last_scan=datetime.utcnow() - timedelta(hours=2),  # Due for scan
         )
         db_session.add(path)
         await db_session.commit()
 
         # Create existing pending job for this path
         existing_job = JobQueue(
-            job_type="library_scan",
-            payload={"library_path_id": str(path.id)},
-            status="pending"
+            job_type="library_scan", payload={"library_path_id": str(path.id)}, status="pending"
         )
         db_session.add(existing_job)
         await db_session.commit()
@@ -97,11 +94,7 @@ class TestJobScheduler:
     async def test_schedule_manual_scan_specific_path(self, db_session: AsyncSession):
         """Test scheduling manual scan for specific path."""
         # Create test library path
-        path = LibraryPath(
-            path="/test/path",
-            enabled=True,
-            scan_interval_hours=24
-        )
+        path = LibraryPath(path="/test/path", enabled=True, scan_interval_hours=24)
         db_session.add(path)
         await db_session.commit()
 
@@ -141,17 +134,17 @@ class TestJobScheduler:
         job1 = JobQueue(
             job_type="library_scan",
             status="completed",
-            created_at=datetime.utcnow() - timedelta(minutes=5)
+            created_at=datetime.utcnow() - timedelta(minutes=5),
         )
         job2 = JobQueue(
             job_type="library_scan",
             status="pending",
-            created_at=datetime.utcnow() - timedelta(minutes=2)
+            created_at=datetime.utcnow() - timedelta(minutes=2),
         )
         job3 = JobQueue(
             job_type="other_job",
             status="failed",
-            created_at=datetime.utcnow() - timedelta(minutes=1)
+            created_at=datetime.utcnow() - timedelta(minutes=1),
         )
 
         db_session.add(job1)
@@ -206,17 +199,14 @@ class TestJobScheduler:
         old_job = JobQueue(
             job_type="library_scan",
             status="completed",
-            completed_at=datetime.utcnow() - timedelta(days=35)
+            completed_at=datetime.utcnow() - timedelta(days=35),
         )
         recent_job = JobQueue(
             job_type="library_scan",
             status="completed",
-            completed_at=datetime.utcnow() - timedelta(days=5)
+            completed_at=datetime.utcnow() - timedelta(days=5),
         )
-        pending_job = JobQueue(
-            job_type="library_scan",
-            status="pending"
-        )
+        pending_job = JobQueue(job_type="library_scan", status="pending")
 
         db_session.add(old_job)
         db_session.add(recent_job)
@@ -237,22 +227,13 @@ class TestJobScheduler:
 
     def test_should_schedule_scan_disabled_path(self):
         """Test should_schedule_scan with disabled path."""
-        path = LibraryPath(
-            path="/test/path",
-            enabled=False,
-            scan_interval_hours=1
-        )
+        path = LibraryPath(path="/test/path", enabled=False, scan_interval_hours=1)
 
         assert not JobScheduler._should_schedule_scan(path)
 
     def test_should_schedule_scan_never_scanned(self):
         """Test should_schedule_scan with never scanned path."""
-        path = LibraryPath(
-            path="/test/path",
-            enabled=True,
-            scan_interval_hours=24,
-            last_scan=None
-        )
+        path = LibraryPath(path="/test/path", enabled=True, scan_interval_hours=24, last_scan=None)
 
         assert JobScheduler._should_schedule_scan(path)
 
@@ -262,7 +243,7 @@ class TestJobScheduler:
             path="/test/path",
             enabled=True,
             scan_interval_hours=1,
-            last_scan=datetime.utcnow() - timedelta(hours=2)
+            last_scan=datetime.utcnow() - timedelta(hours=2),
         )
 
         assert JobScheduler._should_schedule_scan(path)
@@ -273,7 +254,7 @@ class TestJobScheduler:
             path="/test/path",
             enabled=True,
             scan_interval_hours=24,
-            last_scan=datetime.utcnow() - timedelta(hours=1)
+            last_scan=datetime.utcnow() - timedelta(hours=1),
         )
 
         assert not JobScheduler._should_schedule_scan(path)
@@ -309,7 +290,7 @@ class TestSchedulerRunner:
         runner = SchedulerRunner(mock_db_session_factory, check_interval_minutes=1)
 
         await runner.start()
-        
+
         # Try to start again - should not create new task
         old_task = runner._task
         await runner.start()
@@ -320,24 +301,26 @@ class TestSchedulerRunner:
     async def test_scheduler_runner_schedules_jobs(self, mock_db_session_factory):
         """Test that scheduler runner calls job scheduling."""
         mock_session = mock_db_session_factory.return_value.__aenter__.return_value
-        
+
         # Mock the schedule_library_scans method
         original_schedule = JobScheduler.schedule_library_scans
         JobScheduler.schedule_library_scans = AsyncMock(return_value={"scheduled": 1, "skipped": 0})
-        
+
         try:
-            runner = SchedulerRunner(mock_db_session_factory, check_interval_minutes=0.01)  # Very short interval
-            
+            runner = SchedulerRunner(
+                mock_db_session_factory, check_interval_minutes=0.01
+            )  # Very short interval
+
             await runner.start()
-            
+
             # Wait a bit for the scheduler to run
             await asyncio.sleep(0.1)
-            
+
             await runner.stop()
-            
+
             # Verify schedule_library_scans was called
             JobScheduler.schedule_library_scans.assert_called()
-            
+
         finally:
             # Restore original method
             JobScheduler.schedule_library_scans = original_schedule

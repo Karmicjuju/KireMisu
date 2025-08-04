@@ -19,7 +19,7 @@ test.describe('Library Scanning Functionality', () => {
               updated_at: '2025-08-03T10:00:00Z',
             },
             {
-              id: 'path-2', 
+              id: 'path-2',
               path: '/manga/second-library',
               enabled: false,
               scan_interval_hours: 12,
@@ -49,7 +49,7 @@ test.describe('Library Scanning Functionality', () => {
     // Check that individual library paths have scan buttons
     await expect(page.getByText('/manga/test-library')).toBeVisible();
     await expect(page.getByText('/manga/second-library')).toBeVisible();
-    
+
     // Verify individual scan buttons are present
     const scanNowButtons = page.getByRole('button', { name: 'Scan Now' });
     await expect(scanNowButtons).toHaveCount(2);
@@ -59,7 +59,7 @@ test.describe('Library Scanning Functionality', () => {
     // Mock successful scan response
     await page.route('POST', '/api/library/scan', async (route) => {
       const requestData = await route.request().postDataJSON();
-      
+
       // Check if scanning all libraries (no library_path_id)
       if (!requestData.library_path_id) {
         await route.fulfill({
@@ -88,7 +88,7 @@ test.describe('Library Scanning Functionality', () => {
 
     // Should show loading state
     await expect(page.getByRole('button', { name: 'Scanning...' })).toBeVisible();
-    
+
     // Should show success toast
     await expect(page.getByText(/Library scan completed/)).toBeVisible({ timeout: 5000 });
     await expect(page.getByText(/Found 5 series with 23 chapters/)).toBeVisible();
@@ -98,7 +98,7 @@ test.describe('Library Scanning Functionality', () => {
     // Mock successful individual scan response
     await page.route('POST', '/api/library/scan', async (route) => {
       const requestData = await route.request().postDataJSON();
-      
+
       // Check if scanning specific library path
       if (requestData.library_path_id === 'path-1') {
         await route.fulfill({
@@ -124,12 +124,12 @@ test.describe('Library Scanning Functionality', () => {
     // Find the first library path and click its scan button
     const libraryPathRow = page.locator('div').filter({ hasText: '/manga/test-library' }).first();
     const scanButton = libraryPathRow.getByRole('button', { name: 'Scan Now' });
-    
+
     await scanButton.click();
 
     // Should show loading state for this specific path
     await expect(libraryPathRow.getByRole('button', { name: 'Scanning...' })).toBeVisible();
-    
+
     // Should show success toast
     await expect(page.getByText(/Library scan completed/)).toBeVisible({ timeout: 5000 });
     await expect(page.getByText(/Found 3 series with 15 chapters/)).toBeVisible();
@@ -153,11 +153,11 @@ test.describe('Library Scanning Functionality', () => {
 
     // Should show loading state initially
     await expect(page.getByRole('button', { name: 'Scanning...' })).toBeVisible();
-    
+
     // Should show error toast
     await expect(page.getByText(/Library scan failed/)).toBeVisible({ timeout: 5000 });
     await expect(page.getByText(/Permission denied accessing/)).toBeVisible();
-    
+
     // Button should return to normal state
     await expect(page.getByRole('button', { name: 'Scan All Libraries' })).toBeVisible();
   });
@@ -197,10 +197,10 @@ test.describe('Library Scanning Functionality', () => {
     // Mock delayed scan response to test button states
     await page.route('POST', '/api/library/scan', async (route) => {
       const requestData = await route.request().postDataJSON();
-      
+
       // Add delay to simulate longer scan
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -229,10 +229,10 @@ test.describe('Library Scanning Functionality', () => {
     for (const button of await individualScanButtons.all()) {
       await expect(button).toBeDisabled();
     }
-    
+
     // Wait for scan to complete
     await expect(page.getByText(/Library scan completed/)).toBeVisible({ timeout: 5000 });
-    
+
     // After completion, buttons should be re-enabled
     await expect(scanAllButton).toBeEnabled();
     for (const button of await individualScanButtons.all()) {
@@ -244,7 +244,7 @@ test.describe('Library Scanning Functionality', () => {
     // Mock timeout response
     await page.route('POST', '/api/library/scan', async (route) => {
       // Simulate timeout by not responding
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
       await route.fulfill({
         status: 408,
         contentType: 'application/json',
@@ -260,7 +260,7 @@ test.describe('Library Scanning Functionality', () => {
 
     // Should show loading state
     await expect(page.getByRole('button', { name: 'Scanning...' })).toBeVisible();
-    
+
     // Should eventually show timeout error
     await expect(page.getByText(/Library scan failed/)).toBeVisible({ timeout: 10000 });
     await expect(page.getByText(/timed out/)).toBeVisible();
@@ -269,7 +269,7 @@ test.describe('Library Scanning Functionality', () => {
   test('should prevent concurrent scan operations', async ({ page }) => {
     // Mock delayed scan response
     await page.route('POST', '/api/library/scan', async (route) => {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -295,16 +295,16 @@ test.describe('Library Scanning Functionality', () => {
 
     // Should show scanning state
     await expect(page.getByRole('button', { name: 'Scanning...' })).toBeVisible();
-    
+
     // Try to start another scan - all scan buttons should be disabled
     const individualScanButtons = page.getByRole('button', { name: 'Scan Now' });
     for (const button of await individualScanButtons.all()) {
       await expect(button).toBeDisabled();
     }
-    
+
     // Wait for first scan to complete
     await expect(page.getByText(/Library scan completed/)).toBeVisible({ timeout: 5000 });
-    
+
     // Now buttons should be enabled again
     await expect(scanAllButton).toBeEnabled();
   });
@@ -312,7 +312,7 @@ test.describe('Library Scanning Functionality', () => {
   test('should maintain accessibility during scan operations', async ({ page }) => {
     // Mock delayed scan response to test accessibility
     await page.route('POST', '/api/library/scan', async (route) => {
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -333,7 +333,7 @@ test.describe('Library Scanning Functionality', () => {
     });
 
     const scanAllButton = page.getByRole('button', { name: 'Scan All Libraries' });
-    
+
     // Check accessibility attributes before operation
     await expect(scanAllButton).not.toHaveAttribute('disabled');
     await expect(scanAllButton).toHaveAttribute('aria-disabled', 'false');
@@ -345,10 +345,10 @@ test.describe('Library Scanning Functionality', () => {
     const scanningButton = page.getByRole('button', { name: 'Scanning...' });
     await expect(scanningButton).toBeVisible();
     await expect(scanningButton).toHaveAttribute('disabled');
-    
+
     // Wait for completion
     await expect(page.getByText(/Library scan completed/)).toBeVisible({ timeout: 5000 });
-    
+
     // After completion, button should be accessible again
     await expect(scanAllButton).not.toHaveAttribute('disabled');
     await expect(scanAllButton).toHaveAttribute('aria-disabled', 'false');
@@ -404,7 +404,7 @@ test.describe('Library Scanning Functionality', () => {
     // Should show rate limiting error
     await expect(page.getByText(/Library scan failed/)).toBeVisible({ timeout: 5000 });
     await expect(page.getByText(/Rate limit exceeded/)).toBeVisible();
-    
+
     // Button should return to normal state
     await expect(scanAllButton).toBeEnabled();
   });
@@ -442,7 +442,7 @@ test.describe('Library Scanning Functionality', () => {
 
   test('should refresh library path data after successful scan', async ({ page }) => {
     let getPathsCalled = 0;
-    
+
     // Count calls to GET /api/library/paths
     await page.route('GET', '/api/library/paths', async (route) => {
       getPathsCalled++;
@@ -490,20 +490,20 @@ test.describe('Library Scanning Functionality', () => {
     // Navigate to page (first API call)
     await page.goto('/settings');
     await page.waitForLoadState('domcontentloaded');
-    
+
     // Initially should show old timestamp
     await expect(page.getByText(/Last scan.*10:00/)).toBeVisible();
-    
+
     // Trigger scan
     const scanAllButton = page.getByRole('button', { name: 'Scan All Libraries' });
     await scanAllButton.click();
-    
+
     // Wait for scan completion
     await expect(page.getByText(/Library scan completed/)).toBeVisible({ timeout: 5000 });
-    
+
     // Should refresh and show updated timestamp
     await expect(page.getByText(/Last scan.*15:30/)).toBeVisible({ timeout: 5000 });
-    
+
     // Verify API was called twice (initial load + refresh after scan)
     expect(getPathsCalled).toBeGreaterThanOrEqual(2);
   });

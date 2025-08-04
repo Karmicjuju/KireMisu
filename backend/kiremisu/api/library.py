@@ -98,11 +98,11 @@ async def scan_library(
     scan_request: LibraryScanRequest, db: AsyncSession = Depends(get_db)
 ) -> LibraryScanResponse:
     """Scan library paths and import/update series and chapters.
-    
+
     Args:
         scan_request: Request containing optional library_path_id to scan specific path
         db: Database session
-        
+
     Returns:
         LibraryScanResponse: Scan results with statistics
     """
@@ -114,41 +114,35 @@ async def scan_library(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Library path not found: {scan_request.library_path_id}",
             )
-    
+
     importer = ImporterService()
-    
+
     try:
         # Execute the scan (synchronous for now, will be async job in LL-5)
         stats = await importer.scan_library_paths(
-            db=db,
-            library_path_id=scan_request.library_path_id
+            db=db, library_path_id=scan_request.library_path_id
         )
-        
+
         # Determine status based on errors
         status_text = "completed" if stats.errors == 0 else "completed_with_errors"
-        
+
         # Build message
         if scan_request.library_path_id:
             message = f"Library path scan {status_text}"
         else:
             message = f"Library scan {status_text}"
-            
+
         if stats.errors > 0:
             message += f" ({stats.errors} errors encountered)"
-        
+
         return LibraryScanResponse(
-            status=status_text,
-            message=message,
-            stats=LibraryScanStats(**stats.to_dict())
+            status=status_text, message=message, stats=LibraryScanStats(**stats.to_dict())
         )
-        
+
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Library scan failed: {str(e)}"
+            detail=f"Library scan failed: {str(e)}",
         )

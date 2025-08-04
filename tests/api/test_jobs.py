@@ -22,7 +22,7 @@ class TestJobsAPI:
         job1 = JobQueue(job_type="library_scan", status="pending")
         job2 = JobQueue(job_type="library_scan", status="running")
         job3 = JobQueue(job_type="library_scan", status="failed")
-        
+
         db_session.add(job1)
         db_session.add(job2)
         db_session.add(job3)
@@ -30,10 +30,10 @@ class TestJobsAPI:
 
         # Test endpoint
         response = await client.get("/api/jobs/status")
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert "queue_stats" in data
         assert "timestamp" in data
         assert data["queue_stats"]["pending"] == 1
@@ -49,17 +49,17 @@ class TestJobsAPI:
         job1 = JobQueue(
             job_type="library_scan",
             status="completed",
-            created_at=datetime.utcnow() - timedelta(minutes=5)
+            created_at=datetime.utcnow() - timedelta(minutes=5),
         )
         job2 = JobQueue(
             job_type="library_scan",
             status="pending",
-            created_at=datetime.utcnow() - timedelta(minutes=2)
+            created_at=datetime.utcnow() - timedelta(minutes=2),
         )
         job3 = JobQueue(
             job_type="other_job",
             status="failed",
-            created_at=datetime.utcnow() - timedelta(minutes=1)
+            created_at=datetime.utcnow() - timedelta(minutes=1),
         )
 
         db_session.add(job1)
@@ -69,14 +69,14 @@ class TestJobsAPI:
 
         # Test endpoint without filter
         response = await client.get("/api/jobs/recent")
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["total"] == 3
         assert len(data["jobs"]) == 3
         assert data["job_type_filter"] is None
-        
+
         # Jobs should be ordered by creation time desc
         assert data["jobs"][0]["id"] == str(job3.id)
         assert data["jobs"][1]["id"] == str(job2.id)
@@ -84,20 +84,20 @@ class TestJobsAPI:
 
         # Test endpoint with job type filter
         response = await client.get("/api/jobs/recent?job_type=library_scan")
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["total"] == 2
         assert len(data["jobs"]) == 2
         assert data["job_type_filter"] == "library_scan"
 
         # Test endpoint with limit
         response = await client.get("/api/jobs/recent?limit=2")
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["total"] == 2
         assert len(data["jobs"]) == 2
 
@@ -110,17 +110,17 @@ class TestJobsAPI:
             status="completed",
             priority=5,
             retry_count=0,
-            max_retries=3
+            max_retries=3,
         )
         db_session.add(job)
         await db_session.commit()
 
         # Test endpoint
         response = await client.get(f"/api/jobs/{job.id}")
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["id"] == str(job.id)
         assert data["job_type"] == "library_scan"
         assert data["status"] == "completed"
@@ -131,33 +131,27 @@ class TestJobsAPI:
         # Test with non-existent job ID
         fake_id = uuid4()
         response = await client.get(f"/api/jobs/{fake_id}")
-        
+
         assert response.status_code == 404
         assert "Job not found" in response.json()["detail"]
 
-    async def test_schedule_manual_library_scan_specific_path(self, client: AsyncClient, db_session: AsyncSession):
+    async def test_schedule_manual_library_scan_specific_path(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
         """Test POST /api/jobs/schedule for manual library scan of specific path."""
         # Create test library path
-        path = LibraryPath(
-            path="/test/path",
-            enabled=True,
-            scan_interval_hours=24
-        )
+        path = LibraryPath(path="/test/path", enabled=True, scan_interval_hours=24)
         db_session.add(path)
         await db_session.commit()
 
         # Test endpoint
-        request_data = {
-            "job_type": "library_scan",
-            "library_path_id": str(path.id),
-            "priority": 8
-        }
-        
+        request_data = {"job_type": "library_scan", "library_path_id": str(path.id), "priority": 8}
+
         response = await client.post("/api/jobs/schedule", json=request_data)
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["status"] == "scheduled"
         assert "Manual library scan scheduled for path" in data["message"]
         assert data["scheduled_count"] == 1
@@ -165,41 +159,43 @@ class TestJobsAPI:
 
         # Verify job was created in database
         from sqlalchemy import text
+
         jobs = await db_session.execute(
             text("SELECT * FROM job_queue WHERE job_type = 'library_scan'")
         )
         job_list = jobs.fetchall()
         assert len(job_list) == 1
 
-    async def test_schedule_manual_library_scan_all_paths(self, client: AsyncClient, db_session: AsyncSession):
+    async def test_schedule_manual_library_scan_all_paths(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
         """Test POST /api/jobs/schedule for manual library scan of all paths."""
-        request_data = {
-            "job_type": "library_scan",
-            "priority": 9
-        }
-        
+        request_data = {"job_type": "library_scan", "priority": 9}
+
         response = await client.post("/api/jobs/schedule", json=request_data)
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["status"] == "scheduled"
         assert "Manual library scan scheduled for all paths" in data["message"]
         assert data["scheduled_count"] == 1
         assert "job_id" in data
 
-    async def test_schedule_manual_library_scan_invalid_path(self, client: AsyncClient, db_session: AsyncSession):
+    async def test_schedule_manual_library_scan_invalid_path(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
         """Test POST /api/jobs/schedule with invalid library path ID."""
         fake_path_id = uuid4()
-        
+
         request_data = {
             "job_type": "library_scan",
             "library_path_id": str(fake_path_id),
-            "priority": 5
+            "priority": 5,
         }
-        
+
         response = await client.post("/api/jobs/schedule", json=request_data)
-        
+
         assert response.status_code == 400
         assert "Library path not found" in response.json()["detail"]
 
@@ -210,13 +206,13 @@ class TestJobsAPI:
             path="/test/path1",
             enabled=True,
             scan_interval_hours=1,
-            last_scan=datetime.utcnow() - timedelta(hours=2)  # Due for scan
+            last_scan=datetime.utcnow() - timedelta(hours=2),  # Due for scan
         )
         path2 = LibraryPath(
             path="/test/path2",
             enabled=True,
             scan_interval_hours=24,
-            last_scan=datetime.utcnow() - timedelta(hours=1)  # Not due
+            last_scan=datetime.utcnow() - timedelta(hours=1),  # Not due
         )
 
         db_session.add(path1)
@@ -224,16 +220,13 @@ class TestJobsAPI:
         await db_session.commit()
 
         # Test endpoint
-        request_data = {
-            "job_type": "auto_schedule",
-            "priority": 3
-        }
-        
+        request_data = {"job_type": "auto_schedule", "priority": 3}
+
         response = await client.post("/api/jobs/schedule", json=request_data)
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["status"] == "completed"
         assert "Scheduled 1 automatic scans" in data["message"]
         assert data["scheduled_count"] == 1
@@ -242,26 +235,25 @@ class TestJobsAPI:
 
     async def test_schedule_invalid_job_type(self, client: AsyncClient, db_session: AsyncSession):
         """Test POST /api/jobs/schedule with invalid job type."""
-        request_data = {
-            "job_type": "invalid_job",
-            "priority": 5
-        }
-        
+        request_data = {"job_type": "invalid_job", "priority": 5}
+
         response = await client.post("/api/jobs/schedule", json=request_data)
-        
+
         assert response.status_code == 400
         assert "Unknown job type" in response.json()["detail"]
 
-    async def test_schedule_job_validation_error(self, client: AsyncClient, db_session: AsyncSession):
+    async def test_schedule_job_validation_error(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
         """Test POST /api/jobs/schedule with validation errors."""
         # Test invalid priority
         request_data = {
             "job_type": "library_scan",
-            "priority": 15  # Out of valid range (1-10)
+            "priority": 15,  # Out of valid range (1-10)
         }
-        
+
         response = await client.post("/api/jobs/schedule", json=request_data)
-        
+
         assert response.status_code == 422  # Validation error
 
     async def test_cleanup_old_jobs_endpoint(self, client: AsyncClient, db_session: AsyncSession):
@@ -270,12 +262,12 @@ class TestJobsAPI:
         old_job = JobQueue(
             job_type="library_scan",
             status="completed",
-            completed_at=datetime.utcnow() - timedelta(days=35)
+            completed_at=datetime.utcnow() - timedelta(days=35),
         )
         recent_job = JobQueue(
             job_type="library_scan",
             status="completed",
-            completed_at=datetime.utcnow() - timedelta(days=5)
+            completed_at=datetime.utcnow() - timedelta(days=5),
         )
 
         db_session.add(old_job)
@@ -284,10 +276,10 @@ class TestJobsAPI:
 
         # Test cleanup
         response = await client.post("/api/jobs/cleanup?older_than_days=30")
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["deleted"] == 1
         assert data["older_than_days"] == 30
 
@@ -295,23 +287,25 @@ class TestJobsAPI:
         """Test POST /api/jobs/cleanup with validation errors."""
         # Test invalid older_than_days parameter
         response = await client.post("/api/jobs/cleanup?older_than_days=400")  # Out of range
-        
+
         assert response.status_code == 422  # Validation error
 
     async def test_get_worker_status_no_worker(self, client: AsyncClient, db_session: AsyncSession):
         """Test GET /api/jobs/worker/status when no worker is initialized."""
         response = await client.get("/api/jobs/worker/status")
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["running"] is False
         assert data["active_jobs"] == 0
         assert data["max_concurrent_jobs"] == 0
         assert data["poll_interval_seconds"] == 0
         assert "Worker not initialized" in data["message"]
 
-    async def test_get_worker_status_with_worker(self, client: AsyncClient, db_session: AsyncSession):
+    async def test_get_worker_status_with_worker(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
         """Test GET /api/jobs/worker/status with initialized worker."""
         # Mock worker runner
         mock_worker = AsyncMock(spec=JobWorkerRunner)
@@ -319,22 +313,24 @@ class TestJobsAPI:
             "running": True,
             "active_jobs": 2,
             "max_concurrent_jobs": 5,
-            "poll_interval_seconds": 10
+            "poll_interval_seconds": 10,
         }
 
         # Set worker in API module
-        with patch('kiremisu.api.jobs._worker_runner', mock_worker):
+        with patch("kiremisu.api.jobs._worker_runner", mock_worker):
             response = await client.get("/api/jobs/worker/status")
-            
+
             assert response.status_code == 200
             data = response.json()
-            
+
             assert data["running"] is True
             assert data["active_jobs"] == 2
             assert data["max_concurrent_jobs"] == 5
             assert data["poll_interval_seconds"] == 10
 
-    async def test_job_response_schema_validation(self, client: AsyncClient, db_session: AsyncSession):
+    async def test_job_response_schema_validation(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
         """Test that job responses match expected schema."""
         # Create comprehensive test job
         job = JobQueue(
@@ -347,28 +343,37 @@ class TestJobsAPI:
             error_message=None,
             retry_count=1,
             max_retries=3,
-            scheduled_at=datetime.utcnow() - timedelta(minutes=15)
+            scheduled_at=datetime.utcnow() - timedelta(minutes=15),
         )
         db_session.add(job)
         await db_session.commit()
 
         # Get job details
         response = await client.get(f"/api/jobs/{job.id}")
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         # Verify all expected fields are present and properly formatted
         required_fields = [
-            "id", "job_type", "payload", "status", "priority",
-            "started_at", "completed_at", "error_message", 
-            "retry_count", "max_retries", "scheduled_at",
-            "created_at", "updated_at"
+            "id",
+            "job_type",
+            "payload",
+            "status",
+            "priority",
+            "started_at",
+            "completed_at",
+            "error_message",
+            "retry_count",
+            "max_retries",
+            "scheduled_at",
+            "created_at",
+            "updated_at",
         ]
-        
+
         for field in required_fields:
             assert field in data, f"Missing field: {field}"
-        
+
         # Verify data types and values
         assert isinstance(data["payload"], dict)
         assert data["priority"] == 7

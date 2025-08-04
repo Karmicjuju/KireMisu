@@ -103,6 +103,64 @@ export interface WorkerStatusResponse {
   message?: string;
 }
 
+// Chapter and reading interfaces
+export interface ChapterResponse {
+  id: string;
+  series_id: string;
+  chapter_number: number;
+  volume_number?: number;
+  title?: string;
+  file_path: string;
+  file_size: number;
+  page_count: number;
+  mangadx_id?: string;
+  source_metadata: Record<string, any>;
+  is_read: boolean;
+  last_read_page: number;
+  read_at?: string;
+  created_at: string;
+  updated_at: string;
+  series?: SeriesResponse;
+}
+
+export interface SeriesResponse {
+  id: string;
+  title_primary: string;
+  title_alternative?: string;
+  description?: string;
+  author?: string;
+  artist?: string;
+  genres: string[];
+  tags: string[];
+  publication_status?: string;
+  content_rating?: string;
+  language: string;
+  file_path?: string;
+  cover_image_path?: string;
+  mangadx_id?: string;
+  source_metadata: Record<string, any>;
+  user_metadata: Record<string, any>;
+  custom_tags: string[];
+  total_chapters: number;
+  read_chapters: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChapterProgressUpdate {
+  last_read_page: number;
+  is_read?: boolean;
+}
+
+export interface ChapterPagesInfo {
+  chapter_id: string;
+  total_pages: number;
+  pages: Array<{
+    page_number: number;
+    url: string;
+  }>;
+}
+
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
   timeout: 60000, // Increased timeout for library scanning operations
@@ -149,7 +207,7 @@ export const jobsApi = {
     const params = new URLSearchParams();
     if (jobType) params.append('job_type', jobType);
     if (limit) params.append('limit', limit.toString());
-    
+
     const response = await api.get<JobListResponse>(
       `/api/jobs/recent${params.toString() ? `?${params.toString()}` : ''}`
     );
@@ -173,6 +231,84 @@ export const jobsApi = {
 
   async cleanupJobs(): Promise<{ deleted_count: number }> {
     const response = await api.post<{ deleted_count: number }>('/api/jobs/cleanup');
+    return response.data;
+  },
+};
+
+export const chaptersApi = {
+  async getChapter(chapterId: string): Promise<ChapterResponse> {
+    const response = await api.get<ChapterResponse>(`/api/chapters/${chapterId}`);
+    return response.data;
+  },
+
+  async getChapterPages(chapterId: string): Promise<ChapterPagesInfo> {
+    const response = await api.get<ChapterPagesInfo>(`/api/chapters/${chapterId}/pages`);
+    return response.data;
+  },
+
+  getChapterPageUrl(chapterId: string, pageNumber: number): string {
+    return `${api.defaults.baseURL}/api/chapters/${chapterId}/pages/${pageNumber}`;
+  },
+
+  async getSeriesChapters(
+    seriesId: string,
+    options?: { skip?: number; limit?: number }
+  ): Promise<ChapterResponse[]> {
+    const params = new URLSearchParams();
+    if (options?.skip) params.append('skip', options.skip.toString());
+    if (options?.limit) params.append('limit', options.limit.toString());
+
+    const response = await api.get<ChapterResponse[]>(
+      `/api/chapters/series/${seriesId}/chapters${params.toString() ? `?${params.toString()}` : ''}`
+    );
+    return response.data;
+  },
+
+  async updateChapterProgress(
+    chapterId: string,
+    progress: ChapterProgressUpdate
+  ): Promise<ChapterResponse> {
+    const response = await api.patch<ChapterResponse>(
+      `/api/chapters/${chapterId}/progress`,
+      progress
+    );
+    return response.data;
+  },
+};
+
+export const seriesApi = {
+  async getSeriesList(options?: {
+    skip?: number;
+    limit?: number;
+    search?: string;
+  }): Promise<SeriesResponse[]> {
+    const params = new URLSearchParams();
+    if (options?.skip) params.append('skip', options.skip.toString());
+    if (options?.limit) params.append('limit', options.limit.toString());
+    if (options?.search) params.append('search', options.search);
+
+    const response = await api.get<SeriesResponse[]>(
+      `/api/series${params.toString() ? `?${params.toString()}` : ''}`
+    );
+    return response.data;
+  },
+
+  async getSeries(seriesId: string): Promise<SeriesResponse> {
+    const response = await api.get<SeriesResponse>(`/api/series/${seriesId}`);
+    return response.data;
+  },
+
+  async getSeriesChapters(
+    seriesId: string,
+    options?: { skip?: number; limit?: number }
+  ): Promise<ChapterResponse[]> {
+    const params = new URLSearchParams();
+    if (options?.skip) params.append('skip', options.skip.toString());
+    if (options?.limit) params.append('limit', options.limit.toString());
+
+    const response = await api.get<ChapterResponse[]>(
+      `/api/series/${seriesId}/chapters${params.toString() ? `?${params.toString()}` : ''}`
+    );
     return response.data;
   },
 };
