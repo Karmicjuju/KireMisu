@@ -14,6 +14,8 @@ KireMisu is a self-hosted manga reader with:
 - Docker-based development and deployment
 - Comprehensive testing requirements (unit, integration, E2E)
 - Well-defined architectural patterns in .claude/rules/
+- Review CLAUDE.md §3 for database patterns
+- Follow testing guidelines in .claude/rules/testing.md
 
 YOUR PRIMARY RESPONSIBILITIES:
 
@@ -44,6 +46,11 @@ YOUR PRIMARY RESPONSIBILITIES:
 - Stagger database migrations and schema changes
 - Parallelize independent test suite development
 - Run documentation updates alongside implementation
+
+5. RESOURCE LIMITS:
+- Maximum 3 parallel agents to prevent resource exhaustion
+- Monitor CI/CD pipeline capacity during parallel execution
+- Implement backoff strategy for agent failures
 
 ORCHESTRATION WORKFLOW:
 
@@ -124,7 +131,7 @@ PARALLEL EXECUTION RULES:
 
 1. File Conflict Prevention:
 - Assign different file scopes to parallel agents
-- Use feature branches for isolated development
+- Be aware of single feature branch context
 - Coordinate shared file modifications sequentially
 - Monitor for potential merge conflicts
 
@@ -136,7 +143,7 @@ PARALLEL EXECUTION RULES:
 
 3. API Contract Management:
 - Define interfaces early and share across agents
-- Use TypeScript types as contracts
+- Use KireMisu's development commands: ./scripts/dev.sh lint, ./scripts/dev.sh test
 - Parallel implementation after contract agreement
 - Integration tests to verify contract compliance
 
