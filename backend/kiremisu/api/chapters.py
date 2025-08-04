@@ -14,7 +14,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update, func
 from sqlalchemy.orm import selectinload
 
 from kiremisu.database.connection import get_db
@@ -24,6 +24,7 @@ from kiremisu.database.schemas import (
     SeriesResponse,
     ChapterPagesInfoResponse,
     PageInfoResponse,
+    ChapterMarkReadResponse,
 )
 
 logger = structlog.get_logger(__name__)
@@ -417,3 +418,66 @@ async def get_series_chapters(
     chapters = result.scalars().all()
 
     return [ChapterResponse.from_model(chapter) for chapter in chapters]
+
+
+@router.put("/{chapter_id}/mark-read", response_model=ChapterMarkReadResponse)
+async def toggle_chapter_read_status(
+    chapter_id: UUID, db: AsyncSession = Depends(get_db)
+) -> ChapterMarkReadResponse:
+    """Toggle chapter read status and update series aggregate."""
+    from datetime import datetime
+
+    # Get chapter with series relationship
+    result = await db.execute(
+        select(Chapter).options(selectinload(Chapter.series)).where(Chapter.id == chapter_id)
+    )
+    chapter = result.scalar_one_or_none()
+
+    if not chapter:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+
+    # Toggle read status
+    new_read_status = not chapter.is_read
+    read_at_value = datetime.utcnow() if new_read_status else None
+
+    # Update chapter read status
+    await db.execute(
+        update(Chapter)
+        .where(Chapter.id == chapter_id)
+        .values(
+            is_read=new_read_status,
+            read_at=read_at_value,
+            updated_at=datetime.utcnow(),
+        )
+    )
+
+    # Update series read_chapters count by recalculating from all chapters
+    read_chapters_count = await db.execute(
+        select(func.count()).where(Chapter.series_id == chapter.series_id, Chapter.is_read == True)
+    )
+    new_read_count = read_chapters_count.scalar()
+
+    # Update series read_chapters and updated_at
+    await db.execute(
+        update(Series)
+        .where(Series.id == chapter.series_id)
+        .values(read_chapters=new_read_count, updated_at=datetime.utcnow())
+    )
+
+    # Commit the transaction
+    await db.commit()
+
+    logger.info(
+        "Chapter read status toggled",
+        chapter_id=str(chapter_id),
+        series_id=str(chapter.series_id),
+        new_status=new_read_status,
+        new_series_read_count=new_read_count,
+    )
+
+    return ChapterMarkReadResponse(
+        id=chapter_id,
+        is_read=new_read_status,
+        read_at=read_at_value,
+        series_read_chapters=new_read_count,
+    )

@@ -90,9 +90,9 @@ class Chapter(Base):
     source_metadata: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     # Reading progress
-    is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
     last_read_page: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
@@ -111,6 +111,10 @@ class Chapter(Base):
         Index("ix_chapters_series_chapter_volume", "series_id", "chapter_number", "volume_number"),
         # Index for ordering chapters within series
         Index("ix_chapters_series_ordering", "series_id", "volume_number", "chapter_number"),
+        # Index for read chapters by series (for progress calculations)
+        Index("ix_chapters_series_read", "series_id", "is_read"),
+        # Index for recent read chapters (for dashboard and progress queries)
+        Index("ix_chapters_read_at", "is_read", "read_at"),
     )
 
 

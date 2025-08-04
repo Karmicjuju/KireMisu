@@ -20,72 +20,88 @@ class LibraryPathService:
     def _validate_and_sanitize_path(path: str) -> str:
         """
         Validate and sanitize a file system path for security.
-        
+
         Protects against:
         - Directory traversal attacks (../, ..\\)
         - Invalid characters and names
         - Symlink attacks
         - Non-absolute paths
-        
+
         Args:
             path: The path to validate
-            
+
         Returns:
             The sanitized absolute path
-            
+
         Raises:
             ValueError: If the path is invalid or unsafe
         """
         if not path or not isinstance(path, str):
             raise ValueError("Path must be a non-empty string")
-        
+
         # Remove any null bytes (security protection)
-        if '\x00' in path:
+        if "\x00" in path:
             raise ValueError("Path contains null bytes")
-        
+
         # Convert to Path object for normalization
         try:
             path_obj = Path(path).resolve()
         except (OSError, ValueError) as e:
             raise ValueError(f"Invalid path format: {e}")
-        
+
         # Ensure path is absolute after resolution
         if not path_obj.is_absolute():
             raise ValueError("Path must be absolute")
-        
+
         # Get the normalized string representation
         normalized_path = str(path_obj)
-        
+
         # Additional security checks
-        dangerous_patterns = [
-            '..', '\\.\\', '/./', 
-            '\0', '\r', '\n'
-        ]
-        
+        dangerous_patterns = ["..", "\\.\\", "/./", "\0", "\r", "\n"]
+
         for pattern in dangerous_patterns:
             if pattern in normalized_path:
                 raise ValueError(f"Path contains dangerous pattern: {pattern}")
-        
+
         # Check for reserved names on Windows
-        if os.name == 'nt':
+        if os.name == "nt":
             reserved_names = {
-                'CON', 'PRN', 'AUX', 'NUL',
-                'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
-                'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'
+                "CON",
+                "PRN",
+                "AUX",
+                "NUL",
+                "COM1",
+                "COM2",
+                "COM3",
+                "COM4",
+                "COM5",
+                "COM6",
+                "COM7",
+                "COM8",
+                "COM9",
+                "LPT1",
+                "LPT2",
+                "LPT3",
+                "LPT4",
+                "LPT5",
+                "LPT6",
+                "LPT7",
+                "LPT8",
+                "LPT9",
             }
             path_parts = path_obj.parts
             for part in path_parts:
-                if part.upper().split('.')[0] in reserved_names:
+                if part.upper().split(".")[0] in reserved_names:
                     raise ValueError(f"Path contains reserved Windows name: {part}")
-        
+
         # Ensure the path doesn't try to escape to system directories
         # This is a basic protection - adjust based on your deployment environment
-        system_dirs = ['/etc', '/sys', '/proc', '/dev', '/root']
-        if os.name != 'nt':
+        system_dirs = ["/etc", "/sys", "/proc", "/dev", "/root"]
+        if os.name != "nt":
             for sys_dir in system_dirs:
                 if normalized_path.startswith(sys_dir):
                     raise ValueError(f"Access to system directory not allowed: {sys_dir}")
-        
+
         return normalized_path
 
     @staticmethod
@@ -111,7 +127,7 @@ class LibraryPathService:
         """Create a new library path."""
         # Validate and sanitize the path for security
         sanitized_path = LibraryPathService._validate_and_sanitize_path(library_path_data.path)
-        
+
         # Validate path exists and is accessible
         if not os.path.exists(sanitized_path):
             raise ValueError(f"Path does not exist: {sanitized_path}")
@@ -152,7 +168,7 @@ class LibraryPathService:
         if update_data.path and update_data.path != library_path.path:
             # Validate and sanitize the new path for security
             sanitized_new_path = LibraryPathService._validate_and_sanitize_path(update_data.path)
-            
+
             if not os.path.exists(sanitized_new_path):
                 raise ValueError(f"Path does not exist: {sanitized_new_path}")
 

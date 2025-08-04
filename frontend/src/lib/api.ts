@@ -162,6 +162,43 @@ export interface ChapterPagesInfo {
   }>;
 }
 
+// Dashboard statistics interfaces
+export interface DashboardStats {
+  total_series: number;
+  total_chapters: number;
+  chapters_read: number;
+  reading_time_hours: number;
+  favorites_count: number;
+  recent_activity: RecentActivity[];
+}
+
+export interface RecentActivity {
+  id: string;
+  type: 'chapter_read' | 'series_added' | 'progress_updated';
+  title: string;
+  subtitle?: string;
+  timestamp: string;
+  series_id?: string;
+  chapter_id?: string;
+}
+
+// Series progress interfaces
+export interface SeriesProgress {
+  series_id: string;
+  total_chapters: number;
+  read_chapters: number;
+  unread_chapters: number;
+  progress_percentage: number;
+  last_read_chapter?: ChapterResponse;
+  next_unread_chapter?: ChapterResponse;
+  last_activity: string;
+}
+
+// Mark read request interface
+export interface MarkReadRequest {
+  is_read: boolean;
+}
+
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
   timeout: 60000, // Increased timeout for library scanning operations
@@ -246,13 +283,13 @@ export const chaptersApi = {
     // Get chapter info first to know page count
     const chapterResponse = await api.get<ChapterResponse>(`/api/reader/chapter/${chapterId}/info`);
     const chapter = chapterResponse.data;
-    
+
     // Generate pages info based on chapter page count
     const pages = Array.from({ length: chapter.page_count }, (_, i) => ({
       page_number: i + 1,
       url: `${api.defaults.baseURL}/api/reader/chapter/${chapterId}/page/${i}`,
     }));
-    
+
     return {
       chapter_id: chapterId,
       total_pages: chapter.page_count,
@@ -285,6 +322,14 @@ export const chaptersApi = {
     const response = await api.put<ChapterResponse>(
       `/api/reader/chapter/${chapterId}/progress`,
       progress
+    );
+    return response.data;
+  },
+
+  async markChapterRead(chapterId: string, markRead: MarkReadRequest): Promise<ChapterResponse> {
+    const response = await api.put<ChapterResponse>(
+      `/api/chapters/${chapterId}/mark-read`,
+      markRead
     );
     return response.data;
   },
@@ -323,6 +368,18 @@ export const seriesApi = {
     const response = await api.get<ChapterResponse[]>(
       `/api/series/${seriesId}/chapters${params.toString() ? `?${params.toString()}` : ''}`
     );
+    return response.data;
+  },
+
+  async getSeriesProgress(seriesId: string): Promise<SeriesProgress> {
+    const response = await api.get<SeriesProgress>(`/api/series/${seriesId}/progress`);
+    return response.data;
+  },
+};
+
+export const dashboardApi = {
+  async getStats(): Promise<DashboardStats> {
+    const response = await api.get<DashboardStats>('/api/dashboard/stats');
     return response.data;
   },
 };
