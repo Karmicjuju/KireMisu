@@ -16,8 +16,7 @@ from kiremisu.main import app
 
 # Test database URL - uses PostgreSQL test database
 TEST_DATABASE_URL = os.getenv(
-    "TEST_DATABASE_URL",
-    "postgresql+asyncpg://kiremisu:kiremisu@localhost:5432/kiremisu_test"
+    "TEST_DATABASE_URL", "postgresql+asyncpg://kiremisu:kiremisu@localhost:5432/kiremisu_test"
 )
 
 
@@ -64,9 +63,9 @@ async def db_session(engine) -> AsyncGenerator[AsyncSession, None]:
         await session.execute(text("TRUNCATE TABLE annotations CASCADE"))
         await session.execute(text("TRUNCATE TABLE user_lists CASCADE"))
         await session.commit()
-        
+
         yield session
-        
+
         # Clean up after test
         await session.execute(text("TRUNCATE TABLE chapters CASCADE"))
         await session.execute(text("TRUNCATE TABLE series CASCADE"))
@@ -88,6 +87,7 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
     # Use the correct AsyncClient initialization for httpx 0.28+
     import httpx
+
     transport = httpx.ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

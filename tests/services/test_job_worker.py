@@ -19,7 +19,7 @@ class TestJobWorker:
     @pytest.fixture
     def mock_importer(self):
         """Mock importer service."""
-        with patch('kiremisu.services.job_worker.ImporterService') as mock:
+        with patch("kiremisu.services.job_worker.ImporterService") as mock:
             mock_instance = mock.return_value
             mock_instance.scan_library_paths = AsyncMock(
                 return_value=ImportStats(
@@ -29,7 +29,7 @@ class TestJobWorker:
                     chapters_found=10,
                     chapters_created=5,
                     chapters_updated=5,
-                    errors=0
+                    errors=0,
                 )
             )
             yield mock_instance
@@ -37,22 +37,15 @@ class TestJobWorker:
     async def test_execute_library_scan_job_success(self, db_session: AsyncSession, mock_importer):
         """Test successful execution of library scan job."""
         # Create test library path
-        path = LibraryPath(
-            path="/test/path",
-            enabled=True,
-            scan_interval_hours=24
-        )
+        path = LibraryPath(path="/test/path", enabled=True, scan_interval_hours=24)
         db_session.add(path)
         await db_session.commit()
 
         # Create test job
         job = JobQueue(
             job_type="library_scan",
-            payload={
-                "library_path_id": str(path.id),
-                "library_path": path.path
-            },
-            status="pending"
+            payload={"library_path_id": str(path.id), "library_path": path.path},
+            status="pending",
         )
         db_session.add(job)
         await db_session.commit()
@@ -77,7 +70,9 @@ class TestJobWorker:
         assert result["library_path_id"] == str(path.id)
         assert "stats" in result
 
-    async def test_execute_library_scan_job_all_paths(self, db_session: AsyncSession, mock_importer):
+    async def test_execute_library_scan_job_all_paths(
+        self, db_session: AsyncSession, mock_importer
+    ):
         """Test execution of library scan job for all paths."""
         # Create test library paths
         path1 = LibraryPath(path="/test/path1", enabled=True, scan_interval_hours=24)
@@ -87,11 +82,7 @@ class TestJobWorker:
         await db_session.commit()
 
         # Create test job for all paths (no library_path_id)
-        job = JobQueue(
-            job_type="library_scan",
-            payload={},
-            status="pending"
-        )
+        job = JobQueue(job_type="library_scan", payload={}, status="pending")
         db_session.add(job)
         await db_session.commit()
 
@@ -115,16 +106,12 @@ class TestJobWorker:
 
     async def test_execute_job_unknown_type(self, db_session: AsyncSession):
         """Test execution of job with unknown type."""
-        job = JobQueue(
-            job_type="unknown_job",
-            payload={},
-            status="pending"
-        )
+        job = JobQueue(job_type="unknown_job", payload={}, status="pending")
         db_session.add(job)
         await db_session.commit()
 
         worker = JobWorker()
-        
+
         with pytest.raises(JobExecutionError, match="Job execution failed"):
             await worker.execute_job(db_session, job)
 
@@ -140,17 +127,17 @@ class TestJobWorker:
             job_type="library_scan",
             payload={
                 "library_path_id": str(uuid4()),  # Invalid ID will cause failure
-                "library_path": "/invalid/path"
+                "library_path": "/invalid/path",
             },
             status="pending",
             max_retries=2,
-            retry_count=0
+            retry_count=0,
         )
         db_session.add(job)
         await db_session.commit()
 
         worker = JobWorker()
-        
+
         # First attempt should fail and set up retry
         with pytest.raises(JobExecutionError):
             await worker.execute_job(db_session, job)
@@ -178,11 +165,7 @@ class TestJobWorker:
 
     async def test_execute_job_marks_running_status(self, db_session: AsyncSession, mock_importer):
         """Test that job is marked as running during execution."""
-        job = JobQueue(
-            job_type="library_scan",
-            payload={},
-            status="pending"
-        )
+        job = JobQueue(job_type="library_scan", payload={}, status="pending")
         db_session.add(job)
         await db_session.commit()
 
@@ -200,12 +183,7 @@ class TestJobWorker:
 
     async def test_update_library_path_last_scan(self, db_session: AsyncSession):
         """Test updating last_scan for specific library path."""
-        path = LibraryPath(
-            path="/test/path",
-            enabled=True,
-            scan_interval_hours=24,
-            last_scan=None
-        )
+        path = LibraryPath(path="/test/path", enabled=True, scan_interval_hours=24, last_scan=None)
         db_session.add(path)
         await db_session.commit()
 
@@ -217,9 +195,15 @@ class TestJobWorker:
 
     async def test_update_all_library_paths_last_scan(self, db_session: AsyncSession):
         """Test updating last_scan for all enabled library paths."""
-        path1 = LibraryPath(path="/test/path1", enabled=True, scan_interval_hours=24, last_scan=None)
-        path2 = LibraryPath(path="/test/path2", enabled=True, scan_interval_hours=24, last_scan=None)
-        path3 = LibraryPath(path="/test/path3", enabled=False, scan_interval_hours=24, last_scan=None)
+        path1 = LibraryPath(
+            path="/test/path1", enabled=True, scan_interval_hours=24, last_scan=None
+        )
+        path2 = LibraryPath(
+            path="/test/path2", enabled=True, scan_interval_hours=24, last_scan=None
+        )
+        path3 = LibraryPath(
+            path="/test/path3", enabled=False, scan_interval_hours=24, last_scan=None
+        )
 
         db_session.add(path1)
         db_session.add(path2)
@@ -254,9 +238,7 @@ class TestJobWorkerRunner:
     async def test_worker_runner_start_stop(self, mock_db_session_factory):
         """Test starting and stopping worker runner."""
         runner = JobWorkerRunner(
-            mock_db_session_factory,
-            poll_interval_seconds=1,
-            max_concurrent_jobs=2
+            mock_db_session_factory, poll_interval_seconds=1, max_concurrent_jobs=2
         )
 
         # Start runner
@@ -273,7 +255,7 @@ class TestJobWorkerRunner:
         runner = JobWorkerRunner(mock_db_session_factory, poll_interval_seconds=1)
 
         await runner.start()
-        
+
         # Try to start again - should not create new task
         old_task = runner._task
         await runner.start()
@@ -284,13 +266,11 @@ class TestJobWorkerRunner:
     async def test_get_worker_status(self, mock_db_session_factory):
         """Test getting worker status."""
         runner = JobWorkerRunner(
-            mock_db_session_factory,
-            poll_interval_seconds=10,
-            max_concurrent_jobs=5
+            mock_db_session_factory, poll_interval_seconds=10, max_concurrent_jobs=5
         )
 
         status = await runner.get_worker_status()
-        
+
         assert status["running"] is False
         assert status["active_jobs"] == 0
         assert status["max_concurrent_jobs"] == 5
@@ -298,7 +278,7 @@ class TestJobWorkerRunner:
 
         # Start runner and check status
         await runner.start()
-        
+
         status = await runner.get_worker_status()
         assert status["running"] is True
 
@@ -328,9 +308,7 @@ class TestJobWorkerRunner:
         mock_session.execute.return_value = mock_result
 
         runner = JobWorkerRunner(
-            mock_db_session_factory,
-            poll_interval_seconds=1,
-            max_concurrent_jobs=2
+            mock_db_session_factory, poll_interval_seconds=1, max_concurrent_jobs=2
         )
 
         # Process jobs (just check that it doesn't error)
@@ -342,9 +320,7 @@ class TestJobWorkerRunner:
     async def test_concurrency_limit_respected(self, mock_db_session_factory):
         """Test that concurrency limit is respected."""
         runner = JobWorkerRunner(
-            mock_db_session_factory,
-            poll_interval_seconds=1,
-            max_concurrent_jobs=2
+            mock_db_session_factory, poll_interval_seconds=1, max_concurrent_jobs=2
         )
 
         # Simulate having 2 active jobs (at limit)
@@ -365,7 +341,7 @@ class TestJobWorkerRunner:
     async def test_execute_job_with_cleanup_removes_from_active_set(self, mock_db_session_factory):
         """Test that completed jobs are removed from active set."""
         mock_session = mock_db_session_factory.return_value.__aenter__.return_value
-        
+
         # Mock job
         job = MagicMock()
         job.id = uuid4()
@@ -374,7 +350,7 @@ class TestJobWorkerRunner:
         runner = JobWorkerRunner(mock_db_session_factory, poll_interval_seconds=1)
 
         # Mock JobWorker.execute_job to raise an exception
-        with patch('kiremisu.services.job_worker.JobWorker') as mock_worker_class:
+        with patch("kiremisu.services.job_worker.JobWorker") as mock_worker_class:
             mock_worker = mock_worker_class.return_value
             mock_worker.execute_job = AsyncMock(side_effect=Exception("Test error"))
 

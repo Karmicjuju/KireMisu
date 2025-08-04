@@ -11,25 +11,25 @@ interface JobStatusBadgeProps {
 const statusConfig = {
   pending: {
     variant: 'pending' as const,
-    label: 'Pending'
+    label: 'Pending',
   },
   running: {
     variant: 'running' as const,
-    label: 'Running'
+    label: 'Running',
   },
   completed: {
     variant: 'success' as const,
-    label: 'Completed'
+    label: 'Completed',
   },
   failed: {
     variant: 'destructive' as const,
-    label: 'Failed'
-  }
+    label: 'Failed',
+  },
 };
 
 export function JobStatusBadge({ status, className, size = 'default' }: JobStatusBadgeProps) {
   const config = statusConfig[status];
-  
+
   return (
     <Badge
       variant={config.variant}
@@ -47,15 +47,15 @@ interface LibraryPathStatusIndicatorProps {
   className?: string;
 }
 
-export function LibraryPathStatusIndicator({ 
-  isScanning, 
-  hasError = false, 
-  className 
+export function LibraryPathStatusIndicator({
+  isScanning,
+  hasError = false,
+  className,
 }: LibraryPathStatusIndicatorProps) {
   if (isScanning) {
     return (
       <div className={`flex items-center gap-2 ${className}`}>
-        <div className="h-2 w-2 rounded-full bg-orange-500 animate-pulse" />
+        <div className="h-2 w-2 animate-pulse rounded-full bg-orange-500" />
         <span className="text-sm text-orange-600">Scanning</span>
       </div>
     );

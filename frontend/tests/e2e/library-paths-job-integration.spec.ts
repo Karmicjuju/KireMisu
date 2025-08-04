@@ -16,7 +16,7 @@ test.describe('Library Paths with Job Integration', () => {
               scan_interval_hours: 24,
               last_scan: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
               created_at: new Date(Date.now() - 86400000).toISOString(),
-              updated_at: new Date(Date.now() - 3600000).toISOString()
+              updated_at: new Date(Date.now() - 3600000).toISOString(),
             },
             {
               id: 'path-2',
@@ -25,10 +25,10 @@ test.describe('Library Paths with Job Integration', () => {
               scan_interval_hours: 168,
               last_scan: null,
               created_at: new Date(Date.now() - 172800000).toISOString(),
-              updated_at: new Date(Date.now() - 172800000).toISOString()
-            }
+              updated_at: new Date(Date.now() - 172800000).toISOString(),
+            },
           ],
-          total: 2
+          total: 2,
         }),
       });
     });
@@ -53,7 +53,7 @@ test.describe('Library Paths with Job Integration', () => {
               max_retries: 3,
               scheduled_at: new Date(Date.now() - 35000).toISOString(),
               created_at: new Date(Date.now() - 35000).toISOString(),
-              updated_at: new Date(Date.now() - 30000).toISOString()
+              updated_at: new Date(Date.now() - 30000).toISOString(),
             },
             {
               id: 'job-2',
@@ -68,11 +68,11 @@ test.describe('Library Paths with Job Integration', () => {
               max_retries: 3,
               scheduled_at: new Date(Date.now() - 305000).toISOString(),
               created_at: new Date(Date.now() - 305000).toISOString(),
-              updated_at: new Date(Date.now() - 240000).toISOString()
-            }
+              updated_at: new Date(Date.now() - 240000).toISOString(),
+            },
           ],
           total: 2,
-          job_type_filter: 'library_scan'
+          job_type_filter: 'library_scan',
         }),
       });
     });
@@ -87,10 +87,10 @@ test.describe('Library Paths with Job Integration', () => {
             pending: 0,
             running: 1,
             completed: 5,
-            failed: 1
+            failed: 1,
           },
           worker_status: null,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         }),
       });
     });
@@ -104,7 +104,7 @@ test.describe('Library Paths with Job Integration', () => {
           running: true,
           active_jobs: 1,
           max_concurrent_jobs: 3,
-          poll_interval_seconds: 10
+          poll_interval_seconds: 10,
         }),
       });
     });
@@ -136,7 +136,10 @@ test.describe('Library Paths with Job Integration', () => {
 
   test('should display global scanning status', async ({ page }) => {
     // Global status indicator should show scanning state
-    const statusIndicator = page.locator('h2:has-text("Library Paths")').locator('..').getByText('Scanning');
+    const statusIndicator = page
+      .locator('h2:has-text("Library Paths")')
+      .locator('..')
+      .getByText('Scanning');
     await expect(statusIndicator).toBeVisible();
   });
 
@@ -151,7 +154,7 @@ test.describe('Library Paths with Job Integration', () => {
           status: 'scheduled',
           message: `Job scheduled successfully for ${requestBody.library_path_id ? 'specific path' : 'all paths'}`,
           job_id: 'new-job-id',
-          scheduled_count: 1
+          scheduled_count: 1,
         }),
       });
     });
@@ -172,7 +175,7 @@ test.describe('Library Paths with Job Integration', () => {
 
     // Individual scan buttons should also show appropriate state
     const scanButtons = page.getByRole('button', { name: /Scan Now|Scanning/ });
-    
+
     // At least one should be showing "Scanning..." state
     await expect(page.getByText('Scanning...')).toBeVisible();
   });
@@ -186,7 +189,7 @@ test.describe('Library Paths with Job Integration', () => {
   test('should format relative time correctly', async ({ page }) => {
     // Should show relative time instead of absolute timestamps
     await expect(page.getByText(/Last scan:.*hour.*ago/)).toBeVisible();
-    
+
     // Path without last_scan should not show "Last scan:" text
     const secondaryPath = page.locator('text=/manga/library/secondary').locator('..');
     await expect(secondaryPath.getByText(/Last scan:/)).not.toBeVisible();

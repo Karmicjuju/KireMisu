@@ -13,7 +13,13 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { libraryApi, jobsApi, type LibraryPath, type LibraryScanResponse, type JobResponse } from '@/lib/api';
+import {
+  libraryApi,
+  jobsApi,
+  type LibraryPath,
+  type LibraryScanResponse,
+  type JobResponse,
+} from '@/lib/api';
 import { formatRelativeTime } from '@/lib/utils';
 import { LibraryPathStatusIndicator } from '@/components/ui/job-status-badge';
 import useSWR, { mutate } from 'swr';
@@ -47,42 +53,47 @@ export function LibraryPaths() {
   });
 
   const { data: pathsData, error, isLoading } = useSWR('library-paths', libraryApi.getPaths);
-  const { data: recentJobs } = useSWR('recent-jobs', () => jobsApi.getRecentJobs('library_scan', 20), {
-    refreshInterval: 10000, // Poll every 10 seconds for library path updates
-  });
+  const { data: recentJobs } = useSWR(
+    'recent-jobs',
+    () => jobsApi.getRecentJobs('library_scan', 20),
+    {
+      refreshInterval: 10000, // Poll every 10 seconds for library path updates
+    }
+  );
 
   // Helper functions for job status
   const getPathJobStatus = (pathId: string) => {
     if (!recentJobs?.jobs) return { isScanning: false, hasError: false, lastJob: null };
-    
+
     // Find the most recent job for this path
-    const pathJobs = recentJobs.jobs.filter(job => 
-      job.payload.library_path_id === pathId || 
-      (job.payload.library_path_id === null && job.job_type === 'library_scan')
+    const pathJobs = recentJobs.jobs.filter(
+      (job) =>
+        job.payload.library_path_id === pathId ||
+        (job.payload.library_path_id === null && job.job_type === 'library_scan')
     );
-    
+
     if (pathJobs.length === 0) return { isScanning: false, hasError: false, lastJob: null };
-    
+
     const lastJob = pathJobs[0]; // Most recent job
     const isScanning = lastJob.status === 'running' || lastJob.status === 'pending';
     const hasError = lastJob.status === 'failed';
-    
+
     return { isScanning, hasError, lastJob };
   };
 
   const getGlobalScanStatus = () => {
     if (!recentJobs?.jobs) return { isScanning: false, hasError: false };
-    
-    const runningJobs = recentJobs.jobs.filter(job => 
-      job.status === 'running' && job.job_type === 'library_scan'
+
+    const runningJobs = recentJobs.jobs.filter(
+      (job) => job.status === 'running' && job.job_type === 'library_scan'
     );
-    const failedJobs = recentJobs.jobs.filter(job => 
-      job.status === 'failed' && job.job_type === 'library_scan'
+    const failedJobs = recentJobs.jobs.filter(
+      (job) => job.status === 'failed' && job.job_type === 'library_scan'
     );
-    
+
     return {
       isScanning: runningJobs.length > 0,
-      hasError: failedJobs.length > 0 && runningJobs.length === 0
+      hasError: failedJobs.length > 0 && runningJobs.length === 0,
     };
   };
 
@@ -109,9 +120,10 @@ export function LibraryPaths() {
       setFormData({ path: '', enabled: true, scan_interval_hours: 24 });
       mutate('library-paths');
     } catch (error: any) {
-      const errorMessage = typeof error.response?.data?.detail === 'string' 
-        ? error.response.data.detail 
-        : error.response?.data?.detail?.[0]?.msg || 'Failed to save library path.';
+      const errorMessage =
+        typeof error.response?.data?.detail === 'string'
+          ? error.response.data.detail
+          : error.response?.data?.detail?.[0]?.msg || 'Failed to save library path.';
       toast({
         title: 'Error',
         description: errorMessage,
@@ -143,9 +155,10 @@ export function LibraryPaths() {
       });
       mutate('library-paths');
     } catch (error: any) {
-      const errorMessage = typeof error.response?.data?.detail === 'string' 
-        ? error.response.data.detail 
-        : error.response?.data?.detail?.[0]?.msg || 'Failed to delete library path.';
+      const errorMessage =
+        typeof error.response?.data?.detail === 'string'
+          ? error.response.data.detail
+          : error.response?.data?.detail?.[0]?.msg || 'Failed to delete library path.';
       toast({
         title: 'Error',
         description: errorMessage,
@@ -164,7 +177,7 @@ export function LibraryPaths() {
     try {
       const result = await jobsApi.scheduleJob({
         job_type: 'library_scan',
-        priority: 8 // High priority for manual scans
+        priority: 8, // High priority for manual scans
       });
       toast({
         title: 'Library scan scheduled',
@@ -174,9 +187,10 @@ export function LibraryPaths() {
       mutate('recent-jobs');
       mutate('library-paths');
     } catch (error: any) {
-      const errorMessage = typeof error.response?.data?.detail === 'string' 
-        ? error.response.data.detail 
-        : error.response?.data?.detail?.[0]?.msg || 'Failed to schedule library scan.';
+      const errorMessage =
+        typeof error.response?.data?.detail === 'string'
+          ? error.response.data.detail
+          : error.response?.data?.detail?.[0]?.msg || 'Failed to schedule library scan.';
       toast({
         title: 'Library scan failed',
         description: errorMessage,
@@ -193,7 +207,7 @@ export function LibraryPaths() {
       const result = await jobsApi.scheduleJob({
         job_type: 'library_scan',
         library_path_id: pathId,
-        priority: 8 // High priority for manual scans
+        priority: 8, // High priority for manual scans
       });
       toast({
         title: 'Library scan scheduled',
@@ -203,9 +217,10 @@ export function LibraryPaths() {
       mutate('recent-jobs');
       mutate('library-paths');
     } catch (error: any) {
-      const errorMessage = typeof error.response?.data?.detail === 'string' 
-        ? error.response.data.detail 
-        : error.response?.data?.detail?.[0]?.msg || 'Failed to schedule library scan.';
+      const errorMessage =
+        typeof error.response?.data?.detail === 'string'
+          ? error.response.data.detail
+          : error.response?.data?.detail?.[0]?.msg || 'Failed to schedule library scan.';
       toast({
         title: 'Library scan failed',
         description: errorMessage,
@@ -232,14 +247,18 @@ export function LibraryPaths() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button 
-            onClick={handleScanAll} 
-            variant="outline" 
-            size="sm" 
+          <Button
+            onClick={handleScanAll}
+            variant="outline"
+            size="sm"
             disabled={isScanningAll || scanningPathId !== null || getGlobalScanStatus().isScanning}
           >
-            <RefreshCw className={`mr-2 h-4 w-4 ${isScanningAll || getGlobalScanStatus().isScanning ? 'animate-spin' : ''}`} />
-            {isScanningAll || getGlobalScanStatus().isScanning ? 'Scanning...' : 'Scan All Libraries'}
+            <RefreshCw
+              className={`mr-2 h-4 w-4 ${isScanningAll || getGlobalScanStatus().isScanning ? 'animate-spin' : ''}`}
+            />
+            {isScanningAll || getGlobalScanStatus().isScanning
+              ? 'Scanning...'
+              : 'Scan All Libraries'}
           </Button>
           {!isAdding && (
             <Button onClick={() => setIsAdding(true)} size="sm">
@@ -350,13 +369,16 @@ export function LibraryPaths() {
           pathsData.paths.map((path) => {
             const jobStatus = getPathJobStatus(path.id);
             const isPathScanning = jobStatus.isScanning || scanningPathId === path.id;
-            
+
             return (
-              <div key={path.id} className="flex items-center justify-between rounded-lg border p-4">
+              <div
+                key={path.id}
+                className="flex items-center justify-between rounded-lg border p-4"
+              >
                 <div className="flex-1">
                   <div className="flex items-center gap-3">
                     <div className="font-medium">{path.path}</div>
-                    <LibraryPathStatusIndicator 
+                    <LibraryPathStatusIndicator
                       isScanning={isPathScanning}
                       hasError={jobStatus.hasError}
                     />
@@ -366,28 +388,37 @@ export function LibraryPaths() {
                     {SCAN_INTERVAL_OPTIONS.find((o) => o.value === path.scan_interval_hours)?.label}
                     {path.last_scan && ` • Last scan: ${formatRelativeTime(path.last_scan)}`}
                     {jobStatus.lastJob && jobStatus.lastJob.error_message && (
-                      <span className="ml-2 text-red-600">• Error: {jobStatus.lastJob.error_message}</span>
+                      <span className="ml-2 text-red-600">
+                        • Error: {jobStatus.lastJob.error_message}
+                      </span>
                     )}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm">{path.enabled ? 'Auto-scan Enabled' : 'Auto-scan Disabled'}</span>
+                    <span className="text-sm">
+                      {path.enabled ? 'Auto-scan Enabled' : 'Auto-scan Disabled'}
+                    </span>
                     <div
                       className={`h-2 w-2 rounded-full ${path.enabled ? 'bg-green-500' : 'bg-gray-400'}`}
                     />
                   </div>
 
                   <div className="flex gap-1">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => handleScanPath(path.id)}
-                      disabled={isScanningAll || scanningPathId !== null || isPathScanning || getGlobalScanStatus().isScanning}
+                      disabled={
+                        isScanningAll ||
+                        scanningPathId !== null ||
+                        isPathScanning ||
+                        getGlobalScanStatus().isScanning
+                      }
                     >
-                      <RefreshCw 
-                        className={`mr-2 h-4 w-4 ${isPathScanning ? 'animate-spin' : ''}`} 
+                      <RefreshCw
+                        className={`mr-2 h-4 w-4 ${isPathScanning ? 'animate-spin' : ''}`}
                       />
                       {isPathScanning ? 'Scanning...' : 'Scan Now'}
                     </Button>

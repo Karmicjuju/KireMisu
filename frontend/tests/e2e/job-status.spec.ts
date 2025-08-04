@@ -3,8 +3,8 @@ import { test, expect } from '@playwright/test';
 test.describe('Job Status Dashboard', () => {
   test.beforeEach(async ({ page }) => {
     // Enable logging to see network requests
-    page.on('request', req => console.log('REQUEST:', req.method(), req.url()));
-    page.on('response', res => console.log('RESPONSE:', res.status(), res.url()));
+    page.on('request', (req) => console.log('REQUEST:', req.method(), req.url()));
+    page.on('response', (res) => console.log('RESPONSE:', res.status(), res.url()));
 
     // Mock job status API
     await page.route('**/api/jobs/status', async (route) => {
@@ -16,15 +16,15 @@ test.describe('Job Status Dashboard', () => {
             pending: 2,
             running: 1,
             completed: 15,
-            failed: 0
+            failed: 0,
           },
           worker_status: {
             running: true,
             active_jobs: 1,
             max_concurrent_jobs: 3,
-            poll_interval_seconds: 10
+            poll_interval_seconds: 10,
           },
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         }),
       });
     });
@@ -34,7 +34,7 @@ test.describe('Job Status Dashboard', () => {
       const url = new URL(route.request().url());
       const jobType = url.searchParams.get('job_type');
       const limit = url.searchParams.get('limit');
-      
+
       let jobs = [
         {
           id: 'job-1',
@@ -49,7 +49,7 @@ test.describe('Job Status Dashboard', () => {
           max_retries: 3,
           scheduled_at: new Date(Date.now() - 35000).toISOString(),
           created_at: new Date(Date.now() - 35000).toISOString(),
-          updated_at: new Date(Date.now() - 30000).toISOString()
+          updated_at: new Date(Date.now() - 30000).toISOString(),
         },
         {
           id: 'job-2',
@@ -64,13 +64,13 @@ test.describe('Job Status Dashboard', () => {
           max_retries: 3,
           scheduled_at: new Date(Date.now() - 125000).toISOString(),
           created_at: new Date(Date.now() - 125000).toISOString(),
-          updated_at: new Date(Date.now() - 60000).toISOString()
-        }
+          updated_at: new Date(Date.now() - 60000).toISOString(),
+        },
       ];
 
       // Filter by job type if requested
       if (jobType) {
-        jobs = jobs.filter(job => job.job_type === jobType);
+        jobs = jobs.filter((job) => job.job_type === jobType);
       }
 
       await route.fulfill({
@@ -79,7 +79,7 @@ test.describe('Job Status Dashboard', () => {
         body: JSON.stringify({
           jobs: jobs,
           total: jobs.length,
-          job_type_filter: jobType
+          job_type_filter: jobType,
         }),
       });
     });
@@ -94,7 +94,7 @@ test.describe('Job Status Dashboard', () => {
           active_jobs: 1,
           max_concurrent_jobs: 3,
           poll_interval_seconds: 10,
-          message: null
+          message: null,
         }),
       });
     });
@@ -106,7 +106,7 @@ test.describe('Job Status Dashboard', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           paths: [],
-          total: 0
+          total: 0,
         }),
       });
     });
@@ -117,7 +117,7 @@ test.describe('Job Status Dashboard', () => {
   test('should display job queue statistics', async ({ page }) => {
     // Track API calls
     let apiCalls = [];
-    page.on('request', req => {
+    page.on('request', (req) => {
       if (req.url().includes('/api/')) {
         apiCalls.push(req.url());
         console.log('API REQUEST:', req.method(), req.url());
@@ -157,13 +157,13 @@ test.describe('Job Status Dashboard', () => {
     // Check queue statistics cards - should be visible now
     await expect(page.getByText('Pending')).toBeVisible();
     await expect(page.getByText('2', { exact: true })).toBeVisible(); // Pending count
-    
+
     await expect(page.getByText('Running')).toBeVisible();
     await expect(page.getByText('1', { exact: true })).toBeVisible(); // Running count
-    
+
     await expect(page.getByText('Completed')).toBeVisible();
     await expect(page.getByText('15', { exact: true })).toBeVisible(); // Completed count
-    
+
     await expect(page.getByText('Failed')).toBeVisible();
     await expect(page.getByText('0', { exact: true })).toBeVisible(); // Failed count
   });
@@ -171,7 +171,7 @@ test.describe('Job Status Dashboard', () => {
   test('should display worker status information', async ({ page }) => {
     // Check worker status indicator
     await expect(page.getByText('Worker Running')).toBeVisible();
-    
+
     // Check worker details
     await expect(page.getByText('Worker Details')).toBeVisible();
     await expect(page.getByText('Active Jobs: 1 / 3')).toBeVisible();
@@ -181,14 +181,14 @@ test.describe('Job Status Dashboard', () => {
 
   test('should display recent jobs list', async ({ page }) => {
     await expect(page.getByText('Recent Jobs')).toBeVisible();
-    
+
     // Check for job entries
     await expect(page.getByText('Library Scan')).toBeVisible();
-    
+
     // Check for job status badges
     await expect(page.getByText('Running')).toBeVisible();
     await expect(page.getByText('Completed')).toBeVisible();
-    
+
     // Check relative time formatting
     await expect(page.getByText(/ago/)).toBeVisible();
   });
@@ -196,7 +196,7 @@ test.describe('Job Status Dashboard', () => {
   test('should show job priority badges for non-default priorities', async ({ page }) => {
     // The first job has priority 8 (non-default), should show badge
     await expect(page.getByText('Priority 8')).toBeVisible();
-    
+
     // The second job has priority 5 (default), should not show badge
     await expect(page.getByText('Priority 5')).not.toBeVisible();
   });

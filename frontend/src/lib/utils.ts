@@ -49,12 +49,12 @@ export function formatRelativeTime(date: string | Date): string {
   const now = new Date();
   const target = new Date(date);
   const diffMs = now.getTime() - target.getTime();
-  
+
   // If in the future or exactly now
   if (diffMs <= 0) {
     return 'just now';
   }
-  
+
   const diffSeconds = Math.floor(diffMs / 1000);
   const diffMinutes = Math.floor(diffSeconds / 60);
   const diffHours = Math.floor(diffMinutes / 60);
@@ -62,7 +62,7 @@ export function formatRelativeTime(date: string | Date): string {
   const diffWeeks = Math.floor(diffDays / 7);
   const diffMonths = Math.floor(diffDays / 30);
   const diffYears = Math.floor(diffDays / 365);
-  
+
   if (diffYears > 0) {
     return `${diffYears} year${diffYears > 1 ? 's' : ''} ago`;
   } else if (diffMonths > 0) {

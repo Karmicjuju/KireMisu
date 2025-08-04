@@ -37,9 +37,10 @@ async def sample_library_path(db_session: AsyncSession, temp_directory: str):
 async def disabled_library_path(db_session: AsyncSession, temp_directory: str):
     """Create a disabled library path for testing."""
     import os
+
     disabled_path = temp_directory + "/disabled"
     os.makedirs(disabled_path, exist_ok=True)
-    
+
     library_path = LibraryPath(
         path=disabled_path,
         enabled=False,
@@ -65,7 +66,7 @@ async def sample_series_info():
                 title="Chapter 1",
                 file_size=1024000,
                 page_count=20,
-                source_metadata={"format": "cbz"}
+                source_metadata={"format": "cbz"},
             ),
             ChapterInfo(
                 file_path="/test/manga/series/chapter_2.cbz",
@@ -74,13 +75,13 @@ async def sample_series_info():
                 title="Chapter 2",
                 file_size=1024000,
                 page_count=22,
-                source_metadata={"format": "cbz"}
+                source_metadata={"format": "cbz"},
             ),
         ],
         author="Test Author",
         artist="Test Artist",
         description="A test manga series",
-        source_metadata={"format": "cbz", "language": "en"}
+        source_metadata={"format": "cbz", "language": "en"},
     )
 
 
@@ -96,24 +97,26 @@ class TestLibraryScanAPI:
         sample_series_info: SeriesInfo,
     ):
         """Test successful scan of all library paths."""
-        with patch('kiremisu.services.filesystem_parser.FilesystemParser.scan_library_path') as mock_scan:
+        with patch(
+            "kiremisu.services.filesystem_parser.FilesystemParser.scan_library_path"
+        ) as mock_scan:
             mock_scan.return_value = [sample_series_info]
-            
+
             # Test scanning all paths (no library_path_id in request)
             response = await client.post("/api/library/scan", json={})
-            
+
             assert response.status_code == 200
             data = response.json()
-            
+
             # Verify response structure
             assert "status" in data
             assert "message" in data
             assert "stats" in data
-            
+
             # Verify status
             assert data["status"] == "completed"
             assert "Library scan completed" in data["message"]
-            
+
             # Verify stats structure
             stats = data["stats"]
             assert "series_found" in stats
@@ -123,7 +126,7 @@ class TestLibraryScanAPI:
             assert "chapters_created" in stats
             assert "chapters_updated" in stats
             assert "errors" in stats
-            
+
             # Verify actual stats values
             assert stats["series_found"] == 1
             assert stats["series_created"] == 1
@@ -139,21 +142,22 @@ class TestLibraryScanAPI:
         sample_series_info: SeriesInfo,
     ):
         """Test successful scan of specific library path."""
-        with patch('kiremisu.services.filesystem_parser.FilesystemParser.scan_library_path') as mock_scan:
+        with patch(
+            "kiremisu.services.filesystem_parser.FilesystemParser.scan_library_path"
+        ) as mock_scan:
             mock_scan.return_value = [sample_series_info]
-            
+
             # Test scanning specific path
             response = await client.post(
-                "/api/library/scan",
-                json={"library_path_id": str(sample_library_path.id)}
+                "/api/library/scan", json={"library_path_id": str(sample_library_path.id)}
             )
-            
+
             assert response.status_code == 200
             data = response.json()
-            
+
             assert data["status"] == "completed"
             assert "Library path scan completed" in data["message"]
-            
+
             stats = data["stats"]
             assert stats["series_found"] == 1
             assert stats["series_created"] == 1
@@ -168,12 +172,11 @@ class TestLibraryScanAPI:
     ):
         """Test scan with non-existent library path ID."""
         nonexistent_id = uuid4()
-        
+
         response = await client.post(
-            "/api/library/scan",
-            json={"library_path_id": str(nonexistent_id)}
+            "/api/library/scan", json={"library_path_id": str(nonexistent_id)}
         )
-        
+
         assert response.status_code == 404
         data = response.json()
         assert "Library path not found" in data["detail"]
@@ -194,15 +197,15 @@ class TestLibraryScanAPI:
         mock_stats.chapters_found = 3
         mock_stats.chapters_created = 2
         mock_stats.errors = 1  # One error occurred
-        
-        with patch('kiremisu.services.importer.ImporterService.scan_library_paths') as mock_scan:
+
+        with patch("kiremisu.services.importer.ImporterService.scan_library_paths") as mock_scan:
             mock_scan.return_value = mock_stats
-            
+
             response = await client.post("/api/library/scan", json={})
-            
+
             assert response.status_code == 200
             data = response.json()
-            
+
             # Should indicate completed with errors
             assert data["status"] == "completed_with_errors"
             assert "1 errors encountered" in data["message"]
@@ -215,11 +218,11 @@ class TestLibraryScanAPI:
         sample_library_path: LibraryPath,
     ):
         """Test scan with ValueError from importer."""
-        with patch('kiremisu.services.importer.ImporterService.scan_library_paths') as mock_scan:
+        with patch("kiremisu.services.importer.ImporterService.scan_library_paths") as mock_scan:
             mock_scan.side_effect = ValueError("Invalid library path configuration")
-            
+
             response = await client.post("/api/library/scan", json={})
-            
+
             assert response.status_code == 400
             data = response.json()
             assert "Invalid library path configuration" in data["detail"]
@@ -231,11 +234,11 @@ class TestLibraryScanAPI:
         sample_library_path: LibraryPath,
     ):
         """Test scan with generic error from importer."""
-        with patch('kiremisu.services.importer.ImporterService.scan_library_paths') as mock_scan:
+        with patch("kiremisu.services.importer.ImporterService.scan_library_paths") as mock_scan:
             mock_scan.side_effect = Exception("Database connection failed")
-            
+
             response = await client.post("/api/library/scan", json={})
-            
+
             assert response.status_code == 500
             data = response.json()
             assert "Library scan failed" in data["detail"]
@@ -249,11 +252,13 @@ class TestLibraryScanAPI:
         sample_series_info: SeriesInfo,
     ):
         """Test scan with empty request body."""
-        with patch('kiremisu.services.filesystem_parser.FilesystemParser.scan_library_path') as mock_scan:
+        with patch(
+            "kiremisu.services.filesystem_parser.FilesystemParser.scan_library_path"
+        ) as mock_scan:
             mock_scan.return_value = [sample_series_info]
-            
+
             response = await client.post("/api/library/scan", json={})
-            
+
             assert response.status_code == 200
             data = response.json()
             assert data["status"] == "completed"
@@ -266,10 +271,10 @@ class TestLibraryScanAPI:
     ):
         """Test scan when no enabled library paths exist."""
         response = await client.post("/api/library/scan", json={})
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         # Should complete successfully but with zero results
         assert data["status"] == "completed"
         assert data["stats"]["series_found"] == 0
@@ -284,16 +289,13 @@ class TestLibraryScanAPI:
         client: AsyncClient,
     ):
         """Test scan with invalid UUID format."""
-        response = await client.post(
-            "/api/library/scan",
-            json={"library_path_id": "invalid-uuid"}
-        )
-        
+        response = await client.post("/api/library/scan", json={"library_path_id": "invalid-uuid"})
+
         # Should return validation error for invalid UUID
         assert response.status_code == 422
         data = response.json()
         assert "detail" in data
-        
+
     @pytest.mark.asyncio
     async def test_scan_library_response_schema_validation(
         self,
@@ -302,29 +304,36 @@ class TestLibraryScanAPI:
         sample_series_info: SeriesInfo,
     ):
         """Test that response matches expected schema."""
-        with patch('kiremisu.services.filesystem_parser.FilesystemParser.scan_library_path') as mock_scan:
+        with patch(
+            "kiremisu.services.filesystem_parser.FilesystemParser.scan_library_path"
+        ) as mock_scan:
             mock_scan.return_value = [sample_series_info]
-            
+
             response = await client.post("/api/library/scan", json={})
-            
+
             assert response.status_code == 200
             data = response.json()
-            
+
             # Validate complete response structure
             required_fields = ["status", "message", "stats"]
             for field in required_fields:
                 assert field in data, f"Missing required field: {field}"
-            
+
             # Validate stats structure
             stats = data["stats"]
             required_stats_fields = [
-                "series_found", "series_created", "series_updated",
-                "chapters_found", "chapters_created", "chapters_updated", "errors"
+                "series_found",
+                "series_created",
+                "series_updated",
+                "chapters_found",
+                "chapters_created",
+                "chapters_updated",
+                "errors",
             ]
             for field in required_stats_fields:
                 assert field in stats, f"Missing required stats field: {field}"
                 assert isinstance(stats[field], int), f"Stats field {field} should be integer"
-            
+
             # Validate status is a string
             assert isinstance(data["status"], str)
             assert isinstance(data["message"], str)
@@ -345,7 +354,7 @@ class TestLibraryScanAPI:
             total_chapters=1,
         )
         db_session.add(existing_series)
-        
+
         existing_chapter = Chapter(
             series_id=existing_series.id,
             chapter_number=1.0,
@@ -357,7 +366,7 @@ class TestLibraryScanAPI:
         )
         db_session.add(existing_chapter)
         await db_session.commit()
-        
+
         # Create updated series info
         updated_series_info = SeriesInfo(
             title_primary="Updated Series Title",  # Changed
@@ -382,15 +391,17 @@ class TestLibraryScanAPI:
             ],
             author="Updated Author",  # Changed
         )
-        
-        with patch('kiremisu.services.filesystem_parser.FilesystemParser.scan_library_path') as mock_scan:
+
+        with patch(
+            "kiremisu.services.filesystem_parser.FilesystemParser.scan_library_path"
+        ) as mock_scan:
             mock_scan.return_value = [updated_series_info]
-            
+
             response = await client.post("/api/library/scan", json={})
-            
+
             assert response.status_code == 200
             data = response.json()
-            
+
             # Should show updates
             stats = data["stats"]
             assert stats["series_found"] == 1
@@ -412,29 +423,35 @@ class TestLibraryScanAPI:
         for i in range(10):  # 10 series
             chapters = []
             for j in range(5):  # 5 chapters each
-                chapters.append(ChapterInfo(
-                    file_path=f"/test/manga/series_{i}/chapter_{j}.cbz",
-                    chapter_number=float(j + 1),
-                    volume_number=1,
-                    title=f"Chapter {j + 1}",
-                    file_size=1024000,
-                    page_count=20,
-                ))
-            
-            large_series_list.append(SeriesInfo(
-                title_primary=f"Test Series {i}",
-                file_path=f"/test/manga/series_{i}",
-                chapters=chapters,
-            ))
-        
-        with patch('kiremisu.services.filesystem_parser.FilesystemParser.scan_library_path') as mock_scan:
+                chapters.append(
+                    ChapterInfo(
+                        file_path=f"/test/manga/series_{i}/chapter_{j}.cbz",
+                        chapter_number=float(j + 1),
+                        volume_number=1,
+                        title=f"Chapter {j + 1}",
+                        file_size=1024000,
+                        page_count=20,
+                    )
+                )
+
+            large_series_list.append(
+                SeriesInfo(
+                    title_primary=f"Test Series {i}",
+                    file_path=f"/test/manga/series_{i}",
+                    chapters=chapters,
+                )
+            )
+
+        with patch(
+            "kiremisu.services.filesystem_parser.FilesystemParser.scan_library_path"
+        ) as mock_scan:
             mock_scan.return_value = large_series_list
-            
+
             response = await client.post("/api/library/scan", json={})
-            
+
             assert response.status_code == 200
             data = response.json()
-            
+
             # Verify large dataset handling
             assert data["status"] == "completed"
             stats = data["stats"]
@@ -453,24 +470,26 @@ class TestLibraryScanAPI:
     ):
         """Test handling of concurrent scan requests."""
         import asyncio
-        
-        with patch('kiremisu.services.filesystem_parser.FilesystemParser.scan_library_path') as mock_scan:
+
+        with patch(
+            "kiremisu.services.filesystem_parser.FilesystemParser.scan_library_path"
+        ) as mock_scan:
             # Add delay to simulate longer processing
             async def slow_scan(*args, **kwargs):
                 await asyncio.sleep(0.1)  # 100ms delay
                 return [sample_series_info]
-            
+
             mock_scan.side_effect = slow_scan
-            
+
             # Send multiple concurrent requests
             tasks = [
                 client.post("/api/library/scan", json={}),
                 client.post("/api/library/scan", json={}),
                 client.post("/api/library/scan", json={}),
             ]
-            
+
             responses = await asyncio.gather(*tasks)
-            
+
             # All requests should succeed
             for response in responses:
                 assert response.status_code == 200
@@ -484,20 +503,14 @@ class TestLibraryScanAPI:
     ):
         """Test request validation."""
         # Test with invalid JSON structure
-        response = await client.post(
-            "/api/library/scan",
-            json={"invalid_field": "value"}
-        )
-        
+        response = await client.post("/api/library/scan", json={"invalid_field": "value"})
+
         # Should accept extra fields (Pydantic model allows this by default)
         assert response.status_code in [200, 404]  # 404 if no paths exist
-        
+
         # Test with None library_path_id (should be treated as scanning all paths)
-        response = await client.post(
-            "/api/library/scan",
-            json={"library_path_id": None}
-        )
-        
+        response = await client.post("/api/library/scan", json={"library_path_id": None})
+
         assert response.status_code in [200, 404]  # 404 if no paths exist
 
     @pytest.mark.asyncio
@@ -525,7 +538,7 @@ class TestLibraryScanAPI:
                 ],
             ),
             SeriesInfo(
-                title_primary="Error Series", 
+                title_primary="Error Series",
                 file_path="/test/manga/error",
                 chapters=[
                     ChapterInfo(
@@ -537,37 +550,42 @@ class TestLibraryScanAPI:
                         page_count=20,
                     )
                 ],
-            )
+            ),
         ]
-        
+
         # Mock to fail on second series
-        with patch('kiremisu.services.importer.ImporterService._create_series') as mock_create:
+        with patch("kiremisu.services.importer.ImporterService._create_series") as mock_create:
+
             async def selective_failure(self, db, series_info, stats):
                 if series_info.title_primary == "Error Series":
                     raise Exception("Simulated database error")
                 # Call original method for successful series
                 from kiremisu.services.importer import ImporterService
+
                 return await ImporterService._create_series(self, db, series_info, stats)
-            
+
             mock_create.side_effect = selective_failure
-            
-            with patch('kiremisu.services.filesystem_parser.FilesystemParser.scan_library_path') as mock_scan:
+
+            with patch(
+                "kiremisu.services.filesystem_parser.FilesystemParser.scan_library_path"
+            ) as mock_scan:
                 mock_scan.return_value = series_info_list
-                
+
                 response = await client.post("/api/library/scan", json={})
-                
+
                 assert response.status_code == 200
                 data = response.json()
-                
+
                 # Should complete with errors
                 assert data["status"] == "completed_with_errors"
                 assert data["stats"]["errors"] > 0
-                
+
                 # Check that good series was created despite error in second series
                 from sqlalchemy import select
+
                 result = await db_session.execute(select(Series))
                 series_list = list(result.scalars().all())
-                
+
                 # Should have one series (the successful one)
                 series_titles = [s.title_primary for s in series_list]
                 assert "Good Series" in series_titles

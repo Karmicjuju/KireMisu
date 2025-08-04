@@ -105,13 +105,15 @@ class ImporterService:
                         except Exception as series_e:
                             # Roll back this series only, continue with others
                             series_logger = path_logger.bind(series_title=series_info.title_primary)
-                            series_logger.error("Error importing series, rolling back", error=str(series_e))
+                            series_logger.error(
+                                "Error importing series, rolling back", error=str(series_e)
+                            )
                             stats.errors += 1
                             await db.rollback()
 
                     # Update last scan time for this path
                     await self._update_last_scan_time(db, library_path.id)
-                    
+
                     # Commit changes for this path
                     await db.commit()
 
@@ -137,18 +139,14 @@ class ImporterService:
         """Get library paths to scan based on the request."""
         if library_path_id:
             # Scan specific path
-            result = await db.execute(
-                select(LibraryPath).where(LibraryPath.id == library_path_id)
-            )
+            result = await db.execute(select(LibraryPath).where(LibraryPath.id == library_path_id))
             path = result.scalar_one_or_none()
             if not path:
                 raise ValueError(f"Library path not found: {library_path_id}")
             return [path]
         else:
             # Scan all enabled paths
-            result = await db.execute(
-                select(LibraryPath).where(LibraryPath.enabled.is_(True))
-            )
+            result = await db.execute(select(LibraryPath).where(LibraryPath.enabled.is_(True)))
             return list(result.scalars().all())
 
     async def _import_series(
@@ -233,7 +231,7 @@ class ImporterService:
         """Update an existing series and its chapters."""
         # Update series metadata (preserve user metadata)
         series_updated = False
-        
+
         if existing_series.title_primary != series_info.title_primary:
             existing_series.title_primary = series_info.title_primary
             series_updated = True
@@ -285,23 +283,18 @@ class ImporterService:
     ) -> None:
         """Synchronize chapters for a series."""
         # Get existing chapters in batch to avoid N+1 queries
-        result = await db.execute(
-            select(Chapter).where(Chapter.series_id == series.id)
-        )
+        result = await db.execute(select(Chapter).where(Chapter.series_id == series.id))
         existing_chapters = {
-            (ch.chapter_number, ch.volume_number): ch
-            for ch in result.scalars().all()
+            (ch.chapter_number, ch.volume_number): ch for ch in result.scalars().all()
         }
 
         # Process new/updated chapters
         for chapter_info in new_chapters:
             key = (chapter_info.chapter_number, chapter_info.volume_number)
-            
+
             if key in existing_chapters:
                 # Update existing chapter
-                await self._update_chapter(
-                    db, existing_chapters[key], chapter_info, stats
-                )
+                await self._update_chapter(db, existing_chapters[key], chapter_info, stats)
             else:
                 # Create new chapter
                 await self._create_chapter(db, series.id, chapter_info, stats)
