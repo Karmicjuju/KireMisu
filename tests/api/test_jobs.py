@@ -12,6 +12,7 @@ from kiremisu.database.models import JobQueue, LibraryPath
 from kiremisu.services.job_worker import JobWorkerRunner
 
 
+@pytest.mark.api
 class TestJobsAPI:
     """Test cases for job management API endpoints."""
 

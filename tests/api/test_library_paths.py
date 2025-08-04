@@ -32,6 +32,7 @@ async def sample_library_path(db_session: AsyncSession, temp_directory: str):
     return library_path
 
 
+@pytest.mark.api
 class TestLibraryPathAPI:
     """Test library path API endpoints."""
 
