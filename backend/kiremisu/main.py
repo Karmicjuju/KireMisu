@@ -14,6 +14,7 @@ from kiremisu.api.reader import router as reader_router
 from kiremisu.api.series import router as series_router
 from kiremisu.api.dashboard import router as dashboard_router
 from kiremisu.api.mangadx import router as mangadx_router, cleanup_mangadx_services
+from kiremisu.api.tags import router as tags_router
 from kiremisu.core.config import settings
 from kiremisu.core.error_handler import global_exception_handler
 from kiremisu.core.rate_limiter import RateLimiter, RateLimitMiddleware
@@ -115,6 +116,7 @@ app.include_router(reader_router)
 app.include_router(series_router)
 app.include_router(dashboard_router)
 app.include_router(mangadx_router)
+app.include_router(tags_router)
 
 
 @app.get("/")
