@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 from uuid import UUID
 
@@ -52,7 +52,7 @@ class JobScheduler:
                     job_type="library_scan",
                     payload={"library_path_id": str(path.id), "library_path": path.path},
                     priority=1,  # Normal priority for scheduled scans
-                    scheduled_at=datetime.utcnow(),
+                    scheduled_at=datetime.now(timezone.utc),
                 )
 
                 db.add(job)
@@ -104,13 +104,15 @@ class JobScheduler:
             job_type="library_scan",
             payload=payload,
             priority=priority,
-            scheduled_at=datetime.utcnow(),
+            scheduled_at=datetime.now(timezone.utc),
         )
 
         db.add(job)
         await db.commit()
 
-        logger.info(f"Scheduled manual library scan job {job.id} for library_path_id: {library_path_id}")
+        logger.info(
+            f"Scheduled manual library scan job {job.id} for library_path_id: {library_path_id}"
+        )
         return job.id
 
     @staticmethod
@@ -145,7 +147,7 @@ class JobScheduler:
             job_type="download",
             payload=payload,
             priority=priority,
-            scheduled_at=datetime.utcnow(),
+            scheduled_at=datetime.now(timezone.utc),
         )
 
         db.add(job)
@@ -203,9 +205,7 @@ class JobScheduler:
             Dict with queue statistics
         """
         # Count jobs by status (including completed for comprehensive stats)
-        result = await db.execute(
-            select(JobQueue.status, JobQueue.job_type)
-        )
+        result = await db.execute(select(JobQueue.status, JobQueue.job_type))
         jobs = result.all()
 
         stats = {
@@ -227,7 +227,7 @@ class JobScheduler:
             # Count overall status
             if status in stats:
                 stats[status] += 1
-            
+
             # Count job-type specific status
             key = f"{job_type}_{status}"
             if key in stats:
@@ -248,15 +248,15 @@ class JobScheduler:
         """
         from sqlalchemy import delete
 
-        cutoff_date = datetime.utcnow() - timedelta(days=older_than_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=older_than_days)
 
         # Delete completed jobs older than cutoff using bulk delete
         result = await db.execute(
             delete(JobQueue).where(
                 and_(
-                    JobQueue.status == "completed", 
+                    JobQueue.status == "completed",
                     JobQueue.completed_at < cutoff_date,
-                    JobQueue.completed_at.isnot(None)  # Ensure completed_at is not null
+                    JobQueue.completed_at.isnot(None),  # Ensure completed_at is not null
                 )
             )
         )
@@ -286,7 +286,7 @@ class JobScheduler:
 
         # Check if enough time has passed since last scan
         next_scan_time = library_path.last_scan + timedelta(hours=library_path.scan_interval_hours)
-        return datetime.utcnow() >= next_scan_time
+        return datetime.now(timezone.utc) >= next_scan_time
 
     @staticmethod
     async def _get_existing_job(db: AsyncSession, library_path_id: UUID) -> Optional[JobQueue]:
@@ -299,14 +299,18 @@ class JobScheduler:
         Returns:
             Existing JobQueue or None
         """
+        from sqlalchemy import text
+
         result = await db.execute(
-            select(JobQueue).where(
+            select(JobQueue)
+            .where(
                 and_(
                     JobQueue.job_type == "library_scan",
                     JobQueue.status.in_(["pending", "running"]),
-                    JobQueue.payload["library_path_id"].astext.cast(String) == str(library_path_id),
+                    text("payload->>'library_path_id' = :library_path_id"),
                 )
             )
+            .params(library_path_id=str(library_path_id))
         )
         return result.scalar_one_or_none()
 

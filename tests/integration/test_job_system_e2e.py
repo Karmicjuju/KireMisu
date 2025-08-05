@@ -236,9 +236,7 @@ class TestJobSystemE2E:
         assert stats["download_pending"] == 1
         assert stats["download_failed"] == 1
 
-    async def test_job_cleanup_integration(
-        self, client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_job_cleanup_integration(self, client: AsyncClient, db_session: AsyncSession):
         """Test job cleanup functionality via API."""
         # Create old and recent jobs
         old_job = JobQueue(
@@ -272,9 +270,7 @@ class TestJobSystemE2E:
         existing_job = await db_session.get(JobQueue, recent_job.id)
         assert existing_job is not None
 
-    async def test_download_job_integration(
-        self, client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_download_job_integration(self, client: AsyncClient, db_session: AsyncSession):
         """Test download job scheduling and execution."""
         # Schedule download job via API
         schedule_request = {
@@ -303,9 +299,7 @@ class TestJobSystemE2E:
         assert result["job_type"] == "download"
         assert result["manga_id"] == "integration-test-manga"
 
-    async def test_recent_jobs_api_integration(
-        self, client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_recent_jobs_api_integration(self, client: AsyncClient, db_session: AsyncSession):
         """Test recent jobs API with filtering and pagination."""
         # Create jobs with different timestamps and types
         jobs = [
@@ -353,7 +347,9 @@ class TestJobSystemE2E:
         data = response.json()
         assert data["total"] == 2
 
-    async def test_worker_status_api_integration(self, client: AsyncClient, db_session: AsyncSession):
+    async def test_worker_status_api_integration(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
         """Test worker status API integration."""
         # Test without worker initialized
         response = await client.get("/api/jobs/worker/status")

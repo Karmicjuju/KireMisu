@@ -29,7 +29,7 @@ const customJestConfig = {
     '<rootDir>/src/**/*.{test,spec}.{js,jsx,ts,tsx}',
   ],
   moduleNameMapper: {
-    // Handle module aliases (same as in tsconfig.json)  
+    // Handle module aliases (same as in tsconfig.json)
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   transformIgnorePatterns: ['node_modules/(?!(lucide-react|@radix-ui)/)'],

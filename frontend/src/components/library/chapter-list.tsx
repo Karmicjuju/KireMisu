@@ -161,9 +161,7 @@ const ChapterItem = React.forwardRef<HTMLDivElement, ChapterItemProps>(
 
                 <div className="flex items-center gap-1">
                   <Calendar className="h-4 w-4" />
-                  <span>
-                    {new Date(chapter.created_at).toLocaleDateString()}
-                  </span>
+                  <span>{new Date(chapter.created_at).toLocaleDateString()}</span>
                 </div>
 
                 {chapter.file_size && (

@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from uuid import UUID
 
@@ -47,8 +47,7 @@ class JobWorker:
         try:
             # Job is already marked as running from atomic claim, just verify status
             if job.status != "running":
-                logger.warning(f"Job {job.id} has unexpected status {job.status}, expected 'running'")
-                return
+                raise JobExecutionError(f"Job {job.id} has invalid status {job.status}")
 
             # Execute job based on type
             if job.job_type == "library_scan":
@@ -60,7 +59,7 @@ class JobWorker:
 
             # Complete job successfully - mark as completed
             await self._update_job_status(
-                db, job.id, "completed", completed_at=datetime.utcnow(), error_message=None
+                db, job.id, "completed", completed_at=datetime.now(timezone.utc), error_message=None
             )
 
             # Commit all changes in single transaction
@@ -92,7 +91,7 @@ class JobWorker:
         try:
             # Refresh job to get current state
             await db.refresh(job)
-            
+
             # Determine if we should retry
             should_retry = job.retry_count < job.max_retries
 
@@ -100,12 +99,12 @@ class JobWorker:
                 # Mark for retry - increment retry count and set back to pending
                 new_retry_count = job.retry_count + 1
                 await self._update_job_status(
-                    db, 
-                    job.id, 
-                    "pending", 
-                    error_message=error_msg, 
+                    db,
+                    job.id,
+                    "pending",
+                    error_message=error_msg,
                     retry_count=new_retry_count,
-                    started_at=None  # Clear started_at for retry
+                    started_at=None,  # Clear started_at for retry
                 )
                 logger.info(
                     f"Job {job.id} will be retried (attempt {new_retry_count}/{job.max_retries})"
@@ -113,11 +112,11 @@ class JobWorker:
             else:
                 # Mark as failed
                 await self._update_job_status(
-                    db, 
-                    job.id, 
-                    "failed", 
-                    completed_at=datetime.utcnow(), 
-                    error_message=error_msg
+                    db,
+                    job.id,
+                    "failed",
+                    completed_at=datetime.now(timezone.utc),
+                    error_message=error_msg,
                 )
                 logger.error(f"Job {job.id} failed permanently after {job.retry_count} retries")
 
@@ -225,14 +224,14 @@ class JobWorker:
             error_message: Optional error message
             retry_count: Optional retry count
         """
-        update_values = {"status": status, "updated_at": datetime.utcnow()}
+        update_values = {"status": status, "updated_at": datetime.now(timezone.utc)}
 
         # Handle started_at explicitly - None means clear it for retries
         if started_at is not None:
             update_values["started_at"] = started_at
         elif status == "pending":  # Clear started_at when resetting to pending for retry
             update_values["started_at"] = None
-            
+
         if completed_at is not None:
             update_values["completed_at"] = completed_at
         if error_message is not None:
@@ -253,7 +252,7 @@ class JobWorker:
         await db.execute(
             update(LibraryPath)
             .where(LibraryPath.id == library_path_id)
-            .values(last_scan=datetime.utcnow(), updated_at=datetime.utcnow())
+            .values(last_scan=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
         )
         # Note: Commit is handled by caller for transaction consistency
 
@@ -266,7 +265,7 @@ class JobWorker:
         await db.execute(
             update(LibraryPath)
             .where(LibraryPath.enabled == True)
-            .values(last_scan=datetime.utcnow(), updated_at=datetime.utcnow())
+            .values(last_scan=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
         )
         # Note: Commit is handled by caller for transaction consistency
 
@@ -354,29 +353,32 @@ class JobWorkerRunner:
             job_ids_result = await db.execute(
                 select(JobQueue.id)
                 .where(
-                    and_(JobQueue.status == "pending", JobQueue.scheduled_at <= datetime.utcnow())
+                    and_(
+                        JobQueue.status == "pending",
+                        JobQueue.scheduled_at <= datetime.now(timezone.utc),
+                    )
                 )
                 .order_by(JobQueue.priority.desc(), JobQueue.scheduled_at.asc())
                 .limit(available_slots)
             )
             job_ids = [row[0] for row in job_ids_result.fetchall()]
-            
+
             if not job_ids:
                 return
-            
+
             # Atomically claim these jobs by updating their status to 'running'
             claimed_jobs_result = await db.execute(
                 update(JobQueue)
                 .where(
                     and_(
                         JobQueue.id.in_(job_ids),
-                        JobQueue.status == "pending"  # Double-check they're still pending
+                        JobQueue.status == "pending",  # Double-check they're still pending
                     )
                 )
-                .values(status="running", started_at=datetime.utcnow())
+                .values(status="running", started_at=datetime.now(timezone.utc))
                 .returning(JobQueue)
             )
-            
+
             await db.commit()
             jobs = claimed_jobs_result.scalars().all()
 

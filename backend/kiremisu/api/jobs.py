@@ -1,6 +1,6 @@
 """Job management API endpoints."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from uuid import UUID
 
@@ -66,7 +66,7 @@ async def get_job_status(
         worker_status = await worker_runner.get_worker_status()
 
     return JobStatsResponse(
-        queue_stats=queue_stats, worker_status=worker_status, timestamp=datetime.utcnow()
+        queue_stats=queue_stats, worker_status=worker_status, timestamp=datetime.now(timezone.utc)
     )
 
 
@@ -175,16 +175,14 @@ async def schedule_jobs(
             )
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         # Log the full exception for debugging but don't expose internals
         import logging
+
         logger = logging.getLogger(__name__)
         logger.error(f"Job scheduling failed: {e}", exc_info=True)
-        
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error occurred while scheduling job",
@@ -207,9 +205,10 @@ async def cleanup_old_jobs(
     except Exception as e:
         # Log the full exception for debugging but don't expose internals
         import logging
+
         logger = logging.getLogger(__name__)
         logger.error(f"Job cleanup failed: {e}", exc_info=True)
-        
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error occurred during job cleanup",

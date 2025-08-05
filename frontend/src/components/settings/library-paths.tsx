@@ -386,7 +386,10 @@ export function LibraryPaths() {
                     </div>
                     <div className="text-sm text-muted-foreground">
                       Scan interval:{' '}
-                      {SCAN_INTERVAL_OPTIONS.find((o) => o.value === path.scan_interval_hours)?.label}
+                      {
+                        SCAN_INTERVAL_OPTIONS.find((o) => o.value === path.scan_interval_hours)
+                          ?.label
+                      }
                       {path.last_scan && ` • Last scan: ${formatRelativeTime(path.last_scan)}`}
                       {jobStatus.lastJob && jobStatus.lastJob.error_message && (
                         <span className="ml-2 text-destructive">
@@ -431,7 +434,7 @@ export function LibraryPaths() {
                       variant="ghost"
                       size="sm"
                       onClick={() => handleDelete(path.id)}
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
