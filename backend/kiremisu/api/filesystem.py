@@ -28,47 +28,64 @@ class DirectoryListing(BaseModel):
 
 @router.get("/browse", response_model=DirectoryListing)
 async def browse_directory(
-    path: str = Query("/", description="Directory path to browse"),
+    path: str = Query("/manga-storage", description="Directory path to browse"),
     show_hidden: bool = Query(False, description="Show hidden files and directories")
 ) -> DirectoryListing:
     """
-    Browse filesystem directories on the server.
+    Browse manga storage directories on the server.
     
     Security considerations:
-    - Only allows browsing within the container filesystem
-    - Validates path to prevent directory traversal attacks
-    - Does not expose sensitive system directories
+    - Only allows browsing within /manga-storage (manga library mount point)
+    - Uses whitelist approach to prevent any path traversal attacks
+    - Validates all paths are within the allowed storage directory
     """
     try:
-        # Normalize the path
-        dir_path = Path(path).resolve()
+        # Define the allowed base directory for manga storage
+        MANGA_STORAGE_BASE = Path("/manga-storage").resolve()
         
-        # Security check: ensure we're not browsing sensitive system directories
-        forbidden_paths = [
-            "/etc", "/proc", "/sys", "/dev", "/boot", "/root",
-            "/var/log", "/usr/bin", "/usr/sbin", "/sbin", "/bin"
-        ]
+        # Normalize and resolve the requested path
+        requested_path = Path(path).resolve()
         
-        # Check if the path starts with any forbidden directory
-        path_str = str(dir_path)
-        if any(path_str.startswith(forbidden) for forbidden in forbidden_paths):
+        # Security check: ensure the resolved path is within manga storage
+        try:
+            # This will raise ValueError if requested_path is not within MANGA_STORAGE_BASE
+            requested_path.relative_to(MANGA_STORAGE_BASE)
+        except ValueError:
             raise HTTPException(
                 status_code=403, 
-                detail="Access to this directory is not allowed"
+                detail="Access denied. Only manga storage directories are accessible."
+            )
+        
+        # Additional security: ensure we haven't been tricked by symlinks or other path traversal
+        if not str(requested_path).startswith(str(MANGA_STORAGE_BASE)):
+            raise HTTPException(
+                status_code=403, 
+                detail="Access denied. Path is outside manga storage area."
             )
         
         # Check if directory exists and is accessible
-        if not dir_path.exists():
+        if not requested_path.exists():
             raise HTTPException(status_code=404, detail="Directory not found")
         
-        if not dir_path.is_dir():
+        if not requested_path.is_dir():
             raise HTTPException(status_code=400, detail="Path is not a directory")
         
-        if not os.access(dir_path, os.R_OK):
+        if not os.access(requested_path, os.R_OK):
             raise HTTPException(status_code=403, detail="Directory is not readable")
         
-        # Get parent directory
-        parent_path = str(dir_path.parent) if dir_path.parent != dir_path else None
+        # Use the validated path
+        dir_path = requested_path
+        
+        # Get parent directory (only if it's still within manga storage)
+        parent_path = None
+        if dir_path.parent != dir_path and dir_path != MANGA_STORAGE_BASE:
+            try:
+                # Ensure parent is still within manga storage
+                dir_path.parent.relative_to(MANGA_STORAGE_BASE)
+                parent_path = str(dir_path.parent)
+            except ValueError:
+                # Parent is outside manga storage, don't provide it
+                pass
         
         # List directory contents
         items = []
@@ -112,16 +129,42 @@ async def browse_directory(
 @router.get("/validate-path")
 async def validate_path(path: str = Query(..., description="Path to validate")) -> dict:
     """
-    Validate if a path exists and is a directory.
+    Validate if a path exists and is a directory within manga storage.
     """
     try:
-        dir_path = Path(path).resolve()
+        # Define the allowed base directory for manga storage
+        MANGA_STORAGE_BASE = Path("/manga-storage").resolve()
+        
+        # Normalize and resolve the requested path
+        requested_path = Path(path).resolve()
+        
+        # Security check: ensure the resolved path is within manga storage
+        try:
+            requested_path.relative_to(MANGA_STORAGE_BASE)
+        except ValueError:
+            return {
+                "exists": False,
+                "is_directory": False,
+                "readable": False,
+                "error": "Path is outside manga storage area",
+                "path": path
+            }
+        
+        # Additional security check
+        if not str(requested_path).startswith(str(MANGA_STORAGE_BASE)):
+            return {
+                "exists": False,
+                "is_directory": False,
+                "readable": False,
+                "error": "Path is outside manga storage area",
+                "path": path
+            }
         
         return {
-            "exists": dir_path.exists(),
-            "is_directory": dir_path.is_dir() if dir_path.exists() else False,
-            "readable": os.access(dir_path, os.R_OK) if dir_path.exists() else False,
-            "path": str(dir_path)
+            "exists": requested_path.exists(),
+            "is_directory": requested_path.is_dir() if requested_path.exists() else False,
+            "readable": os.access(requested_path, os.R_OK) if requested_path.exists() else False,
+            "path": str(requested_path)
         }
     except Exception as e:
         return {

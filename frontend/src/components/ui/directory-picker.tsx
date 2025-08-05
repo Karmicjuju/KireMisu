@@ -34,7 +34,7 @@ export function DirectoryPicker({
   isOpen,
   onClose,
   onSelect,
-  initialPath = '/app',
+  initialPath = '/manga-storage',
   title = 'Select Directory'
 }: DirectoryPickerProps) {
   const { toast } = useToast();
@@ -93,9 +93,9 @@ export function DirectoryPicker({
     }
   };
 
-  // Navigate to home directory
+  // Navigate to manga storage root directory
   const navigateToHome = () => {
-    navigateToDirectory('/app');
+    navigateToDirectory('/manga-storage');
   };
 
   // Handle manual path input
@@ -113,15 +113,24 @@ export function DirectoryPicker({
     if (!currentPath) return [];
     
     const segments = currentPath.split('/').filter(Boolean);
-    const breadcrumbs = [{ name: 'Root', path: '/' }];
+    const breadcrumbs = [];
     
-    let accumulatedPath = '';
-    for (const segment of segments) {
-      accumulatedPath += '/' + segment;
-      breadcrumbs.push({
-        name: segment,
-        path: accumulatedPath
-      });
+    // Start from manga-storage as the root
+    if (segments.length > 0 && segments[0] === 'manga-storage') {
+      breadcrumbs.push({ name: 'Manga Storage', path: '/manga-storage' });
+      
+      let accumulatedPath = '/manga-storage';
+      for (let i = 1; i < segments.length; i++) {
+        const segment = segments[i];
+        accumulatedPath += '/' + segment;
+        breadcrumbs.push({
+          name: segment,
+          path: accumulatedPath
+        });
+      }
+    } else {
+      // Fallback for any other paths
+      breadcrumbs.push({ name: 'Manga Storage', path: '/manga-storage' });
     }
     
     return breadcrumbs;
