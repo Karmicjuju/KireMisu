@@ -29,12 +29,12 @@ export function Sidebar() {
   return (
     <div
       className={cn(
-        'relative flex h-full flex-col border-r border-slate-800/50 bg-gradient-to-b from-slate-950 to-slate-900 transition-all duration-300',
+        'relative flex h-full flex-col border-r border-border bg-gradient-to-b from-card to-background transition-all duration-300',
         sidebarCollapsed ? 'w-16' : 'w-64'
       )}
     >
       {/* Header */}
-      <div className="flex h-16 items-center border-b border-slate-800/50 px-4">
+      <div className="flex h-16 items-center border-b border-border px-4">
         {!sidebarCollapsed && (
           <div className="flex items-center space-x-2">
             <BookOpen className="h-6 w-6 text-orange-500" />
@@ -64,13 +64,13 @@ export function Sidebar() {
       </nav>
 
       {/* Collapse Toggle */}
-      <div className="border-t border-slate-800/50 p-4">
+      <div className="border-t border-border p-4">
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           className={cn(
-            'w-full text-slate-400 hover:bg-white/10 hover:text-white',
+            'w-full text-muted-foreground hover:bg-accent hover:text-accent-foreground',
             sidebarCollapsed && 'px-2'
           )}
         >

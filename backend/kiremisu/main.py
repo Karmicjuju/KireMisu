@@ -17,6 +17,7 @@ from kiremisu.api.annotations import router as annotations_router
 from kiremisu.api.mangadx import router as mangadx_router, cleanup_mangadx_services
 from kiremisu.api.tags import router as tags_router
 from kiremisu.api.file_operations import router as file_operations_router
+from kiremisu.api.filesystem import router as filesystem_router
 from kiremisu.core.config import settings
 from kiremisu.core.error_handler import global_exception_handler
 from kiremisu.core.rate_limiter import RateLimiter, RateLimitMiddleware
@@ -121,6 +122,7 @@ app.include_router(annotations_router)
 app.include_router(mangadx_router)
 app.include_router(tags_router)
 app.include_router(file_operations_router)
+app.include_router(filesystem_router)
 
 
 @app.get("/")
