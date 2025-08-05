@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Generic, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, validator
 
 # Generic type for paginated responses
 T = TypeVar("T")
@@ -61,6 +61,122 @@ class PaginatedResponse(BaseModel, Generic[T]):
 
     items: List[T] = Field(..., description="List of items")
     pagination: PaginationMeta = Field(..., description="Pagination metadata")
+
+
+# Tag schemas
+class TagBase(BaseModel):
+    """Base schema for tag."""
+
+    name: str = Field(..., max_length=100, description="Tag name")
+    description: Optional[str] = Field(None, description="Tag description")
+    color: Optional[str] = Field(None, description="Tag color (hex format #RRGGBB)")
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v):
+        """Validate tag name is not empty and properly formatted."""
+        if not v or not v.strip():
+            raise ValueError("Tag name cannot be empty")
+        # Remove extra whitespace and convert to lowercase for consistency
+        return v.strip().lower()
+
+    @field_validator("color")
+    @classmethod
+    def validate_color(cls, v):
+        """Validate color is in proper hex format."""
+        if v is None:
+            return v
+        v = v.strip()
+        if not v.startswith("#") or len(v) != 7:
+            raise ValueError("Color must be in hex format #RRGGBB")
+        try:
+            int(v[1:], 16)  # Validate hex digits
+        except ValueError:
+            raise ValueError("Color must contain valid hex digits")
+        return v.upper()
+
+
+class TagCreate(TagBase):
+    """Schema for creating a tag."""
+    pass
+
+
+class TagUpdate(BaseModel):
+    """Schema for updating a tag."""
+
+    name: Optional[str] = Field(None, max_length=100, description="Tag name")
+    description: Optional[str] = Field(None, description="Tag description")
+    color: Optional[str] = Field(None, description="Tag color (hex format #RRGGBB)")
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v):
+        """Validate tag name is not empty and properly formatted."""
+        if v is not None and (not v or not v.strip()):
+            raise ValueError("Tag name cannot be empty")
+        return v.strip().lower() if v else v
+
+    @field_validator("color")
+    @classmethod
+    def validate_color(cls, v):
+        """Validate color is in proper hex format."""
+        if v is None:
+            return v
+        v = v.strip()
+        if not v.startswith("#") or len(v) != 7:
+            raise ValueError("Color must be in hex format #RRGGBB")
+        try:
+            int(v[1:], 16)  # Validate hex digits
+        except ValueError:
+            raise ValueError("Color must contain valid hex digits")
+        return v.upper()
+
+
+class TagResponse(TagBase):
+    """Schema for tag responses."""
+
+    id: UUID = Field(..., description="Tag unique identifier")
+    usage_count: int = Field(..., description="Number of series using this tag")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @classmethod
+    def from_model(cls, tag):
+        """Create TagResponse from Tag model."""
+        return cls(
+            id=tag.id,
+            name=tag.name,
+            description=tag.description,
+            color=tag.color,
+            usage_count=tag.usage_count,
+            created_at=tag.created_at,
+            updated_at=tag.updated_at,
+        )
+
+
+class TagListResponse(BaseModel):
+    """Schema for list of tags."""
+
+    tags: List[TagResponse] = Field(..., description="List of tags")
+    total: int = Field(..., description="Total number of tags")
+
+
+class SeriesTagAssignment(BaseModel):
+    """Schema for assigning/removing tags to/from series."""
+
+    tag_ids: List[UUID] = Field(..., description="List of tag IDs to assign")
+
+    @field_validator("tag_ids")
+    @classmethod
+    def validate_tag_ids(cls, v):
+        """Validate tag IDs list is not empty and contains unique values."""
+        if not v:
+            raise ValueError("Tag IDs list cannot be empty")
+        if len(v) != len(set(v)):
+            raise ValueError("Tag IDs must be unique")
+        return v
 
 
 class LibraryPathBase(BaseModel):
@@ -331,6 +447,7 @@ class SeriesResponse(BaseModel):
     # User customization
     user_metadata: Dict = Field(default_factory=dict, description="User metadata")
     custom_tags: List[str] = Field(default_factory=list, description="Custom user tags")
+    user_tags: List[TagResponse] = Field(default_factory=list, description="User-assigned tags")
 
     # Statistics
     total_chapters: int = Field(..., description="Total chapter count")
@@ -345,6 +462,11 @@ class SeriesResponse(BaseModel):
     @classmethod
     def from_model(cls, series):
         """Create SeriesResponse from Series model."""
+        # Handle user_tags relationship
+        user_tags = []
+        if hasattr(series, 'user_tags') and series.user_tags:
+            user_tags = [TagResponse.from_model(tag) for tag in series.user_tags]
+        
         return cls(
             id=series.id,
             title_primary=series.title_primary,
@@ -363,6 +485,7 @@ class SeriesResponse(BaseModel):
             source_metadata=series.source_metadata,
             user_metadata=series.user_metadata,
             custom_tags=series.custom_tags,
+            user_tags=user_tags,
             total_chapters=series.total_chapters,
             read_chapters=series.read_chapters,
             created_at=series.created_at,

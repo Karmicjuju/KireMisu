@@ -9,7 +9,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
 from kiremisu.database.connection import get_db
-from kiremisu.database.models import Series, Chapter
+from kiremisu.database.models import Series, Chapter, Tag, series_tags
 from kiremisu.database.schemas import SeriesResponse, ChapterResponse, SeriesProgressResponse
 
 router = APIRouter(prefix="/api/series", tags=["series"])
@@ -21,14 +21,39 @@ async def get_series_list(
     skip: int = Query(0, ge=0, description="Number of series to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of series to return"),
     search: Optional[str] = Query(None, description="Search term for series title"),
+    tag_ids: Optional[List[UUID]] = Query(None, description="Filter by tag IDs (AND logic)"),
+    tag_names: Optional[List[str]] = Query(None, description="Filter by tag names (AND logic)"),
 ) -> List[SeriesResponse]:
-    """Get list of all series."""
-    query = select(Series)
+    """Get list of all series with optional tag filtering."""
+    query = select(Series).options(selectinload(Series.user_tags))
 
     # Add search filter if provided
     if search:
         search_term = f"%{search}%"
         query = query.where(Series.title_primary.ilike(search_term))
+
+    # Add tag filtering if provided
+    if tag_ids or tag_names:
+        # Build a subquery for series that have ALL specified tags
+        filters = []
+        
+        if tag_ids:
+            for tag_id in tag_ids:
+                subquery = select(series_tags.c.series_id).where(series_tags.c.tag_id == tag_id)
+                filters.append(Series.id.in_(subquery))
+        
+        if tag_names:
+            for tag_name in tag_names:
+                # Find tag by name and use its ID
+                tag_subquery = select(Tag.id).where(func.lower(Tag.name) == func.lower(tag_name))
+                series_subquery = select(series_tags.c.series_id).where(
+                    series_tags.c.tag_id.in_(tag_subquery)
+                )
+                filters.append(Series.id.in_(series_subquery))
+        
+        # Apply all filters (AND logic)
+        for filter_condition in filters:
+            query = query.where(filter_condition)
 
     # Add ordering and pagination
     query = query.order_by(Series.title_primary.asc()).offset(skip).limit(limit)
@@ -42,7 +67,11 @@ async def get_series_list(
 @router.get("/{series_id}", response_model=SeriesResponse)
 async def get_series(series_id: UUID, db: AsyncSession = Depends(get_db)) -> SeriesResponse:
     """Get series details by ID."""
-    result = await db.execute(select(Series).where(Series.id == series_id))
+    result = await db.execute(
+        select(Series)
+        .options(selectinload(Series.user_tags))
+        .where(Series.id == series_id)
+    )
     series = result.scalar_one_or_none()
 
     if not series:

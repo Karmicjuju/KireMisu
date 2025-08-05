@@ -15,6 +15,8 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     CheckConstraint,
+    Table,
+    Column,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -24,6 +26,56 @@ class Base(DeclarativeBase):
     """Base class for all database models."""
 
     pass
+
+
+# Association table for many-to-many relationship between Series and Tags
+series_tags = Table(
+    "series_tags",
+    Base.metadata,
+    Column("series_id", UUID(as_uuid=True), ForeignKey("series.id", ondelete="CASCADE"), primary_key=True),
+    Column("tag_id", UUID(as_uuid=True), ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True),
+    Column("created_at", DateTime, default=lambda: datetime.now(timezone.utc), nullable=False),
+    # Composite index for efficient querying
+    Index("ix_series_tags_series_id", "series_id"),
+    Index("ix_series_tags_tag_id", "tag_id"),
+)
+
+
+class Tag(Base):
+    """User-defined tags for organizing series."""
+
+    __tablename__ = "tags"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    color: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)  # Hex color code #RRGGBB
+    
+    # Usage statistics
+    usage_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, index=True)
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    # Relationships
+    series: Mapped[list["Series"]] = relationship(
+        "Series", secondary=series_tags, back_populates="user_tags", lazy="select"
+    )
+
+    __table_args__ = (
+        # Case-insensitive unique constraint for tag names
+        Index("ix_tags_name_lower", "name", postgresql_ops={"name": "varchar_ops"}),
+        # Index for searching tags by usage
+        Index("ix_tags_usage_name", "usage_count", "name"),
+    )
 
 
 class Series(Base):
@@ -78,6 +130,9 @@ class Series(Base):
     # Relationships
     chapters: Mapped[list["Chapter"]] = relationship(
         "Chapter", back_populates="series", cascade="all, delete-orphan"
+    )
+    user_tags: Mapped[list["Tag"]] = relationship(
+        "Tag", secondary=series_tags, back_populates="series", lazy="select"
     )
 
 
