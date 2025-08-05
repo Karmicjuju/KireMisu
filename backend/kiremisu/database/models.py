@@ -222,6 +222,13 @@ class Annotation(Base):
         String(50), nullable=False, default="note"
     )  # note, bookmark, highlight
 
+    # Position fields for page-specific placement (normalized 0-1)
+    position_x: Mapped[Optional[float]] = mapped_column(nullable=True)
+    position_y: Mapped[Optional[float]] = mapped_column(nullable=True)
+
+    # Color field for annotation customization (hex format)
+    color: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
@@ -235,6 +242,23 @@ class Annotation(Base):
 
     # Relationships
     chapter: Mapped["Chapter"] = relationship("Chapter", back_populates="annotations")
+
+    __table_args__ = (
+        # Check constraints for position validation (0-1 normalized)
+        CheckConstraint(
+            "position_x IS NULL OR (position_x >= 0 AND position_x <= 1)",
+            name="ck_annotations_position_x_range",
+        ),
+        CheckConstraint(
+            "position_y IS NULL OR (position_y >= 0 AND position_y <= 1)",
+            name="ck_annotations_position_y_range",
+        ),
+        # Check constraint for color format validation (hex color)
+        CheckConstraint(
+            "color IS NULL OR color ~ '^#[0-9A-Fa-f]{6}$'",
+            name="ck_annotations_color_format",
+        ),
+    )
 
 
 class UserList(Base):

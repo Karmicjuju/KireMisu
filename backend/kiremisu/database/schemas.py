@@ -1,6 +1,6 @@
 """Pydantic schemas for API requests and responses."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Generic, TypeVar
 from uuid import UUID
 
@@ -700,6 +700,147 @@ class DashboardStatsResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# Annotation schemas
+class AnnotationBase(BaseModel):
+    """Base schema for annotation data."""
+
+    content: str = Field(..., min_length=1, max_length=2000, description="Annotation content")
+    page_number: Optional[int] = Field(None, ge=1, description="Page number (1-indexed)")
+    annotation_type: str = Field(
+        default="note", 
+        description="Type of annotation (note, bookmark, highlight)"
+    )
+    position_x: Optional[float] = Field(
+        None, ge=0, le=1, description="X position on page (0-1 normalized)"
+    )
+    position_y: Optional[float] = Field(
+        None, ge=0, le=1, description="Y position on page (0-1 normalized)"
+    )
+    color: Optional[str] = Field(
+        None, regex=r"^#[0-9A-Fa-f]{6}$", description="Annotation color in hex format"
+    )
+
+    @field_validator("annotation_type")
+    @classmethod
+    def validate_annotation_type(cls, v):
+        """Validate annotation type is supported."""
+        allowed_types = ["note", "bookmark", "highlight"]
+        if v not in allowed_types:
+            raise ValueError(f"Invalid annotation type. Must be one of: {allowed_types}")
+        return v
+
+
+class AnnotationCreate(AnnotationBase):
+    """Schema for creating annotations."""
+
+    chapter_id: UUID = Field(..., description="Chapter ID to annotate")
+
+
+class AnnotationUpdate(BaseModel):
+    """Schema for updating annotations."""
+
+    content: Optional[str] = Field(
+        None, min_length=1, max_length=2000, description="Annotation content"
+    )
+    page_number: Optional[int] = Field(None, ge=1, description="Page number (1-indexed)")
+    annotation_type: Optional[str] = Field(
+        None, description="Type of annotation (note, bookmark, highlight)"
+    )
+    position_x: Optional[float] = Field(
+        None, ge=0, le=1, description="X position on page (0-1 normalized)"
+    )
+    position_y: Optional[float] = Field(
+        None, ge=0, le=1, description="Y position on page (0-1 normalized)"
+    )
+    color: Optional[str] = Field(
+        None, regex=r"^#[0-9A-Fa-f]{6}$", description="Annotation color in hex format"
+    )
+
+    @field_validator("annotation_type")
+    @classmethod
+    def validate_annotation_type(cls, v):
+        """Validate annotation type is supported."""
+        if v is not None:
+            allowed_types = ["note", "bookmark", "highlight"]
+            if v not in allowed_types:
+                raise ValueError(f"Invalid annotation type. Must be one of: {allowed_types}")
+        return v
+
+
+class AnnotationResponse(AnnotationBase):
+    """Schema for annotation responses."""
+
+    id: UUID = Field(..., description="Annotation unique identifier")
+    chapter_id: UUID = Field(..., description="Parent chapter ID")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+
+    # Optional chapter information (when loaded with relationship)
+    chapter: Optional[ChapterResponse] = Field(None, description="Parent chapter information")
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @classmethod
+    def from_model(cls, annotation, include_chapter: bool = False):
+        """Create AnnotationResponse from Annotation model."""
+        data = {
+            "id": annotation.id,
+            "chapter_id": annotation.chapter_id,
+            "content": annotation.content,
+            "page_number": annotation.page_number,
+            "annotation_type": annotation.annotation_type,
+            "position_x": getattr(annotation, "position_x", None),
+            "position_y": getattr(annotation, "position_y", None),
+            "color": getattr(annotation, "color", None),
+            "created_at": annotation.created_at,
+            "updated_at": annotation.updated_at,
+        }
+
+        # Include chapter if available and requested
+        if include_chapter and hasattr(annotation, "chapter") and annotation.chapter:
+            data["chapter"] = ChapterResponse.from_model(annotation.chapter)
+
+        return cls(**data)
+
+
+class AnnotationListResponse(BaseModel):
+    """Schema for list of annotations."""
+
+    annotations: List[AnnotationResponse] = Field(..., description="List of annotations")
+    total: int = Field(..., description="Total number of annotations")
+    chapter_id: Optional[UUID] = Field(None, description="Chapter ID filter applied")
+    annotation_type: Optional[str] = Field(None, description="Annotation type filter applied")
+
+
+class ChapterAnnotationsResponse(BaseModel):
+    """Schema for chapter annotations response."""
+
+    chapter_id: UUID = Field(..., description="Chapter unique identifier")
+    chapter_title: str = Field(..., description="Chapter title")
+    total_pages: int = Field(..., description="Total pages in chapter")
+    annotations: List[AnnotationResponse] = Field(..., description="Chapter annotations")
+    annotations_by_page: Dict[int, List[AnnotationResponse]] = Field(
+        ..., description="Annotations grouped by page number"
+    )
+
+    @classmethod
+    def from_chapter_and_annotations(cls, chapter, annotations):
+        """Create response from chapter and annotations."""
+        # Group annotations by page
+        annotations_by_page = {}
+        for annotation in annotations:
+            page = annotation.page_number or 0
+            if page not in annotations_by_page:
+                annotations_by_page[page] = []
+            annotations_by_page[page].append(AnnotationResponse.from_model(annotation))
+
+        return cls(
+            chapter_id=chapter.id,
+            chapter_title=f"Chapter {chapter.chapter_number}" + (f" - {chapter.title}" if chapter.title else ""),
+            total_pages=chapter.page_count,
+            annotations=[AnnotationResponse.from_model(a) for a in annotations],
+            annotations_by_page=annotations_by_page,
+        )
 # MangaDx integration schemas
 class MangaDxSearchRequest(BaseModel):
     """Schema for MangaDx search requests."""

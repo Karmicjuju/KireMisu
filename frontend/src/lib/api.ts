@@ -231,6 +231,52 @@ export interface MarkReadRequest {
   is_read: boolean;
 }
 
+// Annotation interfaces
+export interface AnnotationBase {
+  content: string;
+  page_number?: number;
+  annotation_type: 'note' | 'bookmark' | 'highlight';
+  position_x?: number;
+  position_y?: number;
+  color?: string;
+}
+
+export interface AnnotationCreate extends AnnotationBase {
+  chapter_id: string;
+}
+
+export interface AnnotationUpdate {
+  content?: string;
+  page_number?: number;
+  annotation_type?: 'note' | 'bookmark' | 'highlight';
+  position_x?: number;
+  position_y?: number;
+  color?: string;
+}
+
+export interface AnnotationResponse extends AnnotationBase {
+  id: string;
+  chapter_id: string;
+  created_at: string;
+  updated_at: string;
+  chapter?: ChapterResponse;
+}
+
+export interface AnnotationListResponse {
+  annotations: AnnotationResponse[];
+  total: number;
+  chapter_id?: string;
+  annotation_type?: string;
+}
+
+export interface ChapterAnnotationsResponse {
+  chapter_id: string;
+  chapter_title: string;
+  total_pages: number;
+  annotations: AnnotationResponse[];
+  annotations_by_page: Record<number, AnnotationResponse[]>;
+}
+
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
   timeout: 60000, // Increased timeout for library scanning operations
@@ -424,6 +470,47 @@ export const dashboardApi = {
   },
 };
 
+export const annotationsApi = {
+  async createAnnotation(data: AnnotationCreate): Promise<AnnotationResponse> {
+    const response = await api.post<AnnotationResponse>('/api/annotations/', data);
+    return response.data;
+  },
+
+  async getAnnotation(annotationId: string, includeChapter?: boolean): Promise<AnnotationResponse> {
+    const params = new URLSearchParams();
+    if (includeChapter) params.append('include_chapter', 'true');
+
+    const response = await api.get<AnnotationResponse>(
+      `/api/annotations/${annotationId}${params.toString() ? `?${params.toString()}` : ''}`
+    );
+    return response.data;
+  },
+
+  async updateAnnotation(annotationId: string, data: AnnotationUpdate): Promise<AnnotationResponse> {
+    const response = await api.put<AnnotationResponse>(`/api/annotations/${annotationId}`, data);
+    return response.data;
+  },
+
+  async deleteAnnotation(annotationId: string): Promise<void> {
+    await api.delete(`/api/annotations/${annotationId}`);
+  },
+
+  async listAnnotations(options?: {
+    chapter_id?: string;
+    annotation_type?: string;
+    page_number?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<AnnotationListResponse> {
+    const params = new URLSearchParams();
+    if (options?.chapter_id) params.append('chapter_id', options.chapter_id);
+    if (options?.annotation_type) params.append('annotation_type', options.annotation_type);
+    if (options?.page_number) params.append('page_number', options.page_number.toString());
+    if (options?.limit) params.append('limit', options.limit.toString());
+    if (options?.offset) params.append('offset', options.offset.toString());
+
+    const response = await api.get<AnnotationListResponse>(
+      `/api/annotations/${params.toString() ? `?${params.toString()}` : ''}`
 export const tagsApi = {
   async getTags(options?: {
     skip?: number;
@@ -443,6 +530,65 @@ export const tagsApi = {
     return response.data;
   },
 
+  async getChapterAnnotations(
+    chapterId: string,
+    options?: {
+      annotation_type?: string;
+      page_number?: number;
+    }
+  ): Promise<ChapterAnnotationsResponse> {
+    const params = new URLSearchParams();
+    if (options?.annotation_type) params.append('annotation_type', options.annotation_type);
+    if (options?.page_number) params.append('page_number', options.page_number.toString());
+
+    const response = await api.get<ChapterAnnotationsResponse>(
+      `/api/annotations/chapters/${chapterId}${params.toString() ? `?${params.toString()}` : ''}`
+    );
+    return response.data;
+  },
+
+  async getPageAnnotations(
+    chapterId: string,
+    pageNumber: number,
+    annotationType?: string
+  ): Promise<AnnotationResponse[]> {
+    const params = new URLSearchParams();
+    if (annotationType) params.append('annotation_type', annotationType);
+
+    const response = await api.get<AnnotationResponse[]>(
+      `/api/annotations/chapters/${chapterId}/pages/${pageNumber}${
+        params.toString() ? `?${params.toString()}` : ''
+      }`
+    );
+    return response.data;
+  },
+
+  async createPageAnnotation(
+    chapterId: string,
+    pageNumber: number,
+    data: AnnotationCreate
+  ): Promise<AnnotationResponse> {
+    const response = await api.post<AnnotationResponse>(
+      `/api/annotations/chapters/${chapterId}/pages/${pageNumber}`,
+      data
+    );
+    return response.data;
+  },
+
+  async deleteChapterAnnotations(
+    chapterId: string,
+    options?: {
+      annotation_type?: string;
+      page_number?: number;
+    }
+  ): Promise<void> {
+    const params = new URLSearchParams();
+    if (options?.annotation_type) params.append('annotation_type', options.annotation_type);
+    if (options?.page_number) params.append('page_number', options.page_number.toString());
+
+    await api.delete(
+      `/api/annotations/chapters/${chapterId}${params.toString() ? `?${params.toString()}` : ''}`
+    );
   async getTag(tagId: string): Promise<TagResponse> {
     const response = await api.get<TagResponse>(`/api/tags/${tagId}`);
     return response.data;

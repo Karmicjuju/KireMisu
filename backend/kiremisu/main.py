@@ -13,6 +13,7 @@ from kiremisu.api.chapters import router as chapters_router
 from kiremisu.api.reader import router as reader_router
 from kiremisu.api.series import router as series_router
 from kiremisu.api.dashboard import router as dashboard_router
+from kiremisu.api.annotations import router as annotations_router
 from kiremisu.api.mangadx import router as mangadx_router, cleanup_mangadx_services
 from kiremisu.api.tags import router as tags_router
 from kiremisu.core.config import settings
@@ -115,6 +116,7 @@ app.include_router(chapters_router)
 app.include_router(reader_router)
 app.include_router(series_router)
 app.include_router(dashboard_router)
+app.include_router(annotations_router)
 app.include_router(mangadx_router)
 app.include_router(tags_router)
 

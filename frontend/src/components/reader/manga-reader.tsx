@@ -8,14 +8,23 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR, { mutate } from 'swr';
 import { cn } from '@/lib/utils';
-import { chaptersApi, type ChapterResponse, type ChapterPagesInfo } from '@/lib/api';
+import { 
+  chaptersApi, 
+  annotationsApi,
+  type ChapterResponse, 
+  type ChapterPagesInfo,
+  type AnnotationResponse,
+  type AnnotationCreate,
+  type AnnotationUpdate
+} from '@/lib/api';
 import { useKeyboardNavigation } from './use-keyboard-navigation';
 import { useTouchNavigation } from './use-touch-navigation';
 import { PageNavigation } from './page-navigation';
 import { MangaPage } from './manga-page';
+import { AnnotationMarker, AnnotationDrawer, AnnotationForm } from '@/components/annotations';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
-import { ArrowLeft, Maximize, Minimize, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Maximize, Minimize, Loader2, AlertCircle, MessageSquare } from 'lucide-react';
 
 export interface MangaReaderProps {
   chapterId: string;
@@ -34,6 +43,14 @@ export function MangaReader({ chapterId, initialPage = 1, className }: MangaRead
 
   // Auto-hide controls timer
   const [controlsTimer, setControlsTimer] = useState<NodeJS.Timeout | null>(null);
+
+  // Annotation state
+  const [showAnnotationDrawer, setShowAnnotationDrawer] = useState(false);
+  const [pageAnnotations, setPageAnnotations] = useState<Record<number, AnnotationResponse[]>>({});
+  const [selectedAnnotation, setSelectedAnnotation] = useState<AnnotationResponse | null>(null);
+  const [showAnnotationForm, setShowAnnotationForm] = useState(false);
+  const [annotationFormPosition, setAnnotationFormPosition] = useState<{ x: number; y: number } | null>(null);
+  const [annotationMode, setAnnotationMode] = useState(false);
 
   // API queries with SWR
   const {
@@ -195,6 +212,130 @@ export function MangaReader({ chapterId, initialPage = 1, className }: MangaRead
     return chaptersApi.getChapterPageUrl(chapterId, currentPage);
   }, [chapterId, currentPage, pagesInfo]);
 
+  // Load annotations for current page
+  const loadPageAnnotations = useCallback(async (pageNumber: number) => {
+    try {
+      const annotations = await annotationsApi.getPageAnnotations(chapterId, pageNumber);
+      setPageAnnotations(prev => ({
+        ...prev,
+        [pageNumber]: annotations,
+      }));
+    } catch (error) {
+      console.error('Failed to load page annotations:', error);
+    }
+  }, [chapterId]);
+
+  // Annotation handlers
+  const handlePageClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!annotationMode) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width;
+    const y = (event.clientY - rect.top) / rect.height;
+
+    setAnnotationFormPosition({ x, y });
+    setShowAnnotationForm(true);
+    setAnnotationMode(false);
+  }, [annotationMode]);
+
+  const handleCreateAnnotation = useCallback(async (data: AnnotationCreate) => {
+    try {
+      await annotationsApi.createAnnotation(data);
+      
+      // Refresh page annotations
+      if (data.page_number) {
+        await loadPageAnnotations(data.page_number);
+      }
+      
+      setShowAnnotationForm(false);
+      setAnnotationFormPosition(null);
+      
+      toast({
+        title: 'Success',
+        description: 'Annotation created successfully',
+      });
+    } catch (error) {
+      console.error('Failed to create annotation:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to create annotation',
+        variant: 'destructive',
+      });
+      throw error;
+    }
+  }, [loadPageAnnotations]);
+
+  const handleUpdateAnnotation = useCallback(async (annotationId: string, data: AnnotationUpdate) => {
+    try {
+      await annotationsApi.updateAnnotation(annotationId, data);
+      
+      // Refresh page annotations
+      await loadPageAnnotations(currentPage);
+      
+      toast({
+        title: 'Success',
+        description: 'Annotation updated successfully',
+      });
+    } catch (error) {
+      console.error('Failed to update annotation:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update annotation',
+        variant: 'destructive',
+      });
+      throw error;
+    }
+  }, [loadPageAnnotations, currentPage]);
+
+  const handleDeleteAnnotation = useCallback(async (annotationId: string) => {
+    try {
+      await annotationsApi.deleteAnnotation(annotationId);
+      
+      // Refresh page annotations
+      await loadPageAnnotations(currentPage);
+      
+      setSelectedAnnotation(null);
+      
+      toast({
+        title: 'Success',
+        description: 'Annotation deleted successfully',
+      });
+    } catch (error) {
+      console.error('Failed to delete annotation:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete annotation',
+        variant: 'destructive',
+      });
+    }
+  }, [loadPageAnnotations, currentPage]);
+
+  const handleAnnotationSelect = useCallback((annotation: AnnotationResponse) => {
+    setSelectedAnnotation(annotation);
+    
+    // Jump to annotation page if different from current
+    if (annotation.page_number && annotation.page_number !== currentPage) {
+      goToPage(annotation.page_number);
+    }
+  }, [currentPage]);
+
+  const toggleAnnotationMode = useCallback(() => {
+    setAnnotationMode(prev => !prev);
+    if (!annotationMode) {
+      toast({
+        title: 'Annotation Mode',
+        description: 'Click anywhere on the page to add an annotation',
+      });
+    }
+  }, [annotationMode]);
+
+  // Load annotations when page changes
+  useEffect(() => {
+    if (currentPage && !pageAnnotations[currentPage]) {
+      loadPageAnnotations(currentPage);
+    }
+  }, [currentPage, pageAnnotations, loadPageAnnotations]);
+
   // Mark chapter as read when reaching the last page
   useEffect(() => {
     if (pagesInfo && currentPage === pagesInfo.total_pages && !chapter?.is_read) {
@@ -296,21 +437,59 @@ export function MangaReader({ chapterId, initialPage = 1, className }: MangaRead
             </div>
           </div>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleFullscreen}
-            className="hover:bg-white/20"
-            aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-          >
-            {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleAnnotationMode}
+              className={cn(
+                "hover:bg-white/20",
+                annotationMode && "bg-white/20 text-blue-400"
+              )}
+              aria-label="Toggle annotation mode"
+              title="Add annotation"
+            >
+              <MessageSquare className="h-4 w-4" />
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowAnnotationDrawer(true)}
+              className="hover:bg-white/20"
+              aria-label="Show annotations"
+              title="View annotations"
+            >
+              <MessageSquare className="h-4 w-4" />
+              {pageAnnotations[currentPage]?.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {pageAnnotations[currentPage].length}
+                </span>
+              )}
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleFullscreen}
+              className="hover:bg-white/20"
+              aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            >
+              {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* Main content area */}
       <div className="flex min-h-screen items-center justify-center p-4">
-        <div className="relative max-w-full">
+        <div 
+          className={cn(
+            "relative max-w-full",
+            annotationMode && "cursor-crosshair"
+          )}
+          onClick={handlePageClick}
+        >
           <MangaPage
             src={currentPageUrl}
             alt={`Page ${currentPage} of ${chapter.series_title} Chapter ${chapter.chapter_number}`}
@@ -318,6 +497,34 @@ export function MangaReader({ chapterId, initialPage = 1, className }: MangaRead
             priority={true}
             className="max-h-[calc(100vh-2rem)]"
           />
+          
+          {/* Annotation markers */}
+          {pageAnnotations[currentPage]?.map((annotation) => (
+            <AnnotationMarker
+              key={annotation.id}
+              annotation={annotation}
+              isSelected={selectedAnnotation?.id === annotation.id}
+              onClick={() => setSelectedAnnotation(annotation)}
+              onEdit={() => {
+                // TODO: Implement edit functionality
+                console.log('Edit annotation:', annotation);
+              }}
+              onDelete={() => handleDeleteAnnotation(annotation.id)}
+            />
+          ))}
+
+          {/* Annotation mode overlay */}
+          {annotationMode && (
+            <div className={cn(
+              "absolute inset-0 bg-blue-500/10 border-2 border-dashed border-blue-400",
+              "flex items-center justify-center text-blue-400 font-medium",
+              "pointer-events-none"
+            )}>
+              <div className="bg-blue-900/80 px-4 py-2 rounded-lg text-white">
+                Click anywhere to add an annotation
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -352,6 +559,34 @@ export function MangaReader({ chapterId, initialPage = 1, className }: MangaRead
         onClose={exitReader}
         show={showControls}
       />
+
+      {/* Annotation Drawer */}
+      <AnnotationDrawer
+        chapterId={chapterId}
+        isOpen={showAnnotationDrawer}
+        onClose={() => setShowAnnotationDrawer(false)}
+        onAnnotationSelect={handleAnnotationSelect}
+        onAnnotationCreate={() => {
+          // Refresh current page annotations
+          loadPageAnnotations(currentPage);
+        }}
+      />
+
+      {/* Annotation Form Modal */}
+      {showAnnotationForm && annotationFormPosition && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-60 flex items-center justify-center p-4">
+          <AnnotationForm
+            chapterId={chapterId}
+            pageNumber={currentPage}
+            position={annotationFormPosition}
+            onSubmit={handleCreateAnnotation}
+            onCancel={() => {
+              setShowAnnotationForm(false);
+              setAnnotationFormPosition(null);
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }
