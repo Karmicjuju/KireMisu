@@ -222,6 +222,80 @@ class TestJobWorker:
         assert path2.last_scan is not None
         assert path3.last_scan is None
 
+    async def test_execute_download_job_success(self, db_session: AsyncSession):
+        """Test successful execution of download job."""
+        # Create test job
+        job = JobQueue(
+            job_type="download",
+            payload={"manga_id": "test-manga-123", "download_type": "mangadx"},
+            status="pending",
+        )
+        db_session.add(job)
+        await db_session.commit()
+
+        # Execute job
+        worker = JobWorker()
+        result = await worker.execute_job(db_session, job)
+
+        # Verify job was marked as completed
+        await db_session.refresh(job)
+        assert job.status == "completed"
+        assert job.started_at is not None
+        assert job.completed_at is not None
+        assert job.error_message is None
+
+        # Verify result contains expected data
+        assert result["job_type"] == "download"
+        assert result["manga_id"] == "test-manga-123"
+        assert result["download_type"] == "mangadx"
+        assert result["status"] == "completed"
+
+    async def test_execute_download_job_missing_manga_id(self, db_session: AsyncSession):
+        """Test download job execution with missing manga_id."""
+        job = JobQueue(
+            job_type="download",
+            payload={"download_type": "mangadx"},  # Missing manga_id
+            status="pending",
+        )
+        db_session.add(job)
+        await db_session.commit()
+
+        worker = JobWorker()
+
+        with pytest.raises(JobExecutionError, match="Job execution failed"):
+            await worker.execute_job(db_session, job)
+
+        # Verify job was marked as failed
+        await db_session.refresh(job)
+        assert job.status == "failed"
+        assert "missing required 'manga_id'" in job.error_message
+
+    async def test_execute_download_job_with_series_id(self, db_session: AsyncSession):
+        """Test download job execution with series association."""
+        from uuid import uuid4
+
+        series_id = uuid4()
+        job = JobQueue(
+            job_type="download",
+            payload={
+                "manga_id": "test-manga-456",
+                "download_type": "mangadx",
+                "series_id": str(series_id),
+            },
+            status="pending",
+        )
+        db_session.add(job)
+        await db_session.commit()
+
+        # Execute job
+        worker = JobWorker()
+        result = await worker.execute_job(db_session, job)
+
+        # Verify job was completed and series association preserved
+        await db_session.refresh(job)
+        assert job.status == "completed"
+        assert result["series_id"] == str(series_id)
+
 
 class TestJobWorkerRunner:
     """Test cases for JobWorkerRunner background service."""

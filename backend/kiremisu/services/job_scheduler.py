@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from uuid import UUID
 
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, String
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.database.models import JobQueue, LibraryPath
@@ -110,7 +110,48 @@ class JobScheduler:
         db.add(job)
         await db.commit()
 
-        logger.info(f"Scheduled manual library scan job {job.id} with payload: {payload}")
+        logger.info(f"Scheduled manual library scan job {job.id} for library_path_id: {library_path_id}")
+        return job.id
+
+    @staticmethod
+    async def schedule_download(
+        db: AsyncSession,
+        manga_id: str,
+        download_type: str = "mangadx",
+        series_id: Optional[UUID] = None,
+        priority: int = 3,
+    ) -> UUID:
+        """Schedule a manga download job from external sources.
+
+        Args:
+            db: Database session
+            manga_id: External manga ID to download
+            download_type: Type of external source (mangadx, etc.)
+            series_id: Optional local series ID to associate with
+            priority: Job priority (higher = more urgent)
+
+        Returns:
+            UUID of the created job
+        """
+        payload = {
+            "manga_id": manga_id,
+            "download_type": download_type,
+        }
+
+        if series_id:
+            payload["series_id"] = str(series_id)
+
+        job = JobQueue(
+            job_type="download",
+            payload=payload,
+            priority=priority,
+            scheduled_at=datetime.utcnow(),
+        )
+
+        db.add(job)
+        await db.commit()
+
+        logger.info(f"Scheduled download job {job.id} for {download_type} manga: {manga_id}")
         return job.id
 
     @staticmethod
@@ -161,27 +202,36 @@ class JobScheduler:
         Returns:
             Dict with queue statistics
         """
-        # Count jobs by status
+        # Count jobs by status (including completed for comprehensive stats)
         result = await db.execute(
-            select(JobQueue.status, JobQueue.job_type).where(
-                JobQueue.status.in_(["pending", "running", "failed"])
-            )
+            select(JobQueue.status, JobQueue.job_type)
         )
         jobs = result.all()
 
         stats = {
             "pending": 0,
             "running": 0,
+            "completed": 0,
             "failed": 0,
             "library_scan_pending": 0,
             "library_scan_running": 0,
+            "library_scan_completed": 0,
             "library_scan_failed": 0,
+            "download_pending": 0,
+            "download_running": 0,
+            "download_completed": 0,
+            "download_failed": 0,
         }
 
         for status, job_type in jobs:
-            stats[status] = stats.get(status, 0) + 1
-            if job_type == "library_scan":
-                stats[f"{job_type}_{status}"] = stats.get(f"{job_type}_{status}", 0) + 1
+            # Count overall status
+            if status in stats:
+                stats[status] += 1
+            
+            # Count job-type specific status
+            key = f"{job_type}_{status}"
+            if key in stats:
+                stats[key] += 1
 
         return stats
 
@@ -196,22 +246,24 @@ class JobScheduler:
         Returns:
             Number of jobs deleted
         """
+        from sqlalchemy import delete
+
         cutoff_date = datetime.utcnow() - timedelta(days=older_than_days)
 
-        # Delete completed jobs older than cutoff
+        # Delete completed jobs older than cutoff using bulk delete
         result = await db.execute(
-            select(JobQueue).where(
-                and_(JobQueue.status == "completed", JobQueue.completed_at < cutoff_date)
+            delete(JobQueue).where(
+                and_(
+                    JobQueue.status == "completed", 
+                    JobQueue.completed_at < cutoff_date,
+                    JobQueue.completed_at.isnot(None)  # Ensure completed_at is not null
+                )
             )
         )
-        old_jobs = result.scalars().all()
-
-        for job in old_jobs:
-            await db.delete(job)
 
         await db.commit()
 
-        deleted_count = len(old_jobs)
+        deleted_count = result.rowcount
         logger.info(f"Cleaned up {deleted_count} old jobs older than {older_than_days} days")
         return deleted_count
 
@@ -252,7 +304,7 @@ class JobScheduler:
                 and_(
                     JobQueue.job_type == "library_scan",
                     JobQueue.status.in_(["pending", "running"]),
-                    JobQueue.payload["library_path_id"].astext == str(library_path_id),
+                    JobQueue.payload["library_path_id"].astext.cast(String) == str(library_path_id),
                 )
             )
         )

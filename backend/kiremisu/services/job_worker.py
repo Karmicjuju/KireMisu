@@ -45,12 +45,16 @@ class JobWorker:
         logger.info(f"Starting execution of job {job.id} (type: {job.job_type})")
 
         try:
-            # Start transaction - mark job as running
-            await self._update_job_status(db, job.id, "running", started_at=datetime.utcnow())
+            # Job is already marked as running from atomic claim, just verify status
+            if job.status != "running":
+                logger.warning(f"Job {job.id} has unexpected status {job.status}, expected 'running'")
+                return
 
             # Execute job based on type
             if job.job_type == "library_scan":
                 result = await self._execute_library_scan(db, job)
+            elif job.job_type == "download":
+                result = await self._execute_download(db, job)
             else:
                 raise JobExecutionError(f"Unknown job type: {job.job_type}")
 
@@ -86,21 +90,34 @@ class JobWorker:
             error_msg: Error message
         """
         try:
+            # Refresh job to get current state
+            await db.refresh(job)
+            
             # Determine if we should retry
             should_retry = job.retry_count < job.max_retries
 
             if should_retry:
-                # Mark for retry
+                # Mark for retry - increment retry count and set back to pending
+                new_retry_count = job.retry_count + 1
                 await self._update_job_status(
-                    db, job.id, "pending", error_message=error_msg, retry_count=job.retry_count + 1
+                    db, 
+                    job.id, 
+                    "pending", 
+                    error_message=error_msg, 
+                    retry_count=new_retry_count,
+                    started_at=None  # Clear started_at for retry
                 )
                 logger.info(
-                    f"Job {job.id} will be retried (attempt {job.retry_count + 1}/{job.max_retries})"
+                    f"Job {job.id} will be retried (attempt {new_retry_count}/{job.max_retries})"
                 )
             else:
                 # Mark as failed
                 await self._update_job_status(
-                    db, job.id, "failed", completed_at=datetime.utcnow(), error_message=error_msg
+                    db, 
+                    job.id, 
+                    "failed", 
+                    completed_at=datetime.utcnow(), 
+                    error_message=error_msg
                 )
                 logger.error(f"Job {job.id} failed permanently after {job.retry_count} retries")
 
@@ -147,6 +164,46 @@ class JobWorker:
         logger.info(f"Library scan completed: {result}")
         return result
 
+    async def _execute_download(self, db: AsyncSession, job: JobQueue) -> Dict[str, Any]:
+        """Execute a download job for manga from external sources.
+
+        Args:
+            db: Database session
+            job: JobQueue model with download type
+
+        Returns:
+            Dict with download results
+        """
+        payload = job.payload
+        download_type = payload.get("download_type", "mangadx")
+        manga_id = payload.get("manga_id")
+        series_id = payload.get("series_id")
+
+        if not manga_id:
+            raise JobExecutionError("Download job missing required 'manga_id' in payload")
+
+        logger.info(f"Executing download job for {download_type} manga_id: {manga_id}")
+
+        # For now, this is a placeholder implementation
+        # In a full implementation, this would:
+        # 1. Connect to external API (MangaDx, etc.)
+        # 2. Download chapter files
+        # 3. Store them in appropriate directory structure
+        # 4. Update database with new chapters
+
+        result = {
+            "job_type": "download",
+            "download_type": download_type,
+            "manga_id": manga_id,
+            "series_id": series_id,
+            "status": "completed",
+            "downloaded_chapters": 0,  # Placeholder
+            "message": f"Download job completed for {download_type} manga {manga_id}",
+        }
+
+        logger.info(f"Download job completed: {result}")
+        return result
+
     async def _update_job_status(
         self,
         db: AsyncSession,
@@ -163,15 +220,19 @@ class JobWorker:
             db: Database session
             job_id: Job UUID
             status: New status
-            started_at: Optional started timestamp
+            started_at: Optional started timestamp (use None to clear)
             completed_at: Optional completed timestamp
             error_message: Optional error message
             retry_count: Optional retry count
         """
         update_values = {"status": status, "updated_at": datetime.utcnow()}
 
+        # Handle started_at explicitly - None means clear it for retries
         if started_at is not None:
             update_values["started_at"] = started_at
+        elif status == "pending":  # Clear started_at when resetting to pending for retry
+            update_values["started_at"] = None
+            
         if completed_at is not None:
             update_values["completed_at"] = completed_at
         if error_message is not None:
@@ -288,16 +349,36 @@ class JobWorkerRunner:
             return
 
         async with self.db_session_factory() as db:
-            # Get available jobs ordered by priority (higher first) then by scheduled_at
-            result = await db.execute(
-                select(JobQueue)
+            # Atomically claim jobs to prevent race conditions between workers
+            # First, get the IDs of jobs we want to claim
+            job_ids_result = await db.execute(
+                select(JobQueue.id)
                 .where(
                     and_(JobQueue.status == "pending", JobQueue.scheduled_at <= datetime.utcnow())
                 )
                 .order_by(JobQueue.priority.desc(), JobQueue.scheduled_at.asc())
                 .limit(available_slots)
             )
-            jobs = result.scalars().all()
+            job_ids = [row[0] for row in job_ids_result.fetchall()]
+            
+            if not job_ids:
+                return
+            
+            # Atomically claim these jobs by updating their status to 'running'
+            claimed_jobs_result = await db.execute(
+                update(JobQueue)
+                .where(
+                    and_(
+                        JobQueue.id.in_(job_ids),
+                        JobQueue.status == "pending"  # Double-check they're still pending
+                    )
+                )
+                .values(status="running", started_at=datetime.utcnow())
+                .returning(JobQueue)
+            )
+            
+            await db.commit()
+            jobs = claimed_jobs_result.scalars().all()
 
         # Start processing jobs
         for job in jobs:

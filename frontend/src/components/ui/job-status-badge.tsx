@@ -56,7 +56,7 @@ export function LibraryPathStatusIndicator({
     return (
       <div className={`flex items-center gap-2 ${className}`}>
         <div className="h-2 w-2 animate-pulse rounded-full bg-orange-500" />
-        <span className="text-sm text-orange-600">Scanning</span>
+        <span className="text-sm font-medium text-orange-600 dark:text-orange-400">Scanning</span>
       </div>
     );
   }
@@ -65,7 +65,7 @@ export function LibraryPathStatusIndicator({
     return (
       <div className={`flex items-center gap-2 ${className}`}>
         <div className="h-2 w-2 rounded-full bg-red-500" />
-        <span className="text-sm text-red-600">Error</span>
+        <span className="text-sm font-medium text-red-600 dark:text-red-400">Error</span>
       </div>
     );
   }
@@ -73,7 +73,7 @@ export function LibraryPathStatusIndicator({
   return (
     <div className={`flex items-center gap-2 ${className}`}>
       <div className="h-2 w-2 rounded-full bg-green-500" />
-      <span className="text-sm text-green-600">Idle</span>
+      <span className="text-sm font-medium text-green-600 dark:text-green-400">Idle</span>
     </div>
   );
 }

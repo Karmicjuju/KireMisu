@@ -145,6 +145,29 @@ async def schedule_jobs(
                 total_paths=result["total_paths"],
             )
 
+        elif schedule_request.job_type == "download":
+            # Schedule download job
+            if not schedule_request.manga_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Download jobs require 'manga_id' field",
+                )
+
+            job_id = await JobScheduler.schedule_download(
+                db,
+                manga_id=schedule_request.manga_id,
+                download_type=schedule_request.download_type,
+                series_id=schedule_request.series_id,
+                priority=schedule_request.priority,
+            )
+
+            return JobScheduleResponse(
+                status="scheduled",
+                message=f"Download job scheduled for {schedule_request.download_type} manga: {schedule_request.manga_id}",
+                job_id=job_id,
+                scheduled_count=1,
+            )
+
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -152,11 +175,19 @@ async def schedule_jobs(
             )
 
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail=str(e)
+        )
     except Exception as e:
+        # Log the full exception for debugging but don't expose internals
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Job scheduling failed: {e}", exc_info=True)
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Job scheduling failed: {str(e)}",
+            detail="Internal server error occurred while scheduling job",
         )
 
 
@@ -174,9 +205,14 @@ async def cleanup_old_jobs(
         return {"deleted": deleted_count, "older_than_days": older_than_days}
 
     except Exception as e:
+        # Log the full exception for debugging but don't expose internals
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Job cleanup failed: {e}", exc_info=True)
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Job cleanup failed: {str(e)}",
+            detail="Internal server error occurred during job cleanup",
         )
 
 

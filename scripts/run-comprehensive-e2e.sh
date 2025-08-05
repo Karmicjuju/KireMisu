@@ -86,7 +86,7 @@ run_backend_tests() {
     cd "$PROJECT_ROOT"
     
     # Run backend tests with proper environment
-    if SECRET_KEY=test-key DATABASE_URL=sqlite:///test.db uv run python -m pytest tests/api/ -v --tb=short -q > /tmp/backend_test_results.log 2>&1; then
+    if SECRET_KEY=test-key DATABASE_URL=sqlite:///test.db uv run pytest tests/api/ -v --tb=short -q > /tmp/backend_test_results.log 2>&1; then
         log_success "Backend tests passed"
         return 0
     else

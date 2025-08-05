@@ -17,6 +17,23 @@ KireMisu is a self-hosted manga reader with:
 - Review CLAUDE.md §3 for database patterns
 - Follow testing guidelines in .claude/rules/testing.md
 
+**🚨 CRITICAL: Docker-First Development**
+ALL development and testing MUST use Docker containers:
+- Frontend: kiremisu-frontend-dev (http://localhost:3000)
+- Backend: kiremisu-backend-dev (http://localhost:8000)  
+- Database: kiremisu-postgres-dev (localhost:5432)
+
+ALWAYS instruct sub-agents to rebuild containers after code changes:
+```bash
+# Frontend changes
+docker-compose -f docker-compose.dev.yml build frontend
+docker-compose -f docker-compose.dev.yml restart frontend
+
+# Backend changes
+docker-compose -f docker-compose.dev.yml build backend  
+docker-compose -f docker-compose.dev.yml restart backend
+```
+
 YOUR PRIMARY RESPONSIBILITIES:
 
 1. ISSUE ANALYSIS & PLANNING

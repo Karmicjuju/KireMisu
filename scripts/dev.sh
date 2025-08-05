@@ -188,30 +188,36 @@ check_and_handle_ports() {
     fi
 }
 
-ensure_venv() {
+ensure_uv_venv() {
     cd "$PROJECT_ROOT"
     
-    # Check if we're already in a virtual environment
-    if [ -n "$VIRTUAL_ENV" ]; then
-        log_info "Already in virtual environment: $VIRTUAL_ENV"
+    # Check if uv is available
+    if ! command -v uv &> /dev/null; then
+        log_error "uv is not installed. Please install uv first: curl -LsSf https://astral.sh/uv/install.sh | sh"
+        return 1
+    fi
+    
+    # Check if we're already in a virtual environment managed by uv
+    if [ -n "$VIRTUAL_ENV" ] && [[ "$VIRTUAL_ENV" == *".venv"* ]]; then
+        log_info "Already in uv virtual environment: $VIRTUAL_ENV"
         return 0
     fi
     
-    # Check if .venv exists
+    # Create/sync virtual environment with uv (this handles both creation and activation)
     if [ ! -d ".venv" ]; then
-        log_info "Creating virtual environment..."
-        python3 -m venv .venv
+        log_info "Creating virtual environment with uv..."
+        uv venv
     else
         log_info "Virtual environment already exists"
     fi
     
     # Activate virtual environment
-    log_info "Activating virtual environment..."
+    log_info "Activating uv virtual environment..."
     source .venv/bin/activate
     
     # Verify activation
     if [ -n "$VIRTUAL_ENV" ]; then
-        log_success "Virtual environment activated: $VIRTUAL_ENV"
+        log_success "uv virtual environment activated: $VIRTUAL_ENV"
     else
         log_error "Failed to activate virtual environment"
         return 1
@@ -222,18 +228,12 @@ setup_backend() {
     log_info "Setting up Python backend..."
     cd "$PROJECT_ROOT"
     
-    # Ensure we're in a virtual environment
-    ensure_venv || return 1
+    # Ensure we're in a uv virtual environment
+    ensure_uv_venv || return 1
     
-    # Check for uv, fallback to pip
-    if command -v uv &> /dev/null; then
-        log_info "Installing dependencies with uv..."
-        uv sync --dev
-    else
-        log_info "Installing dependencies with pip..."
-        python -m pip install --upgrade pip
-        python -m pip install -e ".[dev]"
-    fi
+    # Install dependencies with uv (much faster than pip)
+    log_info "Installing dependencies with uv..."
+    uv sync --dev
     
     log_success "Backend setup complete"
 }
@@ -255,25 +255,25 @@ setup_frontend() {
 setup_dev_environment() {
     log_info "Setting up development environment..."
     
-    # Check prerequisites
-    check_command "python3" || exit 1
+    # Check prerequisites - uv handles Python version management
+    check_command "uv" || {
+        log_error "uv is required but not installed"
+        log_info "Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh"
+        exit 1
+    }
     check_command "node" || exit 1
     check_command "npm" || exit 1
     
-    # Setup backend
+    # Setup backend with uv
     setup_backend
     
     # Setup frontend
     setup_frontend
     
-    # Setup pre-commit hooks (ensure venv is active)
-    ensure_venv || return 1
-    if command -v pre-commit &> /dev/null; then
-        log_info "Installing pre-commit hooks..."
-        pre-commit install
-    else
-        log_warning "pre-commit not found, skipping hooks setup"
-    fi
+    # Setup pre-commit hooks (uv run handles this in the venv)
+    ensure_uv_venv || return 1
+    log_info "Installing pre-commit hooks with uv..."
+    uv run pre-commit install
     
     # Copy environment file if it doesn't exist
     if [ ! -f "$PROJECT_ROOT/.env" ]; then
@@ -294,14 +294,11 @@ start_backend() {
     log_info "Starting backend development server..."
     cd "$PROJECT_ROOT"
     
-    # Ensure we're in a virtual environment
-    ensure_venv || return 1
+    # Ensure we're in a uv virtual environment
+    ensure_uv_venv || return 1
     
-    if command -v uv &> /dev/null; then
-        uv run python -m kiremisu.main
-    else
-        python -m kiremisu.main
-    fi
+    # Start with uv (handles virtual environment automatically)
+    uv run uvicorn kiremisu.main:app --host 0.0.0.0 --port 8000 --reload
 }
 
 start_frontend() {
@@ -336,16 +333,13 @@ run_migrations() {
     cd "$PROJECT_ROOT"
     
     # Ensure we're in a virtual environment
-    ensure_venv || return 1
+    ensure_uv_venv || return 1
     
     # Navigate to backend directory for alembic
     cd "$PROJECT_ROOT/backend"
     
-    if command -v uv &> /dev/null; then
-        uv run alembic upgrade head
-    else
-        alembic upgrade head
-    fi
+    # Use uv to run alembic
+    uv run alembic upgrade head
     
     log_success "Migrations complete"
 }
@@ -355,7 +349,7 @@ generate_migration() {
     cd "$PROJECT_ROOT"
     
     # Ensure we're in a virtual environment
-    ensure_venv || return 1
+    ensure_uv_venv || return 1
     
     # Navigate to backend directory for alembic
     cd "$PROJECT_ROOT/backend"
@@ -370,11 +364,8 @@ generate_migration() {
         fi
     fi
     
-    if command -v uv &> /dev/null; then
-        uv run alembic revision --autogenerate -m "$message"
-    else
-        alembic revision --autogenerate -m "$message"
-    fi
+    # Use uv to run alembic
+    uv run alembic revision --autogenerate -m "$message"
     
     log_success "Migration generated successfully"
 }
@@ -401,13 +392,10 @@ run_lint() {
     cd "$PROJECT_ROOT"
     
     # Ensure we're in a virtual environment
-    ensure_venv || return 1
+    ensure_uv_venv || return 1
     
-    if command -v uv &> /dev/null; then
-        uv run ruff check .
-    else
-        ruff check .
-    fi
+    # Use uv to run ruff
+    uv run ruff check .
     
     # Frontend linting
     cd "$PROJECT_ROOT/frontend"
@@ -423,13 +411,10 @@ run_format() {
     cd "$PROJECT_ROOT"
     
     # Ensure we're in a virtual environment
-    ensure_venv || return 1
+    ensure_uv_venv || return 1
     
-    if command -v uv &> /dev/null; then
-        uv run ruff format .
-    else
-        ruff format .
-    fi
+    # Use uv to run ruff
+    uv run ruff format .
     
     # Frontend formatting
     cd "$PROJECT_ROOT/frontend"
@@ -445,13 +430,10 @@ run_tests() {
     cd "$PROJECT_ROOT"
     
     # Ensure we're in a virtual environment
-    ensure_venv || return 1
+    ensure_uv_venv || return 1
     
-    if command -v uv &> /dev/null; then
-        uv run pytest
-    else
-        pytest
-    fi
+    # Use uv to run pytest
+    uv run pytest
     
     # Frontend type checking
     cd "$PROJECT_ROOT/frontend"

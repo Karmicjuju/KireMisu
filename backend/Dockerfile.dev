@@ -9,14 +9,13 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for faster Python package management
-RUN pip install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
-# Copy dependency files
-COPY pyproject.toml ./
-COPY backend/kiremisu/__init__.py ./backend/kiremisu/__init__.py
+# Copy dependency files first for better caching
+COPY pyproject.toml uv.lock ./
 
-# Install Python dependencies
-RUN uv pip install --system -e ".[dev]"
+# Create virtual environment and install dependencies (including dev for development)
+RUN uv sync --frozen
 
 # Copy backend source
 COPY backend/ ./backend/
@@ -31,5 +30,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Default command (can be overridden)
-CMD ["uvicorn", "kiremisu.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Default command using uv run
+CMD ["uv", "run", "uvicorn", "kiremisu.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

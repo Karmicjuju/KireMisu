@@ -249,7 +249,7 @@ export function LibraryPaths() {
         <div className="flex gap-2">
           <Button
             onClick={handleScanAll}
-            variant="outline"
+            variant="secondary"
             size="sm"
             disabled={isScanningAll || scanningPathId !== null || getGlobalScanStatus().isScanning}
           >
@@ -373,41 +373,43 @@ export function LibraryPaths() {
             return (
               <div
                 key={path.id}
-                className="flex items-center justify-between rounded-lg border p-4"
+                className="flex items-center justify-between rounded-lg border bg-card p-4"
               >
                 <div className="flex-1">
-                  <div className="flex items-center gap-3">
-                    <div className="font-medium">{path.path}</div>
-                    <LibraryPathStatusIndicator
-                      isScanning={isPathScanning}
-                      hasError={jobStatus.hasError}
-                    />
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Scan interval:{' '}
-                    {SCAN_INTERVAL_OPTIONS.find((o) => o.value === path.scan_interval_hours)?.label}
-                    {path.last_scan && ` • Last scan: ${formatRelativeTime(path.last_scan)}`}
-                    {jobStatus.lastJob && jobStatus.lastJob.error_message && (
-                      <span className="ml-2 text-red-600">
-                        • Error: {jobStatus.lastJob.error_message}
-                      </span>
-                    )}
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-3">
+                      <div className="font-medium text-foreground">{path.path}</div>
+                      <LibraryPathStatusIndicator
+                        isScanning={isPathScanning}
+                        hasError={jobStatus.hasError}
+                      />
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      Scan interval:{' '}
+                      {SCAN_INTERVAL_OPTIONS.find((o) => o.value === path.scan_interval_hours)?.label}
+                      {path.last_scan && ` • Last scan: ${formatRelativeTime(path.last_scan)}`}
+                      {jobStatus.lastJob && jobStatus.lastJob.error_message && (
+                        <span className="ml-2 text-destructive">
+                          • Error: {jobStatus.lastJob.error_message}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm">
+                    <span className="text-sm font-medium">
                       {path.enabled ? 'Auto-scan Enabled' : 'Auto-scan Disabled'}
                     </span>
                     <div
-                      className={`h-2 w-2 rounded-full ${path.enabled ? 'bg-green-500' : 'bg-gray-400'}`}
+                      className={`h-2 w-2 rounded-full ${path.enabled ? 'bg-green-500' : 'bg-muted-foreground'}`}
                     />
                   </div>
 
-                  <div className="flex gap-1">
+                  <div className="flex gap-2">
                     <Button
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
                       onClick={() => handleScanPath(path.id)}
                       disabled={
@@ -420,12 +422,17 @@ export function LibraryPaths() {
                       <RefreshCw
                         className={`mr-2 h-4 w-4 ${isPathScanning ? 'animate-spin' : ''}`}
                       />
-                      {isPathScanning ? 'Scanning...' : 'Scan Now'}
+                      {isPathScanning ? 'Scanning...' : 'Scan'}
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => handleEdit(path)}>
+                    <Button variant="ghost" size="sm" onClick={() => handleEdit(path)}>
                       Edit
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => handleDelete(path.id)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDelete(path.id)}
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>

@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 
-from sqlalchemy import ARRAY, DateTime, String, Text, Boolean, Integer, JSON, ForeignKey, Index
+from sqlalchemy import ARRAY, DateTime, String, Text, Boolean, Integer, JSON, ForeignKey, Index, CheckConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -214,4 +214,36 @@ class JobQueue(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    __table_args__ = (
+        # Compound index for job processing queries (status + priority + scheduled_at)
+        Index("ix_job_queue_processing", "status", "priority", "scheduled_at"),
+        # Compound index for job type filtering with status
+        Index("ix_job_queue_type_status", "job_type", "status"),
+        # Index for cleanup queries (status + completed_at)
+        Index("ix_job_queue_cleanup", "status", "completed_at"),
+        # Index for retry logic (status + retry_count)
+        Index("ix_job_queue_retry", "status", "retry_count"),
+        # Constraints for data validation
+        CheckConstraint(
+            "status IN ('pending', 'running', 'completed', 'failed')",
+            name="ck_job_queue_status"
+        ),
+        CheckConstraint(
+            "job_type IN ('library_scan', 'download')",
+            name="ck_job_queue_job_type"
+        ),
+        CheckConstraint(
+            "priority >= 1 AND priority <= 10",
+            name="ck_job_queue_priority_range"
+        ),
+        CheckConstraint(
+            "retry_count >= 0",
+            name="ck_job_queue_retry_count"
+        ),
+        CheckConstraint(
+            "max_retries >= 0",
+            name="ck_job_queue_max_retries"
+        ),
     )
