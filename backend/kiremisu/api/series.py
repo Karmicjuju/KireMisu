@@ -11,11 +11,14 @@ from sqlalchemy.orm import selectinload
 from kiremisu.database.connection import get_db
 from kiremisu.database.models import Series, Chapter, Tag, series_tags
 from kiremisu.database.schemas import SeriesResponse, ChapterResponse, SeriesProgressResponse
+from kiremisu.database.utils import with_db_retry, log_slow_query, safe_like_pattern, validate_query_params
 
 router = APIRouter(prefix="/api/series", tags=["series"])
 
 
 @router.get("/", response_model=List[SeriesResponse])
+@with_db_retry(max_attempts=2)
+@log_slow_query("get_series_list", 2.0)
 async def get_series_list(
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0, description="Number of series to skip"),
@@ -25,11 +28,22 @@ async def get_series_list(
     tag_names: Optional[List[str]] = Query(None, description="Filter by tag names (AND logic)"),
 ) -> List[SeriesResponse]:
     """Get list of all series with optional tag filtering."""
+    # Validate input parameters
+    try:
+        clean_params = validate_query_params(
+            search=search,
+            tag_names=tag_names or []
+        )
+        search = clean_params.get("search")
+        tag_names = clean_params.get("tag_names")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
     query = select(Series).options(selectinload(Series.user_tags))
 
     # Add search filter if provided
     if search:
-        search_term = f"%{search}%"
+        search_term = safe_like_pattern(search)
         query = query.where(Series.title_primary.ilike(search_term))
 
     # Add tag filtering if provided
