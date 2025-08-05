@@ -45,7 +45,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["uvicorn", "kiremisu.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command: ["uv", "run", "uvicorn", "kiremisu.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     networks:
       - kiremisu-dev
     restart: unless-stopped

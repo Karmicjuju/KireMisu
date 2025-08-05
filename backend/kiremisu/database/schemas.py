@@ -549,3 +549,215 @@ class DashboardStatsResponse(BaseModel):
     last_updated: datetime = Field(..., description="Statistics calculation timestamp")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# MangaDx integration schemas
+class MangaDxSearchRequest(BaseModel):
+    """Schema for MangaDx search requests."""
+    
+    title: Optional[str] = Field(None, description="Manga title to search for")
+    author: Optional[str] = Field(None, description="Author name to search for")
+    artist: Optional[str] = Field(None, description="Artist name to search for")
+    year: Optional[int] = Field(None, ge=1900, le=2030, description="Publication year")
+    status: Optional[List[str]] = Field(None, description="Publication status filter")
+    content_rating: Optional[List[str]] = Field(None, description="Content rating filter")
+    original_language: Optional[List[str]] = Field(None, description="Original language filter")
+    limit: int = Field(default=20, ge=1, le=100, description="Number of results (1-100)")
+    offset: int = Field(default=0, ge=0, description="Offset for pagination")
+    
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v):
+        """Validate publication status values."""
+        if v is not None:
+            allowed_statuses = ["ongoing", "completed", "hiatus", "cancelled"]
+            for status in v:
+                if status not in allowed_statuses:
+                    raise ValueError(f"Invalid status '{status}'. Must be one of: {allowed_statuses}")
+        return v
+    
+    @field_validator("content_rating")
+    @classmethod
+    def validate_content_rating(cls, v):
+        """Validate content rating values."""
+        if v is not None:
+            allowed_ratings = ["safe", "suggestive", "erotica", "pornographic"]
+            for rating in v:
+                if rating not in allowed_ratings:
+                    raise ValueError(f"Invalid content rating '{rating}'. Must be one of: {allowed_ratings}")
+        return v
+
+
+class MangaDxMangaInfo(BaseModel):
+    """Schema for MangaDx manga information in search results."""
+    
+    id: str = Field(..., description="MangaDx manga UUID")
+    title: str = Field(..., description="Primary manga title")
+    alternative_titles: List[str] = Field(default_factory=list, description="Alternative titles")
+    description: Optional[str] = Field(None, description="Manga description")
+    author: Optional[str] = Field(None, description="Author name")
+    artist: Optional[str] = Field(None, description="Artist name")
+    genres: List[str] = Field(default_factory=list, description="Manga genres")
+    tags: List[str] = Field(default_factory=list, description="Manga tags")
+    status: str = Field(..., description="Publication status")
+    content_rating: str = Field(..., description="Content rating")
+    original_language: str = Field(..., description="Original language")
+    publication_year: Optional[int] = Field(None, description="Publication year")
+    last_volume: Optional[str] = Field(None, description="Last volume number")
+    last_chapter: Optional[str] = Field(None, description="Last chapter number")
+    cover_art_url: Optional[str] = Field(None, description="Cover art image URL")
+    
+    # MangaDx metadata
+    mangadx_created_at: Optional[datetime] = Field(None, description="MangaDx creation timestamp")
+    mangadx_updated_at: Optional[datetime] = Field(None, description="MangaDx update timestamp")
+
+
+class MangaDxSearchResponse(BaseModel):
+    """Schema for MangaDx search response."""
+    
+    results: List[MangaDxMangaInfo] = Field(default_factory=list, description="Search results")
+    total: int = Field(..., description="Total number of results")
+    limit: int = Field(..., description="Results per page")
+    offset: int = Field(..., description="Current offset")
+    has_more: bool = Field(..., description="Whether there are more results")
+
+
+class MangaDxImportRequest(BaseModel):
+    """Schema for MangaDx metadata import requests."""
+    
+    mangadx_id: str = Field(..., description="MangaDx manga UUID to import")
+    target_series_id: Optional[UUID] = Field(
+        None, 
+        description="Optional existing series ID to enrich with metadata"
+    )
+    import_cover_art: bool = Field(default=True, description="Whether to download cover art")
+    import_chapters: bool = Field(default=False, description="Whether to import chapter metadata")
+    overwrite_existing: bool = Field(
+        default=False, 
+        description="Whether to overwrite existing metadata fields"
+    )
+    custom_title: Optional[str] = Field(
+        None, 
+        description="Custom title override (if different from MangaDx)"
+    )
+
+
+class MangaDxImportResult(BaseModel):
+    """Schema for MangaDx import operation result."""
+    
+    success: bool = Field(..., description="Whether import was successful")
+    series_id: Optional[UUID] = Field(None, description="ID of created/updated series")
+    mangadx_id: str = Field(..., description="MangaDx manga UUID that was imported")
+    operation: str = Field(..., description="Operation performed (created/updated/enriched)")
+    
+    # Import statistics
+    metadata_fields_updated: List[str] = Field(
+        default_factory=list, 
+        description="List of metadata fields that were updated"
+    )
+    cover_art_downloaded: bool = Field(default=False, description="Whether cover art was downloaded")
+    chapters_imported: int = Field(default=0, description="Number of chapters imported")
+    
+    # Error information
+    warnings: List[str] = Field(default_factory=list, description="Non-fatal warnings")
+    errors: List[str] = Field(default_factory=list, description="Error messages if failed")
+    
+    # Timing information
+    import_duration_ms: Optional[int] = Field(None, description="Import duration in milliseconds")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class MangaDxImportResponse(BaseModel):
+    """Schema for MangaDx import API response."""
+    
+    status: str = Field(..., description="Import status (success/partial/failed)")
+    message: str = Field(..., description="Human-readable status message")
+    result: MangaDxImportResult = Field(..., description="Detailed import result")
+
+
+class MangaDxBulkImportRequest(BaseModel):
+    """Schema for bulk MangaDx import requests."""
+    
+    import_requests: List[MangaDxImportRequest] = Field(
+        ..., 
+        min_length=1, 
+        max_length=50,
+        description="List of import requests (max 50)"
+    )
+    priority: int = Field(default=5, ge=1, le=10, description="Job priority for background processing")
+    notify_on_completion: bool = Field(
+        default=True, 
+        description="Whether to create notification job on completion"
+    )
+
+
+class MangaDxBulkImportResponse(BaseModel):
+    """Schema for bulk MangaDx import response."""
+    
+    status: str = Field(..., description="Request status (scheduled/failed)")
+    message: str = Field(..., description="Human-readable status message")
+    job_id: Optional[UUID] = Field(None, description="Background job ID")
+    import_count: int = Field(..., description="Number of imports scheduled")
+
+
+class MangaDxEnrichmentRequest(BaseModel):
+    """Schema for enriching existing series with MangaDx metadata."""
+    
+    series_id: UUID = Field(..., description="Local series ID to enrich")
+    search_query: Optional[str] = Field(
+        None, 
+        description="Override search query (uses series title if not provided)"
+    )
+    auto_select_best_match: bool = Field(
+        default=False, 
+        description="Automatically select best match if confidence is high"
+    )
+    confidence_threshold: float = Field(
+        default=0.8, 
+        ge=0.0, 
+        le=1.0, 
+        description="Minimum confidence for auto-selection (0.0-1.0)"
+    )
+    import_cover_art: bool = Field(default=True, description="Whether to download cover art")
+    overwrite_existing: bool = Field(
+        default=False, 
+        description="Whether to overwrite existing metadata fields"
+    )
+
+
+class MangaDxEnrichmentCandidate(BaseModel):
+    """Schema for MangaDx enrichment candidate."""
+    
+    mangadx_info: MangaDxMangaInfo = Field(..., description="MangaDx manga information")
+    confidence_score: float = Field(..., ge=0.0, le=1.0, description="Match confidence (0.0-1.0)")
+    match_reasons: List[str] = Field(
+        default_factory=list, 
+        description="Reasons for this match (title, author, etc.)"
+    )
+    is_recommended: bool = Field(..., description="Whether this is the recommended match")
+
+
+class MangaDxEnrichmentResponse(BaseModel):
+    """Schema for MangaDx enrichment response."""
+    
+    series_id: UUID = Field(..., description="Local series ID")
+    series_title: str = Field(..., description="Local series title")
+    candidates: List[MangaDxEnrichmentCandidate] = Field(
+        default_factory=list, 
+        description="Potential MangaDx matches"
+    )
+    auto_selected: Optional[MangaDxEnrichmentCandidate] = Field(
+        None, 
+        description="Auto-selected candidate if confidence threshold met"
+    )
+    search_query_used: str = Field(..., description="Search query that was used")
+    total_candidates: int = Field(..., description="Total number of candidates found")
+
+
+class MangaDxHealthResponse(BaseModel):
+    """Schema for MangaDx API health check response."""
+    
+    api_accessible: bool = Field(..., description="Whether MangaDx API is accessible")
+    response_time_ms: Optional[int] = Field(None, description="API response time in milliseconds")
+    last_check: datetime = Field(..., description="Last health check timestamp")
+    error_message: Optional[str] = Field(None, description="Error message if health check failed")

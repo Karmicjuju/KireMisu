@@ -31,6 +31,7 @@ dependencies = [
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
     "greenlet>=3.2.3",
+    "python-dateutil>=2.9.0.post0",
 ]
 
 [project.optional-dependencies]
@@ -146,6 +147,9 @@ directory = "htmlcov/${COVERAGE_CONTEXT:-combined}"
 [dependency-groups]
 dev = [
     "aiosqlite>=0.21.0",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.1.0",
+    "pytest-cov>=6.2.1",
 ]
 
 [tool.hatch.build.targets.wheel]
