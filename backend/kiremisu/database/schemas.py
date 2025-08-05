@@ -246,17 +246,26 @@ class JobListResponse(BaseModel):
 class JobScheduleRequest(BaseModel):
     """Schema for job scheduling requests."""
 
-    job_type: str = Field(..., description="Type of job to schedule (library_scan, auto_schedule)")
+    job_type: str = Field(
+        ..., description="Type of job to schedule (library_scan, auto_schedule, download)"
+    )
     library_path_id: Optional[UUID] = Field(
         None, description="Optional specific library path ID for manual scans"
     )
     priority: int = Field(default=5, ge=1, le=10, description="Job priority (1=low, 10=high)")
 
+    # Download job specific fields
+    manga_id: Optional[str] = Field(None, description="External manga ID for download jobs")
+    download_type: Optional[str] = Field(default="mangadx", description="Download source type")
+    series_id: Optional[UUID] = Field(
+        None, description="Optional local series ID to associate with"
+    )
+
     @field_validator("job_type")
     @classmethod
     def validate_job_type(cls, v):
         """Validate job type is supported."""
-        allowed_types = ["library_scan", "auto_schedule"]
+        allowed_types = ["library_scan", "auto_schedule", "download"]
         if v not in allowed_types:
             raise ValueError(f"Invalid job type. Must be one of: {allowed_types}")
         return v

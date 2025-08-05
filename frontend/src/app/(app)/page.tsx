@@ -14,7 +14,7 @@ import {
 } from '@/lib/api';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { formatDistanceToNow } from 'date-fns';
+// import { formatDistanceToNow } from 'date-fns'; // Temporarily disabled to prevent build errors
 
 export default function Dashboard() {
   const {
@@ -269,7 +269,7 @@ export default function Dashboard() {
                   </div>
 
                   <div className="text-xs text-white/40">
-                    {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
+                    {new Date(activity.timestamp).toLocaleDateString()}
                   </div>
                 </div>
               ))}

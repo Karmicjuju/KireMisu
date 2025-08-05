@@ -317,7 +317,7 @@ class TestJobsAPI:
         }
 
         # Set worker in API module
-        with patch("kiremisu.api.jobs._worker_runner", mock_worker):
+        with patch("kiremisu.api.jobs.get_worker_runner", return_value=mock_worker):
             response = await client.get("/api/jobs/worker/status")
 
             assert response.status_code == 200
@@ -380,3 +380,89 @@ class TestJobsAPI:
         assert data["status"] == "completed"
         assert data["retry_count"] == 1
         assert data["max_retries"] == 3
+
+    async def test_schedule_download_job_api(self, client: AsyncClient, db_session: AsyncSession):
+        """Test POST /api/jobs/schedule for download job."""
+        request_data = {
+            "job_type": "download",
+            "manga_id": "test-manga-123",
+            "download_type": "mangadx",
+            "priority": 6,
+        }
+
+        response = await client.post("/api/jobs/schedule", json=request_data)
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["status"] == "scheduled"
+        assert "Download job scheduled" in data["message"]
+        assert data["scheduled_count"] == 1
+        assert "job_id" in data
+
+        # Verify job was created in database
+        from sqlalchemy import text
+
+        jobs = await db_session.execute(text("SELECT * FROM job_queue WHERE job_type = 'download'"))
+        job_list = jobs.fetchall()
+        assert len(job_list) == 1
+
+    async def test_schedule_download_job_with_series_id(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Test POST /api/jobs/schedule for download job with series association."""
+        from uuid import uuid4
+
+        series_id = uuid4()
+        request_data = {
+            "job_type": "download",
+            "manga_id": "test-manga-456",
+            "download_type": "mangadx",
+            "series_id": str(series_id),
+            "priority": 8,
+        }
+
+        response = await client.post("/api/jobs/schedule", json=request_data)
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["status"] == "scheduled"
+        assert "test-manga-456" in data["message"]
+        assert data["scheduled_count"] == 1
+
+    async def test_schedule_download_job_missing_manga_id(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Test POST /api/jobs/schedule for download job without manga_id."""
+        request_data = {
+            "job_type": "download",
+            "download_type": "mangadx",
+            "priority": 5,
+            # Missing manga_id
+        }
+
+        response = await client.post("/api/jobs/schedule", json=request_data)
+
+        assert response.status_code == 400
+        assert "Download jobs require 'manga_id' field" in response.json()["detail"]
+
+    async def test_schedule_download_job_validation_schema(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Test download job validation in request schema."""
+        # Test that download is a valid job type
+        request_data = {
+            "job_type": "download",
+            "manga_id": "test-manga",
+            "priority": 5,
+        }
+
+        # This should not fail validation
+        response = await client.post("/api/jobs/schedule", json=request_data)
+        assert response.status_code == 200
+
+        # Test invalid job type still fails
+        request_data["job_type"] = "invalid_type"
+        response = await client.post("/api/jobs/schedule", json=request_data)
+        assert response.status_code == 422  # Validation error

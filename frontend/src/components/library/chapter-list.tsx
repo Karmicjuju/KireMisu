@@ -6,6 +6,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import { format } from 'date-fns';
 import { GlassCard } from '@/components/ui/glass-card';
 import { Button } from '@/components/ui/button';
 import { ProgressBar } from '@/components/ui/progress-bar';
@@ -16,7 +17,7 @@ import { ChapterResponse, chaptersApi } from '@/lib/api';
 import { mutate } from 'swr';
 import { toast } from 'sonner';
 import { BookOpen, Calendar, FileText, Play, ChevronRight, Clock, Check } from 'lucide-react';
-import { formatDistanceToNow, format } from 'date-fns';
+// import { formatDistanceToNow, format } from 'date-fns'; // Temporarily disabled to prevent build errors
 
 export interface ChapterListProps {
   chapters: ChapterResponse[];
@@ -160,11 +161,7 @@ const ChapterItem = React.forwardRef<HTMLDivElement, ChapterItemProps>(
 
                 <div className="flex items-center gap-1">
                   <Calendar className="h-4 w-4" />
-                  <span>
-                    {formatDistanceToNow(new Date(chapter.created_at), {
-                      addSuffix: true,
-                    })}
-                  </span>
+                  <span>{new Date(chapter.created_at).toLocaleDateString()}</span>
                 </div>
 
                 {chapter.file_size && (

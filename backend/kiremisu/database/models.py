@@ -1,10 +1,21 @@
 """Database models for KireMisu."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
-from sqlalchemy import ARRAY, DateTime, String, Text, Boolean, Integer, JSON, ForeignKey, Index
+from sqlalchemy import (
+    ARRAY,
+    DateTime,
+    String,
+    Text,
+    Boolean,
+    Integer,
+    JSON,
+    ForeignKey,
+    Index,
+    CheckConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -54,9 +65,14 @@ class Series(Base):
     read_chapters: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
     # Relationships
@@ -95,9 +111,14 @@ class Chapter(Base):
     read_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
     # Relationships
@@ -141,9 +162,14 @@ class Annotation(Base):
     )  # note, bookmark, highlight
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
     # Relationships
@@ -161,9 +187,14 @@ class UserList(Base):
     series_ids: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
 
@@ -179,9 +210,14 @@ class LibraryPath(Base):
     last_scan: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
 
@@ -207,11 +243,34 @@ class JobQueue(Base):
 
     # Scheduling
     scheduled_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, index=True
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), index=True
     )
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        # Compound index for job processing queries (status + priority + scheduled_at)
+        Index("ix_job_queue_processing", "status", "priority", "scheduled_at"),
+        # Compound index for job type filtering with status
+        Index("ix_job_queue_type_status", "job_type", "status"),
+        # Index for cleanup queries (status + completed_at)
+        Index("ix_job_queue_cleanup", "status", "completed_at"),
+        # Index for retry logic (status + retry_count)
+        Index("ix_job_queue_retry", "status", "retry_count"),
+        # Constraints for data validation
+        CheckConstraint(
+            "status IN ('pending', 'running', 'completed', 'failed')", name="ck_job_queue_status"
+        ),
+        CheckConstraint("priority >= 1 AND priority <= 10", name="ck_job_queue_priority_range"),
+        CheckConstraint("retry_count >= 0", name="ck_job_queue_retry_count"),
+        CheckConstraint("max_retries >= 0", name="ck_job_queue_max_retries"),
     )

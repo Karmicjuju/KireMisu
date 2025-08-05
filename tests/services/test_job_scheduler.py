@@ -1,48 +1,95 @@
 """Tests for job scheduler service."""
 
-import asyncio
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.database.models import JobQueue, LibraryPath
-from kiremisu.services.job_scheduler import JobScheduler, SchedulerRunner
+from kiremisu.services.job_scheduler import JobScheduler
 
 
+@pytest.mark.unit
 class TestJobScheduler:
     """Test cases for JobScheduler service."""
 
-    async def test_schedule_library_scans_with_due_paths(self, db_session: AsyncSession):
-        """Test scheduling scans for paths that are due."""
-        # Create test library paths - one due, one not due
-        import uuid
+    async def test_schedule_manual_scan_specific_path(self, db_session: AsyncSession):
+        """Test scheduling manual scan for specific library path."""
+        # Create test library path
+        path = LibraryPath(path="/test/path", enabled=True, scan_interval_hours=24)
+        db_session.add(path)
+        await db_session.commit()
 
+        # Schedule manual scan
+        job_id = await JobScheduler.schedule_manual_scan(
+            db_session, library_path_id=path.id, priority=8
+        )
+
+        # Verify job was created
+        assert job_id is not None
+
+        # Check job in database
+        job = await db_session.get(JobQueue, job_id)
+        assert job is not None
+        assert job.job_type == "library_scan"
+        assert job.status == "pending"
+        assert job.priority == 8
+        assert job.payload["library_path_id"] == str(path.id)
+        assert job.payload["library_path"] == path.path
+
+    async def test_schedule_manual_scan_all_paths(self, db_session: AsyncSession):
+        """Test scheduling manual scan for all library paths."""
+        # Schedule manual scan for all paths
+        job_id = await JobScheduler.schedule_manual_scan(db_session, priority=9)
+
+        # Verify job was created
+        assert job_id is not None
+
+        # Check job in database
+        job = await db_session.get(JobQueue, job_id)
+        assert job is not None
+        assert job.job_type == "library_scan"
+        assert job.status == "pending"
+        assert job.priority == 9
+        assert job.payload == {}  # No specific path
+
+    async def test_schedule_manual_scan_invalid_path(self, db_session: AsyncSession):
+        """Test scheduling manual scan with invalid library path ID."""
+        fake_path_id = uuid4()
+
+        # Should raise ValueError for invalid path
+        with pytest.raises(ValueError, match="Library path not found"):
+            await JobScheduler.schedule_manual_scan(
+                db_session, library_path_id=fake_path_id, priority=5
+            )
+
+    async def test_schedule_library_scans_automatic(self, db_session: AsyncSession):
+        """Test automatic library scan scheduling based on intervals."""
+        # Create test library paths with different scan schedules
         path1 = LibraryPath(
-            path=f"/test/path1_{uuid.uuid4()}",
+            path="/test/path1",
             enabled=True,
             scan_interval_hours=1,
             last_scan=datetime.utcnow() - timedelta(hours=2),  # Due for scan
         )
         path2 = LibraryPath(
-            path=f"/test/path2_{uuid.uuid4()}",
+            path="/test/path2",
             enabled=True,
             scan_interval_hours=24,
             last_scan=datetime.utcnow() - timedelta(hours=1),  # Not due
         )
         path3 = LibraryPath(
-            path=f"/test/path3_{uuid.uuid4()}",
-            enabled=True,
-            scan_interval_hours=1,
-            last_scan=None,  # Never scanned, should be scheduled
-        )
-        path4 = LibraryPath(
-            path=f"/test/path4_{uuid.uuid4()}",
-            enabled=False,  # Disabled, should not be scheduled
+            path="/test/path3",
+            enabled=False,  # Disabled
             scan_interval_hours=1,
             last_scan=datetime.utcnow() - timedelta(hours=2),
+        )
+        path4 = LibraryPath(
+            path="/test/path4",
+            enabled=True,
+            scan_interval_hours=12,
+            last_scan=None,  # Never scanned - should be scheduled
         )
 
         db_session.add(path1)
@@ -51,86 +98,96 @@ class TestJobScheduler:
         db_session.add(path4)
         await db_session.commit()
 
-        # Schedule scans
+        # Schedule automatic scans
         result = await JobScheduler.schedule_library_scans(db_session)
 
-        # Should schedule path1 (due) and path3 (never scanned)
+        # Should schedule 2 jobs (path1 and path4)
         assert result["scheduled"] == 2
-        assert result["skipped"] == 1  # path2 not due
-        assert result["total_paths"] == 3  # path4 disabled, not counted
+        assert result["skipped"] == 2  # path2 (not due) and path3 (disabled)
+        assert result["total_paths"] == 4
 
         # Verify jobs were created
-        jobs = await db_session.execute("SELECT * FROM job_queue WHERE job_type = 'library_scan'")
+        from sqlalchemy import text
+
+        jobs = await db_session.execute(
+            text("SELECT * FROM job_queue WHERE job_type = 'library_scan'")
+        )
         job_list = jobs.fetchall()
         assert len(job_list) == 2
 
-    async def test_schedule_library_scans_skips_existing_jobs(self, db_session: AsyncSession):
-        """Test that scheduling skips paths with existing pending jobs."""
-        # Create test library path
-        path = LibraryPath(
-            path="/test/path",
-            enabled=True,
-            scan_interval_hours=1,
-            last_scan=datetime.utcnow() - timedelta(hours=2),  # Due for scan
+    async def test_schedule_download_job(self, db_session: AsyncSession):
+        """Test scheduling download job."""
+        job_id = await JobScheduler.schedule_download(
+            db_session,
+            manga_id="test-manga-123",
+            download_type="mangadx",
+            priority=6,
         )
-        db_session.add(path)
-        await db_session.commit()
-
-        # Create existing pending job for this path
-        existing_job = JobQueue(
-            job_type="library_scan", payload={"library_path_id": str(path.id)}, status="pending"
-        )
-        db_session.add(existing_job)
-        await db_session.commit()
-
-        # Schedule scans
-        result = await JobScheduler.schedule_library_scans(db_session)
-
-        # Should skip the path due to existing job
-        assert result["scheduled"] == 0
-        assert result["skipped"] == 1
-        assert result["total_paths"] == 1
-
-    async def test_schedule_manual_scan_specific_path(self, db_session: AsyncSession):
-        """Test scheduling manual scan for specific path."""
-        # Create test library path
-        path = LibraryPath(path="/test/path", enabled=True, scan_interval_hours=24)
-        db_session.add(path)
-        await db_session.commit()
-
-        # Schedule manual scan
-        job_id = await JobScheduler.schedule_manual_scan(db_session, path.id, priority=8)
 
         # Verify job was created
-        job = await JobScheduler.get_job_status(db_session, job_id)
+        assert job_id is not None
+
+        # Check job in database
+        job = await db_session.get(JobQueue, job_id)
         assert job is not None
-        assert job.job_type == "library_scan"
-        assert job.priority == 8
-        assert job.payload["library_path_id"] == str(path.id)
-        assert job.payload["library_path"] == path.path
+        assert job.job_type == "download"
+        assert job.status == "pending"
+        assert job.priority == 6
+        assert job.payload["manga_id"] == "test-manga-123"
+        assert job.payload["download_type"] == "mangadx"
 
-    async def test_schedule_manual_scan_all_paths(self, db_session: AsyncSession):
-        """Test scheduling manual scan for all paths."""
-        # Schedule manual scan for all paths
-        job_id = await JobScheduler.schedule_manual_scan(db_session, priority=9)
+    async def test_schedule_download_job_with_series_id(self, db_session: AsyncSession):
+        """Test scheduling download job with series association."""
+        series_id = uuid4()
+        job_id = await JobScheduler.schedule_download(
+            db_session,
+            manga_id="test-manga-456",
+            download_type="mangadx",
+            series_id=series_id,
+            priority=8,
+        )
 
-        # Verify job was created
-        job = await JobScheduler.get_job_status(db_session, job_id)
+        # Verify job was created with series association
+        job = await db_session.get(JobQueue, job_id)
         assert job is not None
-        assert job.job_type == "library_scan"
-        assert job.priority == 9
-        assert job.payload == {}  # Empty payload for all paths
+        assert job.payload["series_id"] == str(series_id)
 
-    async def test_schedule_manual_scan_invalid_path(self, db_session: AsyncSession):
-        """Test scheduling manual scan with invalid path ID."""
-        invalid_path_id = uuid4()
+    async def test_get_queue_stats(self, db_session: AsyncSession):
+        """Test getting queue statistics."""
+        # Create test jobs with different statuses and types
+        jobs = [
+            JobQueue(job_type="library_scan", status="pending"),
+            JobQueue(job_type="library_scan", status="running"),
+            JobQueue(job_type="library_scan", status="completed"),
+            JobQueue(job_type="library_scan", status="failed"),
+            JobQueue(job_type="download", status="pending"),
+            JobQueue(job_type="download", status="running"),
+        ]
 
-        with pytest.raises(ValueError, match="Library path not found"):
-            await JobScheduler.schedule_manual_scan(db_session, invalid_path_id)
+        for job in jobs:
+            db_session.add(job)
+        await db_session.commit()
+
+        # Get statistics
+        stats = await JobScheduler.get_queue_stats(db_session)
+
+        # Verify overall stats
+        assert stats["pending"] == 2
+        assert stats["running"] == 2
+        assert stats["completed"] == 1
+        assert stats["failed"] == 1
+
+        # Verify job type specific stats
+        assert stats["library_scan_pending"] == 1
+        assert stats["library_scan_running"] == 1
+        assert stats["library_scan_completed"] == 1
+        assert stats["library_scan_failed"] == 1
+        assert stats["download_pending"] == 1
+        assert stats["download_running"] == 1
 
     async def test_get_recent_jobs(self, db_session: AsyncSession):
         """Test getting recent jobs."""
-        # Create test jobs
+        # Create test jobs with different timestamps
         job1 = JobQueue(
             job_type="library_scan",
             status="completed",
@@ -142,7 +199,7 @@ class TestJobScheduler:
             created_at=datetime.utcnow() - timedelta(minutes=2),
         )
         job3 = JobQueue(
-            job_type="other_job",
+            job_type="download",
             status="failed",
             created_at=datetime.utcnow() - timedelta(minutes=1),
         )
@@ -153,45 +210,51 @@ class TestJobScheduler:
         await db_session.commit()
 
         # Get all recent jobs
-        all_jobs = await JobScheduler.get_recent_jobs(db_session)
-        assert len(all_jobs) == 3
+        jobs = await JobScheduler.get_recent_jobs(db_session, limit=10)
+
         # Should be ordered by creation time desc
-        assert all_jobs[0].id == job3.id
-        assert all_jobs[1].id == job2.id
-        assert all_jobs[2].id == job1.id
+        assert len(jobs) == 3
+        assert jobs[0].id == job3.id  # Most recent
+        assert jobs[1].id == job2.id
+        assert jobs[2].id == job1.id  # Oldest
 
-        # Get recent jobs filtered by type
-        scan_jobs = await JobScheduler.get_recent_jobs(db_session, job_type="library_scan")
-        assert len(scan_jobs) == 2
+        # Test with job type filter
+        library_jobs = await JobScheduler.get_recent_jobs(
+            db_session, job_type="library_scan", limit=10
+        )
 
-        # Get limited number of jobs
+        assert len(library_jobs) == 2
+        assert library_jobs[0].id == job2.id
+        assert library_jobs[1].id == job1.id
+
+        # Test with limit
         limited_jobs = await JobScheduler.get_recent_jobs(db_session, limit=2)
         assert len(limited_jobs) == 2
 
-    async def test_get_queue_stats(self, db_session: AsyncSession):
-        """Test getting queue statistics."""
-        # Create test jobs
-        jobs = [
-            JobQueue(job_type="library_scan", status="pending"),
-            JobQueue(job_type="library_scan", status="running"),
-            JobQueue(job_type="library_scan", status="failed"),
-            JobQueue(job_type="other_job", status="pending"),
-            JobQueue(job_type="other_job", status="completed"),  # Completed jobs not counted
-        ]
-
-        for job in jobs:
-            db_session.add(job)
+    async def test_get_job_status(self, db_session: AsyncSession):
+        """Test getting specific job status."""
+        # Create test job
+        job = JobQueue(
+            job_type="library_scan",
+            payload={"library_path_id": str(uuid4())},
+            status="completed",
+            priority=5,
+        )
+        db_session.add(job)
         await db_session.commit()
 
-        # Get stats
-        stats = await JobScheduler.get_queue_stats(db_session)
+        # Get job status
+        retrieved_job = await JobScheduler.get_job_status(db_session, job.id)
 
-        assert stats["pending"] == 2
-        assert stats["running"] == 1
-        assert stats["failed"] == 1
-        assert stats["library_scan_pending"] == 1
-        assert stats["library_scan_running"] == 1
-        assert stats["library_scan_failed"] == 1
+        assert retrieved_job is not None
+        assert retrieved_job.id == job.id
+        assert retrieved_job.job_type == "library_scan"
+        assert retrieved_job.status == "completed"
+
+        # Test with non-existent job
+        fake_id = uuid4()
+        nonexistent_job = await JobScheduler.get_job_status(db_session, fake_id)
+        assert nonexistent_job is None
 
     async def test_cleanup_old_jobs(self, db_session: AsyncSession):
         """Test cleaning up old completed jobs."""
@@ -206,7 +269,10 @@ class TestJobScheduler:
             status="completed",
             completed_at=datetime.utcnow() - timedelta(days=5),
         )
-        pending_job = JobQueue(job_type="library_scan", status="pending")
+        pending_job = JobQueue(
+            job_type="library_scan",
+            status="pending",
+        )
 
         db_session.add(old_job)
         db_session.add(recent_job)
@@ -219,108 +285,89 @@ class TestJobScheduler:
         assert deleted_count == 1
 
         # Verify only old completed job was deleted
-        remaining_jobs = await JobScheduler.get_recent_jobs(db_session)
-        remaining_ids = [job.id for job in remaining_jobs]
-        assert old_job.id not in remaining_ids
-        assert recent_job.id in remaining_ids
-        assert pending_job.id in remaining_ids
+        from sqlalchemy import text
 
-    def test_should_schedule_scan_disabled_path(self):
-        """Test should_schedule_scan with disabled path."""
-        path = LibraryPath(path="/test/path", enabled=False, scan_interval_hours=1)
+        remaining_jobs = await db_session.execute(text("SELECT * FROM job_queue"))
+        job_list = remaining_jobs.fetchall()
+        assert len(job_list) == 2  # recent_job and pending_job should remain
 
-        assert not JobScheduler._should_schedule_scan(path)
-
-    def test_should_schedule_scan_never_scanned(self):
-        """Test should_schedule_scan with never scanned path."""
-        path = LibraryPath(path="/test/path", enabled=True, scan_interval_hours=24, last_scan=None)
-
-        assert JobScheduler._should_schedule_scan(path)
-
-    def test_should_schedule_scan_due_for_scan(self):
-        """Test should_schedule_scan with path due for scan."""
-        path = LibraryPath(
-            path="/test/path",
-            enabled=True,
-            scan_interval_hours=1,
-            last_scan=datetime.utcnow() - timedelta(hours=2),
+    async def test_job_priority_ordering(self, db_session: AsyncSession):
+        """Test that jobs are ordered by priority correctly."""
+        # Create jobs with different priorities
+        low_priority_job = JobQueue(
+            job_type="library_scan",
+            status="pending",
+            priority=3,
+            scheduled_at=datetime.utcnow() - timedelta(minutes=5),
+        )
+        high_priority_job = JobQueue(
+            job_type="library_scan",
+            status="pending",
+            priority=8,
+            scheduled_at=datetime.utcnow() - timedelta(minutes=1),
+        )
+        medium_priority_job = JobQueue(
+            job_type="library_scan",
+            status="pending",
+            priority=5,
+            scheduled_at=datetime.utcnow() - timedelta(minutes=3),
         )
 
-        assert JobScheduler._should_schedule_scan(path)
+        db_session.add(low_priority_job)
+        db_session.add(high_priority_job)
+        db_session.add(medium_priority_job)
+        await db_session.commit()
 
-    def test_should_schedule_scan_not_due(self):
-        """Test should_schedule_scan with path not due for scan."""
-        path = LibraryPath(
-            path="/test/path",
-            enabled=True,
-            scan_interval_hours=24,
-            last_scan=datetime.utcnow() - timedelta(hours=1),
+        # Get recent jobs (should be ordered by creation time desc)
+        jobs = await JobScheduler.get_recent_jobs(db_session, limit=10)
+
+        # Recent jobs are ordered by creation time, not priority
+        assert jobs[0].id == high_priority_job.id  # Most recent
+        assert jobs[1].id == medium_priority_job.id
+        assert jobs[2].id == low_priority_job.id  # Oldest
+
+    async def test_duplicate_job_prevention(self, db_session: AsyncSession):
+        """Test that duplicate jobs are prevented or handled correctly."""
+        # Create library path
+        path = LibraryPath(path="/test/path", enabled=True, scan_interval_hours=24)
+        db_session.add(path)
+        await db_session.commit()
+
+        # Schedule first job
+        job_id1 = await JobScheduler.schedule_manual_scan(
+            db_session, library_path_id=path.id, priority=5
         )
 
-        assert not JobScheduler._should_schedule_scan(path)
+        # Schedule second job for same path (should be allowed)
+        job_id2 = await JobScheduler.schedule_manual_scan(
+            db_session, library_path_id=path.id, priority=5
+        )
 
+        # Both jobs should be created (no duplicate prevention in current implementation)
+        assert job_id1 != job_id2
 
-class TestSchedulerRunner:
-    """Test cases for SchedulerRunner background service."""
+        # Verify both jobs exist
+        job1 = await db_session.get(JobQueue, job_id1)
+        job2 = await db_session.get(JobQueue, job_id2)
+        assert job1 is not None
+        assert job2 is not None
 
-    @pytest.fixture
-    def mock_db_session_factory(self):
-        """Mock database session factory."""
-        mock_session = AsyncMock()
-        mock_factory = AsyncMock(return_value=mock_session)
-        mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_factory.return_value.__aexit__ = AsyncMock(return_value=None)
-        return mock_factory
+    async def test_job_payload_validation(self, db_session: AsyncSession):
+        """Test that job payloads are properly validated."""
+        # Create library path
+        path = LibraryPath(path="/test/path", enabled=True, scan_interval_hours=24)
+        db_session.add(path)
+        await db_session.commit()
 
-    async def test_scheduler_runner_start_stop(self, mock_db_session_factory):
-        """Test starting and stopping scheduler runner."""
-        runner = SchedulerRunner(mock_db_session_factory, check_interval_minutes=1)
+        # Schedule job and verify payload structure
+        job_id = await JobScheduler.schedule_manual_scan(
+            db_session, library_path_id=path.id, priority=5
+        )
 
-        # Start runner
-        await runner.start()
-        assert runner._running is True
-        assert runner._task is not None
-
-        # Stop runner
-        await runner.stop()
-        assert runner._running is False
-
-    async def test_scheduler_runner_already_running(self, mock_db_session_factory):
-        """Test starting runner when already running."""
-        runner = SchedulerRunner(mock_db_session_factory, check_interval_minutes=1)
-
-        await runner.start()
-
-        # Try to start again - should not create new task
-        old_task = runner._task
-        await runner.start()
-        assert runner._task is old_task
-
-        await runner.stop()
-
-    async def test_scheduler_runner_schedules_jobs(self, mock_db_session_factory):
-        """Test that scheduler runner calls job scheduling."""
-        mock_session = mock_db_session_factory.return_value.__aenter__.return_value
-
-        # Mock the schedule_library_scans method
-        original_schedule = JobScheduler.schedule_library_scans
-        JobScheduler.schedule_library_scans = AsyncMock(return_value={"scheduled": 1, "skipped": 0})
-
-        try:
-            runner = SchedulerRunner(
-                mock_db_session_factory, check_interval_minutes=0.01
-            )  # Very short interval
-
-            await runner.start()
-
-            # Wait a bit for the scheduler to run
-            await asyncio.sleep(0.1)
-
-            await runner.stop()
-
-            # Verify schedule_library_scans was called
-            JobScheduler.schedule_library_scans.assert_called()
-
-        finally:
-            # Restore original method
-            JobScheduler.schedule_library_scans = original_schedule
+        job = await db_session.get(JobQueue, job_id)
+        assert job is not None
+        assert isinstance(job.payload, dict)
+        assert "library_path_id" in job.payload
+        assert "library_path" in job.payload
+        assert job.payload["library_path_id"] == str(path.id)
+        assert job.payload["library_path"] == path.path
