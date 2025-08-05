@@ -717,7 +717,7 @@ class AnnotationBase(BaseModel):
         None, ge=0, le=1, description="Y position on page (0-1 normalized)"
     )
     color: Optional[str] = Field(
-        None, regex=r"^#[0-9A-Fa-f]{6}$", description="Annotation color in hex format"
+        None, pattern=r"^#[0-9A-Fa-f]{6}$", description="Annotation color in hex format"
     )
 
     @field_validator("annotation_type")
@@ -753,7 +753,7 @@ class AnnotationUpdate(BaseModel):
         None, ge=0, le=1, description="Y position on page (0-1 normalized)"
     )
     color: Optional[str] = Field(
-        None, regex=r"^#[0-9A-Fa-f]{6}$", description="Annotation color in hex format"
+        None, pattern=r"^#[0-9A-Fa-f]{6}$", description="Annotation color in hex format"
     )
 
     @field_validator("annotation_type")
@@ -777,6 +777,86 @@ class AnnotationResponse(AnnotationBase):
 
     # Optional chapter information (when loaded with relationship)
     chapter: Optional[ChapterResponse] = Field(None, description="Parent chapter information")
+
+
+# File Operation schemas
+class FileOperationRequest(BaseModel):
+    """Schema for file operation requests."""
+
+    operation_type: str = Field(..., description="Type of operation (rename, delete, move)")
+    source_path: str = Field(..., description="Source file/directory path")
+    target_path: Optional[str] = Field(None, description="Target path (for rename/move operations)")
+    
+    # Safety options
+    force: bool = Field(default=False, description="Force operation without confirmations")
+    create_backup: bool = Field(default=True, description="Create backup before operation")
+    
+    # Validation options
+    skip_validation: bool = Field(default=False, description="Skip pre-operation validation")
+    validate_database_consistency: bool = Field(default=True, description="Validate database consistency")
+
+    @field_validator("operation_type")
+    @classmethod
+    def validate_operation_type(cls, v):
+        """Validate operation type is supported."""
+        allowed_types = ["rename", "delete", "move"]
+        if v not in allowed_types:
+            raise ValueError(f"Invalid operation type. Must be one of: {allowed_types}")
+        return v
+
+    @field_validator("source_path")
+    @classmethod
+    def validate_source_path(cls, v):
+        """Validate source path is not empty."""
+        if not v or not v.strip():
+            raise ValueError("Source path cannot be empty")
+        return v.strip()
+
+    @field_validator("target_path")
+    @classmethod
+    def validate_target_path(cls, v, info):
+        """Validate target path for rename/move operations."""
+        operation_type = info.data.get("operation_type")
+        if operation_type in ["rename", "move"]:
+            if not v or not v.strip():
+                raise ValueError(f"Target path is required for {operation_type} operations")
+            return v.strip()
+        return v
+
+
+class FileOperationResponse(BaseModel):
+    """Schema for file operation responses."""
+
+    id: UUID = Field(..., description="Operation ID")
+    operation_type: str = Field(..., description="Type of operation")
+    status: str = Field(..., description="Operation status")
+    
+    # File paths
+    source_path: str = Field(..., description="Source path")
+    target_path: Optional[str] = Field(None, description="Target path")
+    backup_path: Optional[str] = Field(None, description="Backup path")
+    
+    # Affected records
+    affected_series_ids: List[str] = Field(default_factory=list, description="Affected series IDs")
+    affected_chapter_ids: List[str] = Field(default_factory=list, description="Affected chapter IDs")
+    
+    # Operation metadata
+    operation_metadata: dict = Field(default_factory=dict, description="Operation metadata")
+    validation_results: dict = Field(default_factory=dict, description="Validation results")
+    
+    # Error handling
+    error_message: Optional[str] = Field(None, description="Error message if operation failed")
+    retry_count: int = Field(..., description="Number of retry attempts")
+    max_retries: int = Field(..., description="Maximum retry attempts")
+    
+    # Timing
+    started_at: Optional[datetime] = Field(None, description="Operation start time")
+    completed_at: Optional[datetime] = Field(None, description="Operation completion time")
+    validated_at: Optional[datetime] = Field(None, description="Validation completion time")
+    
+    # Timestamps
+    created_at: datetime = Field(..., description="Operation creation time")
+    updated_at: datetime = Field(..., description="Last update time")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -841,6 +921,8 @@ class ChapterAnnotationsResponse(BaseModel):
             annotations=[AnnotationResponse.from_model(a) for a in annotations],
             annotations_by_page=annotations_by_page,
         )
+
+
 # MangaDx integration schemas
 class MangaDxSearchRequest(BaseModel):
     """Schema for MangaDx search requests."""
@@ -1051,3 +1133,75 @@ class MangaDxHealthResponse(BaseModel):
     response_time_ms: Optional[int] = Field(None, description="API response time in milliseconds")
     last_check: datetime = Field(..., description="Last health check timestamp")
     error_message: Optional[str] = Field(None, description="Error message if health check failed")
+
+
+    @classmethod
+    def from_model(cls, operation):
+        """Create FileOperationResponse from FileOperation model."""
+        return cls(
+            id=operation.id,
+            operation_type=operation.operation_type,
+            status=operation.status,
+            source_path=operation.source_path,
+            target_path=operation.target_path,
+            backup_path=operation.backup_path,
+            affected_series_ids=operation.affected_series_ids,
+            affected_chapter_ids=operation.affected_chapter_ids,
+            operation_metadata=operation.operation_metadata,
+            validation_results=operation.validation_results,
+            error_message=operation.error_message,
+            retry_count=operation.retry_count,
+            max_retries=operation.max_retries,
+            started_at=operation.started_at,
+            completed_at=operation.completed_at,
+            validated_at=operation.validated_at,
+            created_at=operation.created_at,
+            updated_at=operation.updated_at,
+        )
+
+
+class ValidationResult(BaseModel):
+    """Schema for validation results."""
+
+    is_valid: bool = Field(..., description="Whether the operation is valid")
+    warnings: List[str] = Field(default_factory=list, description="Non-critical validation warnings")
+    errors: List[str] = Field(default_factory=list, description="Critical validation errors")
+    conflicts: List[dict] = Field(default_factory=list, description="Detected conflicts")
+    
+    # Affected data summary
+    affected_series_count: int = Field(default=0, description="Number of affected series")
+    affected_chapter_count: int = Field(default=0, description="Number of affected chapters")
+    
+    # Risk assessment
+    risk_level: str = Field(default="low", description="Risk level (low, medium, high)")
+    requires_confirmation: bool = Field(default=False, description="Whether user confirmation is required")
+    
+    # Performance impact
+    estimated_duration_seconds: Optional[float] = Field(None, description="Estimated operation duration")
+    estimated_disk_usage_mb: Optional[float] = Field(None, description="Estimated disk usage for backups")
+
+    @field_validator("risk_level")
+    @classmethod
+    def validate_risk_level(cls, v):
+        """Validate risk level."""
+        allowed_levels = ["low", "medium", "high"]
+        if v not in allowed_levels:
+            raise ValueError(f"Invalid risk level. Must be one of: {allowed_levels}")
+        return v
+
+
+class FileOperationConfirmationRequest(BaseModel):
+    """Schema for confirming a file operation after validation."""
+
+    operation_id: UUID = Field(..., description="Operation ID to confirm")
+    confirmed: bool = Field(..., description="User confirmation")
+    confirmation_message: Optional[str] = Field(None, description="Optional confirmation message")
+
+
+class FileOperationListResponse(BaseModel):
+    """Schema for listing file operations."""
+
+    operations: List[FileOperationResponse] = Field(..., description="List of operations")
+    total: int = Field(..., description="Total number of operations")
+    status_filter: Optional[str] = Field(None, description="Applied status filter")
+    operation_type_filter: Optional[str] = Field(None, description="Applied operation type filter")
