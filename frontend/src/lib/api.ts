@@ -124,6 +124,37 @@ export interface ChapterResponse {
   series?: SeriesResponse;
 }
 
+export interface TagResponse {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string;
+  usage_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TagCreate {
+  name: string;
+  description?: string;
+  color?: string;
+}
+
+export interface TagUpdate {
+  name?: string;
+  description?: string;
+  color?: string;
+}
+
+export interface TagListResponse {
+  tags: TagResponse[];
+  total: number;
+}
+
+export interface SeriesTagAssignment {
+  tag_ids: string[];
+}
+
 export interface SeriesResponse {
   id: string;
   title_primary: string;
@@ -142,6 +173,7 @@ export interface SeriesResponse {
   source_metadata: Record<string, any>;
   user_metadata: Record<string, any>;
   custom_tags: string[];
+  user_tags: TagResponse[];
   total_chapters: number;
   read_chapters: number;
   created_at: string;
@@ -386,11 +418,19 @@ export const seriesApi = {
     skip?: number;
     limit?: number;
     search?: string;
+    tag_ids?: string[];
+    tag_names?: string[];
   }): Promise<SeriesResponse[]> {
     const params = new URLSearchParams();
     if (options?.skip) params.append('skip', options.skip.toString());
     if (options?.limit) params.append('limit', options.limit.toString());
     if (options?.search) params.append('search', options.search);
+    if (options?.tag_ids) {
+      options.tag_ids.forEach(id => params.append('tag_ids', id));
+    }
+    if (options?.tag_names) {
+      options.tag_names.forEach(name => params.append('tag_names', name));
+    }
 
     const response = await api.get<SeriesResponse[]>(
       `/api/series${params.toString() ? `?${params.toString()}` : ''}`
@@ -471,6 +511,21 @@ export const annotationsApi = {
 
     const response = await api.get<AnnotationListResponse>(
       `/api/annotations/${params.toString() ? `?${params.toString()}` : ''}`
+export const tagsApi = {
+  async getTags(options?: {
+    skip?: number;
+    limit?: number;
+    search?: string;
+    sort_by?: 'name' | 'usage' | 'created';
+  }): Promise<TagListResponse> {
+    const params = new URLSearchParams();
+    if (options?.skip) params.append('skip', options.skip.toString());
+    if (options?.limit) params.append('limit', options.limit.toString());
+    if (options?.search) params.append('search', options.search);
+    if (options?.sort_by) params.append('sort_by', options.sort_by);
+
+    const response = await api.get<TagListResponse>(
+      `/api/tags${params.toString() ? `?${params.toString()}` : ''}`
     );
     return response.data;
   },
@@ -534,6 +589,47 @@ export const annotationsApi = {
     await api.delete(
       `/api/annotations/chapters/${chapterId}${params.toString() ? `?${params.toString()}` : ''}`
     );
+  async getTag(tagId: string): Promise<TagResponse> {
+    const response = await api.get<TagResponse>(`/api/tags/${tagId}`);
+    return response.data;
+  },
+
+  async createTag(tagData: TagCreate): Promise<TagResponse> {
+    const response = await api.post<TagResponse>('/api/tags/', tagData);
+    return response.data;
+  },
+
+  async updateTag(tagId: string, tagData: TagUpdate): Promise<TagResponse> {
+    const response = await api.put<TagResponse>(`/api/tags/${tagId}`, tagData);
+    return response.data;
+  },
+
+  async deleteTag(tagId: string): Promise<{ message: string }> {
+    const response = await api.delete<{ message: string }>(`/api/tags/${tagId}`);
+    return response.data;
+  },
+
+  // Series-specific tag operations
+  async getSeriesTags(seriesId: string): Promise<TagResponse[]> {
+    const response = await api.get<TagResponse[]>(`/api/tags/series/${seriesId}`);
+    return response.data;
+  },
+
+  async assignTagsToSeries(seriesId: string, assignment: SeriesTagAssignment): Promise<TagResponse[]> {
+    const response = await api.put<TagResponse[]>(`/api/tags/series/${seriesId}`, assignment);
+    return response.data;
+  },
+
+  async addTagsToSeries(seriesId: string, assignment: SeriesTagAssignment): Promise<TagResponse[]> {
+    const response = await api.post<TagResponse[]>(`/api/tags/series/${seriesId}/add`, assignment);
+    return response.data;
+  },
+
+  async removeTagsFromSeries(seriesId: string, assignment: SeriesTagAssignment): Promise<TagResponse[]> {
+    const response = await api.delete<TagResponse[]>(`/api/tags/series/${seriesId}/remove`, {
+      data: assignment,
+    });
+    return response.data;
   },
 };
 
