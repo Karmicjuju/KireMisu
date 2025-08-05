@@ -12,6 +12,7 @@ import { Plus, X, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TagResponse, TagCreate, tagsApi } from '@/lib/api';
 import { TagChip } from './tag-chip';
+import { useToast } from '@/hooks/use-toast';
 
 export interface TagInputProps {
   selectedTags: TagResponse[];
@@ -41,6 +42,7 @@ export function TagInput({
 
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   // Debounced search function
   const debouncedSearch = useCallback(
@@ -68,11 +70,16 @@ export function TagInput({
       } catch (error) {
         console.error('Failed to search tags:', error);
         setSuggestions([]);
+        toast({
+          title: "Search Error",
+          description: "Failed to search tags. Please try again.",
+          variant: "destructive",
+        });
       } finally {
         setIsLoading(false);
       }
     }, 300),
-    [selectedTags]
+    [selectedTags, toast]
   );
 
   useEffect(() => {
@@ -145,6 +152,11 @@ export function TagInput({
       handleAddTag(newTag);
     } catch (error) {
       console.error('Failed to create tag:', error);
+      toast({
+        title: "Creation Error",
+        description: error instanceof Error ? error.message : "Failed to create tag. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsCreating(false);
     }

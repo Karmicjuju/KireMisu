@@ -45,6 +45,12 @@ class Tag(Base):
     """User-defined tags for organizing series."""
 
     __tablename__ = "tags"
+    __table_args__ = (
+        CheckConstraint(
+            "color IS NULL OR (color ~ '^#[0-9A-Fa-f]{6}$')",
+            name="ck_tag_color_format"
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)

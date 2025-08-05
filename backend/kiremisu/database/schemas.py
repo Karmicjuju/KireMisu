@@ -83,16 +83,29 @@ class TagBase(BaseModel):
     @field_validator("color")
     @classmethod
     def validate_color(cls, v):
-        """Validate color is in proper hex format."""
+        """Validate color is in proper hex format and prevent CSS injection."""
         if v is None:
             return v
         v = v.strip()
+        
+        # Strict validation: must be exactly #RRGGBB format
         if not v.startswith("#") or len(v) != 7:
             raise ValueError("Color must be in hex format #RRGGBB")
+        
+        # Only allow alphanumeric hex characters after #
+        hex_part = v[1:]
+        if not all(c in '0123456789ABCDEFabcdef' for c in hex_part):
+            raise ValueError("Color must contain valid hex digits only")
+        
         try:
-            int(v[1:], 16)  # Validate hex digits
+            int(hex_part, 16)  # Validate hex digits
         except ValueError:
             raise ValueError("Color must contain valid hex digits")
+        
+        # Additional security: prevent any special characters that could be used for injection
+        if any(char in v for char in [';', '(', ')', '{', '}', '/', '\\', '<', '>', '"', "'"]):
+            raise ValueError("Color contains invalid characters")
+            
         return v.upper()
 
 
@@ -119,16 +132,29 @@ class TagUpdate(BaseModel):
     @field_validator("color")
     @classmethod
     def validate_color(cls, v):
-        """Validate color is in proper hex format."""
+        """Validate color is in proper hex format and prevent CSS injection."""
         if v is None:
             return v
         v = v.strip()
+        
+        # Strict validation: must be exactly #RRGGBB format
         if not v.startswith("#") or len(v) != 7:
             raise ValueError("Color must be in hex format #RRGGBB")
+        
+        # Only allow alphanumeric hex characters after #
+        hex_part = v[1:]
+        if not all(c in '0123456789ABCDEFabcdef' for c in hex_part):
+            raise ValueError("Color must contain valid hex digits only")
+        
         try:
-            int(v[1:], 16)  # Validate hex digits
+            int(hex_part, 16)  # Validate hex digits
         except ValueError:
             raise ValueError("Color must contain valid hex digits")
+        
+        # Additional security: prevent any special characters that could be used for injection
+        if any(char in v for char in [';', '(', ')', '{', '}', '/', '\\', '<', '>', '"', "'"]):
+            raise ValueError("Color contains invalid characters")
+            
         return v.upper()
 
 
