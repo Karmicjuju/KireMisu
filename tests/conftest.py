@@ -9,9 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 from sqlalchemy.pool import NullPool
 from sqlalchemy import text
 
-from kiremisu.database.models import Base
+from kiremisu.database.models import Base, Series, Chapter, Annotation
 from kiremisu.database.connection import get_db
 from kiremisu.main import app
+from uuid import uuid4
 
 
 # Test database URL - uses PostgreSQL test database
@@ -93,3 +94,136 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         yield ac
 
     app.dependency_overrides.clear()
+
+
+# Annotation test fixtures
+@pytest.fixture
+async def sample_series_with_chapters(db_session: AsyncSession):
+    """Create a test series with chapters for annotation testing."""
+    series = Series(
+        id=uuid4(),
+        title_primary="Test Manga Series",
+        language="en",
+        file_path="/test/manga/series",
+        total_chapters=3,
+        read_chapters=0,
+    )
+    db_session.add(series)
+    await db_session.commit()
+    await db_session.refresh(series)
+
+    chapters = []
+    for i in range(3):
+        chapter = Chapter(
+            id=uuid4(),
+            series_id=series.id,
+            chapter_number=float(i + 1),
+            title=f"Chapter {i + 1}",
+            file_path=f"/test/manga/series/chapter_{i + 1}.cbz",
+            file_size=1024 * 1024,  # 1MB
+            page_count=20,
+        )
+        chapters.append(chapter)
+        db_session.add(chapter)
+
+    await db_session.commit()
+    for chapter in chapters:
+        await db_session.refresh(chapter)
+
+    return series, chapters
+
+
+@pytest.fixture
+async def sample_annotation(db_session: AsyncSession, sample_series_with_chapters):
+    """Create a single test annotation."""
+    series, chapters = sample_series_with_chapters
+    chapter = chapters[0]
+
+    annotation = Annotation(
+        id=uuid4(),
+        chapter_id=chapter.id,
+        content="This is a test note annotation",
+        page_number=1,
+        annotation_type="note",
+        position_x=0.5,
+        position_y=0.3,
+        color="#3b82f6",
+    )
+    db_session.add(annotation)
+    await db_session.commit()
+    await db_session.refresh(annotation)
+
+    return annotation
+
+
+@pytest.fixture
+async def sample_annotations(db_session: AsyncSession, sample_series_with_chapters):
+    """Create multiple test annotations across different chapters and pages."""
+    series, chapters = sample_series_with_chapters
+
+    annotations = []
+    
+    # Chapter 1 annotations
+    annotations.extend([
+        Annotation(
+            id=uuid4(),
+            chapter_id=chapters[0].id,
+            content="Note on page 1",
+            page_number=1,
+            annotation_type="note",
+            position_x=0.2,
+            position_y=0.3,
+            color="#3b82f6",
+        ),
+        Annotation(
+            id=uuid4(),
+            chapter_id=chapters[0].id,
+            content="Bookmark on page 1",
+            page_number=1,
+            annotation_type="bookmark",
+            position_x=0.8,
+            position_y=0.1,
+            color="#f59e0b",
+        ),
+        Annotation(
+            id=uuid4(),
+            chapter_id=chapters[0].id,
+            content="Highlight on page 2",
+            page_number=2,
+            annotation_type="highlight",
+            position_x=0.5,
+            position_y=0.7,
+            color="#eab308",
+        ),
+    ])
+
+    # Chapter 2 annotations
+    annotations.extend([
+        Annotation(
+            id=uuid4(),
+            chapter_id=chapters[1].id,
+            content="Note on chapter 2",
+            page_number=1,
+            annotation_type="note",
+            position_x=0.3,
+            position_y=0.5,
+            color="#3b82f6",
+        ),
+        Annotation(
+            id=uuid4(),
+            chapter_id=chapters[1].id,
+            content="General chapter annotation",
+            page_number=None,  # No specific page
+            annotation_type="bookmark",
+            color="#f59e0b",
+        ),
+    ])
+
+    for annotation in annotations:
+        db_session.add(annotation)
+
+    await db_session.commit()
+    for annotation in annotations:
+        await db_session.refresh(annotation)
+
+    return annotations
