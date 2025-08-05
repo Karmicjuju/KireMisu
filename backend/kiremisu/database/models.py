@@ -359,3 +359,69 @@ class JobQueue(Base):
         CheckConstraint("retry_count >= 0", name="ck_job_queue_retry_count"),
         CheckConstraint("max_retries >= 0", name="ck_job_queue_max_retries"),
     )
+
+
+class FileOperation(Base):
+    """Track file operations for safety and audit purposes."""
+
+    __tablename__ = "file_operations"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    operation_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, index=True
+    )  # rename, delete, move
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending", index=True
+    )  # pending, validated, in_progress, completed, failed, rolled_back
+
+    # File paths
+    source_path: Mapped[str] = mapped_column(Text, nullable=False)
+    target_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    backup_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Affected database records
+    affected_series_ids: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
+    affected_chapter_ids: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
+
+    # Operation metadata
+    operation_metadata: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    validation_results: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    rollback_data: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+    # Error handling
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_retries: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+
+    # Timing
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    validated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        # Index for operation monitoring and cleanup
+        Index("ix_file_operations_status_created", "status", "created_at"),
+        # Index for operation type filtering
+        Index("ix_file_operations_type_status", "operation_type", "status"),
+        # Constraints for data validation
+        CheckConstraint(
+            "operation_type IN ('rename', 'delete', 'move')", name="ck_file_operations_type"
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'validated', 'in_progress', 'completed', 'failed', 'rolled_back')",
+            name="ck_file_operations_status",
+        ),
+        CheckConstraint("retry_count >= 0", name="ck_file_operations_retry_count"),
+        CheckConstraint("max_retries >= 0", name="ck_file_operations_max_retries"),
+    )
