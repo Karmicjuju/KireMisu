@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 from contextlib import asynccontextmanager
 from functools import wraps
 from typing import Any, AsyncGenerator, Callable, List, Optional
@@ -11,22 +12,31 @@ from sqlalchemy.exc import DisconnectionError, OperationalError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .connection import get_db_session
+from .config import db_config
 
 logger = logging.getLogger(__name__)
 
 
 async def check_db_health() -> bool:
-    """Simple database health check."""
+    """Simple database health check with timeout protection."""
     try:
-        async with get_db_session() as session:
-            await session.execute(text("SELECT 1"))
-            return True
+        # Use asyncio.wait_for to prevent hanging connections
+        async with asyncio.timeout(db_config.HEALTH_CHECK_TIMEOUT):
+            async with get_db_session() as session:
+                await session.execute(text("SELECT 1"))
+                return True
+    except asyncio.TimeoutError:
+        logger.error("Database health check timed out")
+        return False
     except Exception as e:
         logger.error(f"Database health check failed: {e}")
         return False
 
 
-def with_db_retry(max_attempts: int = 3, delay: float = 1.0):
+def with_db_retry(
+    max_attempts: int = db_config.DEFAULT_MAX_ATTEMPTS, 
+    delay: float = db_config.DEFAULT_RETRY_DELAY
+):
     """Simple retry decorator for database operations."""
     def decorator(func: Callable) -> Callable:
         @wraps(func)
@@ -82,17 +92,36 @@ async def bulk_create(session: AsyncSession, items: List[Any]) -> None:
 
 
 async def safe_delete(session: AsyncSession, item: Any) -> bool:
-    """Safe delete with error handling."""
+    """Safe delete with comprehensive error handling and validation."""
+    if item is None:
+        logger.warning("Attempted to delete None item")
+        return False
+    
     try:
-        await session.delete(item)
+        # Check if item is already in the session
+        if item not in session:
+            logger.warning("Item not found in session for deletion")
+            return False
+            
+        session.delete(item)
         await session.flush()
+        logger.debug(f"Successfully deleted item: {type(item).__name__}")
         return True
+        
     except SQLAlchemyError as e:
-        logger.error(f"Delete failed: {e}")
+        logger.error(f"Delete failed for {type(item).__name__}: {e}")
+        # Attempt to rollback the session state
+        try:
+            await session.rollback()
+        except Exception as rollback_error:
+            logger.error(f"Failed to rollback after delete error: {rollback_error}")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error during delete: {e}")
         return False
 
 
-def log_slow_query(query_name: str, duration_threshold: float = 1.0):
+def log_slow_query(query_name: str, duration_threshold: float = db_config.DEFAULT_SLOW_QUERY_THRESHOLD):
     """Decorator to log slow queries."""
     def decorator(func: Callable) -> Callable:
         @wraps(func)
@@ -117,7 +146,7 @@ def log_slow_query(query_name: str, duration_threshold: float = 1.0):
 
 
 def validate_query_params(**params) -> dict:
-    """Simple parameter validation to prevent basic SQL injection."""
+    """Enhanced parameter validation with comprehensive SQL injection protection."""
     cleaned_params = {}
     
     for key, value in params.items():
@@ -126,41 +155,125 @@ def validate_query_params(**params) -> dict:
             continue
         
         if isinstance(value, str):
-            # Basic SQL injection prevention - check for dangerous patterns
-            dangerous_patterns = ["'", '"', ";", "--", "/*", "*/", "xp_", "sp_", "drop ", "delete ", "truncate "]
+            # Enhanced SQL injection prevention with case-insensitive matching
             value_lower = value.lower()
             
-            if any(pattern in value_lower for pattern in dangerous_patterns):
-                raise ValueError(f"Potentially unsafe parameter '{key}': contains dangerous pattern")
+            # Check for dangerous SQL patterns
+            for pattern in db_config.DANGEROUS_SQL_PATTERNS:
+                if pattern.lower() in value_lower:
+                    raise ValueError(
+                        f"Potentially unsafe parameter '{key}': contains SQL injection pattern '{pattern}'"
+                    )
+            
+            # Additional regex-based checks for complex injection patterns
+            suspicious_patterns = [
+                r'\b(union\s+select)\b',  # Union-based injections
+                r'\b(or\s+\d+\s*=\s*\d+)\b',  # Boolean-based injections
+                r'\b(and\s+\d+\s*=\s*\d+)\b',  # Boolean-based injections
+                r'[\'"]\s*;\s*\w+',  # Command chaining
+                r'0x[0-9a-f]+',  # Hexadecimal values
+                r'\\x[0-9a-f]{2}',  # Hex encoded characters (fixed escape)
+            ]
+            
+            for pattern in suspicious_patterns:
+                if re.search(pattern, value_lower, re.IGNORECASE):
+                    raise ValueError(
+                        f"Potentially unsafe parameter '{key}': matches suspicious pattern"
+                    )
             
             # Limit string length to prevent DoS
-            if len(value) > 1000:
-                raise ValueError(f"Parameter '{key}' too long (max 1000 characters)")
+            if len(value) > db_config.MAX_STRING_LENGTH:
+                raise ValueError(
+                    f"Parameter '{key}' too long (max {db_config.MAX_STRING_LENGTH} characters)"
+                )
+                
+            # Check for excessive whitespace (potential obfuscation)
+            if len(value.strip()) != len(value) and len(value) - len(value.strip()) > 10:
+                raise ValueError(f"Parameter '{key}' contains excessive whitespace")
                 
             cleaned_params[key] = value.strip()
+            
         elif isinstance(value, (int, float, bool)):
             cleaned_params[key] = value
+            
         elif isinstance(value, list):
-            # Validate each item in list
-            if len(value) > 100:  # Prevent huge lists
-                raise ValueError(f"Parameter '{key}' list too long (max 100 items)")
-            cleaned_params[key] = [validate_query_params(item=item)["item"] for item in value]
+            # Validate list size and each item
+            if len(value) > db_config.MAX_LIST_SIZE:
+                raise ValueError(
+                    f"Parameter '{key}' list too long (max {db_config.MAX_LIST_SIZE} items)"
+                )
+            
+            # Recursively validate each list item
+            cleaned_list = []
+            for i, item in enumerate(value):
+                try:
+                    cleaned_item = validate_query_params(**{f"item_{i}": item})
+                    cleaned_list.append(cleaned_item[f"item_{i}"])
+                except ValueError as e:
+                    raise ValueError(f"Invalid item in list '{key}' at index {i}: {str(e)}")
+            
+            cleaned_params[key] = cleaned_list
+            
         else:
+            # For other types, just pass through but log for monitoring
+            logger.debug(f"Parameter '{key}' has unusual type: {type(value)}")
             cleaned_params[key] = value
     
     return cleaned_params
 
 
 def safe_like_pattern(search_term: str) -> str:
-    """Create a safe LIKE pattern from user input."""
+    """Create a safe LIKE pattern from user input with enhanced validation."""
     if not search_term:
         return "%"
     
-    # Escape special LIKE characters
-    escaped = search_term.replace("%", "\\%").replace("_", "\\_")
+    # First validate the search term using our comprehensive validation
+    try:
+        validated = validate_query_params(search=search_term)["search"]
+    except ValueError as e:
+        raise ValueError(f"Invalid search term: {e}")
     
-    # Basic validation
-    if len(escaped) > 100:
-        raise ValueError("Search term too long")
+    # Escape special LIKE characters
+    escaped = validated.replace("%", "\\%").replace("_", "\\_")
+    
+    # Length validation using configuration
+    if len(escaped) > db_config.MAX_SEARCH_PATTERN_LENGTH:
+        raise ValueError(
+            f"Search term too long (max {db_config.MAX_SEARCH_PATTERN_LENGTH} characters)"
+        )
     
     return f"%{escaped}%"
+
+
+async def get_connection_info() -> dict:
+    """Get database connection information for monitoring."""
+    try:
+        async with get_db_session() as session:
+            # Get database-agnostic connection info
+            connection_info = {
+                "engine_info": str(session.get_bind()),
+                "is_connected": True,
+                "pool_info": {},
+            }
+            
+            # Try to get pool information if available
+            engine = session.get_bind()
+            if hasattr(engine, 'pool'):
+                pool = engine.pool
+                connection_info["pool_info"] = {
+                    "size": getattr(pool, 'size', 'unknown'),
+                    "checked_in": getattr(pool, 'checkedin', 'unknown'),
+                    "checked_out": getattr(pool, 'checkedout', 'unknown'),
+                    "overflow": getattr(pool, 'overflow', 'unknown'),
+                    "invalid": getattr(pool, 'invalid', 'unknown'),
+                }
+            
+            return connection_info
+            
+    except Exception as e:
+        logger.error(f"Failed to get connection info: {e}")
+        return {
+            "is_connected": False,
+            "error": str(e),
+            "pool_info": {},
+        }

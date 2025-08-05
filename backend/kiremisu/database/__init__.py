@@ -10,7 +10,9 @@ from .utils import (
     log_slow_query,
     validate_query_params,
     safe_like_pattern,
+    get_connection_info,
 )
+from .config import db_config
 from .migrations import (
     get_current_revision,
     validate_migration_safety,
@@ -32,6 +34,9 @@ __all__ = [
     "log_slow_query",
     "validate_query_params",
     "safe_like_pattern",
+    "get_connection_info",
+    # Configuration
+    "db_config",
     # Migration utilities
     "get_current_revision",
     "validate_migration_safety",

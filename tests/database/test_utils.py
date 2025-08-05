@@ -108,10 +108,13 @@ class TestParameterValidation:
             'test" OR 1=1',
             "test/* comment */",
             "test; DELETE FROM table",
+            "UNION SELECT * FROM users",
+            "' OR 1=1 --",
+            "admin'--",
         ]
         
         for dangerous_input in dangerous_inputs:
-            with pytest.raises(ValueError, match="dangerous pattern"):
+            with pytest.raises(ValueError, match="SQL injection pattern|suspicious pattern"):
                 validate_query_params(search=dangerous_input)
 
     def test_validate_long_strings(self):
