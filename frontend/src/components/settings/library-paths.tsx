@@ -449,7 +449,7 @@ export function LibraryPaths() {
           setFormData({ ...formData, path });
           setShowDirectoryPicker(false);
         }}
-        initialPath="/app"
+        initialPath="/manga-storage"
         title="Select Library Directory"
       />
     </div>
