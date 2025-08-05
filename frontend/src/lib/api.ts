@@ -511,6 +511,11 @@ export const annotationsApi = {
 
     const response = await api.get<AnnotationListResponse>(
       `/api/annotations/${params.toString() ? `?${params.toString()}` : ''}`
+    );
+    return response.data;
+  },
+};
+
 export const tagsApi = {
   async getTags(options?: {
     skip?: number;
@@ -589,6 +594,8 @@ export const tagsApi = {
     await api.delete(
       `/api/annotations/chapters/${chapterId}${params.toString() ? `?${params.toString()}` : ''}`
     );
+  },
+
   async getTag(tagId: string): Promise<TagResponse> {
     const response = await api.get<TagResponse>(`/api/tags/${tagId}`);
     return response.data;

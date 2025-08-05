@@ -717,7 +717,7 @@ class AnnotationBase(BaseModel):
         None, ge=0, le=1, description="Y position on page (0-1 normalized)"
     )
     color: Optional[str] = Field(
-        None, regex=r"^#[0-9A-Fa-f]{6}$", description="Annotation color in hex format"
+        None, pattern=r"^#[0-9A-Fa-f]{6}$", description="Annotation color in hex format"
     )
 
     @field_validator("annotation_type")
@@ -753,7 +753,7 @@ class AnnotationUpdate(BaseModel):
         None, ge=0, le=1, description="Y position on page (0-1 normalized)"
     )
     color: Optional[str] = Field(
-        None, regex=r"^#[0-9A-Fa-f]{6}$", description="Annotation color in hex format"
+        None, pattern=r"^#[0-9A-Fa-f]{6}$", description="Annotation color in hex format"
     )
 
     @field_validator("annotation_type")
