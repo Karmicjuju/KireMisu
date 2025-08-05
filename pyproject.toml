@@ -32,6 +32,7 @@ dependencies = [
     "pydantic-settings>=2.1.0",
     "greenlet>=3.2.3",
     "python-dateutil>=2.9.0.post0",
+    "slowapi>=0.1.9",
 ]
 
 [project.optional-dependencies]

@@ -29,10 +29,10 @@ export function NavigationItem({
       onClick={() => setCurrentPage(label.toLowerCase())}
       className={cn(
         'flex items-center rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200',
-        'hover:bg-white/10 hover:backdrop-blur-sm',
-        'focus:outline-none focus:ring-2 focus:ring-orange-500/50',
-        isActive && 'bg-gradient-to-r from-orange-500/20 to-red-500/20 text-orange-400 shadow-lg',
-        !isActive && 'text-slate-300 hover:text-white',
+        'hover:bg-accent/10 hover:backdrop-blur-sm',
+        'focus:outline-none focus:ring-2 focus:ring-primary/50',
+        isActive && 'bg-gradient-to-r from-primary/20 to-accent/20 text-primary shadow-lg',
+        !isActive && 'text-muted-foreground hover:text-foreground',
         collapsed && 'justify-center px-2'
       )}
     >

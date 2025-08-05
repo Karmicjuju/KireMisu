@@ -22,6 +22,7 @@ import {
 } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/utils';
 import { LibraryPathStatusIndicator } from '@/components/ui/job-status-badge';
+import { DirectoryPicker } from '@/components/ui/directory-picker';
 import useSWR, { mutate } from 'swr';
 
 interface LibraryPathFormData {
@@ -46,6 +47,7 @@ export function LibraryPaths() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isScanningAll, setIsScanningAll] = useState(false);
   const [scanningPathId, setScanningPathId] = useState<string | null>(null);
+  const [showDirectoryPicker, setShowDirectoryPicker] = useState(false);
   const [formData, setFormData] = useState<LibraryPathFormData>({
     path: '',
     enabled: true,
@@ -301,14 +303,7 @@ export function LibraryPaths() {
                 type="button"
                 variant="outline"
                 size="icon"
-                onClick={() => {
-                  // Note: In a real implementation, you'd use the File System Access API
-                  // or electron dialog for directory picking
-                  const path = prompt('Enter directory path:');
-                  if (path) {
-                    setFormData({ ...formData, path });
-                  }
-                }}
+                onClick={() => setShowDirectoryPicker(true)}
               >
                 <Folder className="h-4 w-4" />
               </Button>
@@ -445,6 +440,18 @@ export function LibraryPaths() {
           })
         )}
       </div>
+
+      {/* Directory Picker Modal */}
+      <DirectoryPicker
+        isOpen={showDirectoryPicker}
+        onClose={() => setShowDirectoryPicker(false)}
+        onSelect={(path) => {
+          setFormData({ ...formData, path });
+          setShowDirectoryPicker(false);
+        }}
+        initialPath="/manga-storage"
+        title="Select Library Directory"
+      />
     </div>
   );
 }

@@ -32,9 +32,9 @@ export function SeriesCard({ series, className }: SeriesCardProps) {
 
   return (
     <GlassCard className={cn('overflow-hidden transition-all hover:scale-105', className)}>
-      <div className="relative flex aspect-[3/4] items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900">
+      <div className="relative flex aspect-[3/4] items-center justify-center bg-gradient-to-br from-muted to-muted/80">
         {/* Placeholder for cover image */}
-        <div className="text-white/40">
+        <div className="text-muted-foreground/60">
           <Book className="h-16 w-16" />
         </div>
 
@@ -70,22 +70,22 @@ export function SeriesCard({ series, className }: SeriesCardProps) {
 
       <div className="space-y-3 p-4">
         <div>
-          <h3 className="mb-1 line-clamp-2 font-semibold text-white">{series.title_primary}</h3>
+          <h3 className="mb-1 line-clamp-2 font-semibold">{series.title_primary}</h3>
           {series.author && (
-            <p className="line-clamp-1 text-sm text-white/70">by {series.author}</p>
+            <p className="line-clamp-1 text-sm text-muted-foreground">by {series.author}</p>
           )}
         </div>
 
         {/* Enhanced progress section */}
         {series.total_chapters > 0 && (
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm text-white/60">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <BookOpen className="h-4 w-4" />
               <span>
                 {series.read_chapters} / {series.total_chapters} chapters
               </span>
               {readingStatus === 'completed' && <Check className="h-4 w-4 text-green-500" />}
-              {readingStatus === 'in-progress' && <Clock className="h-4 w-4 text-orange-500" />}
+              {readingStatus === 'in-progress' && <Clock className="h-4 w-4 text-primary" />}
             </div>
 
             <ProgressBar
