@@ -10,6 +10,7 @@ import { GlassCard } from '@/components/ui/glass-card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
+import { TagChipList } from '@/components/tags';
 import { cn } from '@/lib/utils';
 import { SeriesResponse } from '@/lib/api';
 import { Book, BookOpen, Play, Check, Clock } from 'lucide-react';
@@ -110,6 +111,17 @@ export function SeriesCard({ series, className }: SeriesCardProps) {
               </Badge>
             )}
           </div>
+        )}
+
+        {series.user_tags && series.user_tags.length > 0 && (
+          <TagChipList
+            tags={series.user_tags}
+            maxVisible={3}
+            chipProps={{
+              size: 'sm',
+              variant: 'secondary',
+            }}
+          />
         )}
 
         <div className="flex gap-2 pt-2">
