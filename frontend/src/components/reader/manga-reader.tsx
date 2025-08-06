@@ -164,17 +164,21 @@ export function MangaReader({ chapterId, initialPage = 1, className }: MangaRead
   }, [router, chapter]);
 
   const toggleControls = useCallback(() => {
+    if (controlsTimer) {
+      clearTimeout(controlsTimer);
+      setControlsTimer(null);
+    }
     setShowControls((prev) => !prev);
-    resetControlsTimer();
-  }, [resetControlsTimer]);
+  }, [controlsTimer]);
 
   // Keyboard navigation
-  useKeyboardNavigation({
+  const { shortcuts } = useKeyboardNavigation({
     onNextPage: nextPage,
     onPrevPage: prevPage,
     onFirstPage: firstPage,
     onLastPage: lastPage,
     onToggleFullscreen: toggleFullscreen,
+    onToggleControls: toggleControls,
     onExit: exitReader,
   });
 
@@ -409,6 +413,7 @@ export function MangaReader({ chapterId, initialPage = 1, className }: MangaRead
       )}
       onMouseMove={resetControlsTimer}
       onTouchStart={resetControlsTimer}
+      data-testid="manga-reader"
     >
       {/* Header controls */}
       <div
@@ -424,16 +429,27 @@ export function MangaReader({ chapterId, initialPage = 1, className }: MangaRead
               size="icon"
               onClick={exitReader}
               className="hover:bg-white/20"
-              aria-label="Exit reader"
+              aria-label="Back"
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
               <h1 className="font-semibold">{chapter.series_title}</h1>
-              <p className="text-sm text-white/70">
-                Chapter {chapter.chapter_number}
-                {chapter.title && ` - ${chapter.title}`}
-              </p>
+              <div className="space-y-1">
+                <p className="text-sm text-white/70">
+                  Chapter {chapter.chapter_number}
+                  {chapter.title && ` - ${chapter.title}`}
+                </p>
+                <div className="flex items-center gap-2 text-xs text-white/60">
+                  <span data-testid="page-counter">
+                    {currentPage} / {pagesInfo.total_pages}
+                  </span>
+                  <span>•</span>
+                  <span data-testid="progress-text">
+                    Progress: {Math.round((currentPage / pagesInfo.total_pages) * 100)}%
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -545,6 +561,22 @@ export function MangaReader({ chapterId, initialPage = 1, className }: MangaRead
             }}
           />
         ))}
+      </div>
+
+      {/* Keyboard shortcuts help - bottom left corner */}
+      <div
+        className={cn(
+          'fixed bottom-4 left-4 z-40 max-w-xs rounded-lg bg-black/80 p-3 text-xs text-white/70 transition-all duration-300',
+          showControls ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'
+        )}
+      >
+        <div className="space-y-1">
+          <div>← → : Navigate pages</div>
+          <div>Space: Next page</div>
+          <div>F: Toggle fit mode</div>
+          <div>U: Toggle UI</div>
+          <div>Esc: Exit reader</div>
+        </div>
       </div>
 
       {/* Page navigation controls */}

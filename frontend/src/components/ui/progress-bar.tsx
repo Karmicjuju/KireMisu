@@ -99,7 +99,7 @@ const ProgressBar = React.forwardRef<HTMLDivElement, ProgressBarProps>(
               {description && <div className="text-xs text-white/60">{description}</div>}
             </div>
             {showValue && (
-              <div className="font-mono text-xs text-white/70">{Math.round(displayValue)}%</div>
+              <div className="font-mono text-xs text-white/70" data-testid="progress-percentage">{Math.round(displayValue)}%</div>
             )}
           </div>
         )}
@@ -112,6 +112,7 @@ const ProgressBar = React.forwardRef<HTMLDivElement, ProgressBarProps>(
           aria-valuemin={0}
           aria-valuemax={max}
           aria-label={label || `Progress: ${Math.round(percentage)}%`}
+          data-testid="progress-bar"
           {...props}
         >
           <div
@@ -120,6 +121,7 @@ const ProgressBar = React.forwardRef<HTMLDivElement, ProgressBarProps>(
               width: `${displayValue}%`,
               transition: animated ? 'width 500ms cubic-bezier(0.65, 0, 0.35, 1)' : 'none',
             }}
+            data-testid="progress-fill"
           />
 
           {/* Shimmer effect for loading state */}

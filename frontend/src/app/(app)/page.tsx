@@ -4,6 +4,9 @@ import { GlassCard } from '@/components/ui/glass-card';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Button } from '@/components/ui/button';
 import { ChapterList } from '@/components/library/chapter-list';
+import { ProgressStats, ReadingStreak } from '@/components/progress/progress-stats';
+import { RecentReads, ReadingCalendar } from '@/components/progress/recent-reads';
+import { useDashboardStats } from '@/hooks/use-reading-progress';
 import { BookOpen, TrendingUp, Clock, Star, Loader2, AlertTriangle } from 'lucide-react';
 import {
   dashboardApi,
@@ -17,14 +20,8 @@ import Link from 'next/link';
 // import { formatDistanceToNow } from 'date-fns'; // Temporarily disabled to prevent build errors
 
 export default function Dashboard() {
-  const {
-    data: stats,
-    error: statsError,
-    isLoading: statsLoading,
-  } = useSWR<DashboardStats>('/api/dashboard/stats', dashboardApi.getStats, {
-    refreshInterval: 30000, // Refresh every 30 seconds
-    errorRetryCount: 3,
-  });
+  // Use the new hook for dashboard stats
+  const { stats, loading: statsLoading, error: statsError } = useDashboardStats();
 
   const {
     data: recentSeries,
@@ -47,105 +44,25 @@ export default function Dashboard() {
         <p className="text-slate-400">Continue your manga journey where you left off</p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <GlassCard className="p-6">
-          <div className="flex items-center space-x-4">
-            <div className="rounded-full bg-orange-500/20 p-3">
-              <BookOpen className="h-6 w-6 text-orange-500" />
-            </div>
-            <div>
-              <p className="text-sm text-slate-400">Total Series</p>
-              <div className="flex items-center gap-2">
-                {statsLoading ? (
-                  <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-                ) : statsError ? (
-                  <AlertTriangle className="h-5 w-5 text-red-500" />
-                ) : (
-                  <p className="text-2xl font-bold">{stats?.total_series ?? 0}</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </GlassCard>
+      {/* Progress Statistics */}
+      <ProgressStats 
+        stats={stats} 
+        loading={statsLoading} 
+        error={statsError} 
+      />
 
-        <GlassCard className="p-6">
-          <div className="flex items-center space-x-4">
-            <div className="rounded-full bg-blue-500/20 p-3">
-              <TrendingUp className="h-6 w-6 text-blue-500" />
-            </div>
-            <div>
-              <p className="text-sm text-slate-400">Chapters Read</p>
-              <div className="flex items-center gap-2">
-                {statsLoading ? (
-                  <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-                ) : statsError ? (
-                  <AlertTriangle className="h-5 w-5 text-red-500" />
-                ) : (
-                  <>
-                    <p className="text-2xl font-bold">{stats?.chapters_read ?? 0}</p>
-                    {stats && stats.total_chapters > 0 && (
-                      <span className="text-sm text-slate-400">/ {stats.total_chapters}</span>
-                    )}
-                  </>
-                )}
-              </div>
-              {stats && stats.total_chapters > 0 && (
-                <div className="mt-2">
-                  <ProgressBar
-                    value={stats.chapters_read}
-                    max={stats.total_chapters}
-                    size="sm"
-                    variant="subtle"
-                    colorScheme="info"
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        </GlassCard>
-
-        <GlassCard className="p-6">
-          <div className="flex items-center space-x-4">
-            <div className="rounded-full bg-green-500/20 p-3">
-              <Clock className="h-6 w-6 text-green-500" />
-            </div>
-            <div>
-              <p className="text-sm text-slate-400">Reading Time</p>
-              <div className="flex items-center gap-2">
-                {statsLoading ? (
-                  <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-                ) : statsError ? (
-                  <AlertTriangle className="h-5 w-5 text-red-500" />
-                ) : (
-                  <p className="text-2xl font-bold">
-                    {formatReadingTime(stats?.reading_time_hours ?? 0)}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        </GlassCard>
-
-        <GlassCard className="p-6">
-          <div className="flex items-center space-x-4">
-            <div className="rounded-full bg-purple-500/20 p-3">
-              <Star className="h-6 w-6 text-purple-500" />
-            </div>
-            <div>
-              <p className="text-sm text-slate-400">Favorites</p>
-              <div className="flex items-center gap-2">
-                {statsLoading ? (
-                  <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-                ) : statsError ? (
-                  <AlertTriangle className="h-5 w-5 text-red-500" />
-                ) : (
-                  <p className="text-2xl font-bold">{stats?.favorites_count ?? 0}</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </GlassCard>
+      {/* Reading Streak */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <ReadingStreak 
+          stats={stats} 
+          loading={statsLoading} 
+          error={statsError} 
+        />
+        <ReadingCalendar 
+          stats={stats} 
+          loading={statsLoading} 
+          error={statsError} 
+        />
       </div>
 
       {/* Continue Reading Section */}
@@ -242,41 +159,12 @@ export default function Dashboard() {
       </div>
 
       {/* Recent Activity */}
-      {stats && stats.recent_activity && stats.recent_activity.length > 0 && (
-        <div>
-          <h2 className="mb-4 text-xl font-semibold">Recent Activity</h2>
-          <GlassCard className="p-4">
-            <div className="space-y-3">
-              {stats.recent_activity.slice(0, 5).map((activity) => (
-                <div key={activity.id} className="flex items-center gap-3 text-sm">
-                  <div className="rounded-full bg-orange-500/20 p-2">
-                    {activity.type === 'chapter_read' && (
-                      <BookOpen className="h-4 w-4 text-orange-500" />
-                    )}
-                    {activity.type === 'series_added' && (
-                      <Star className="h-4 w-4 text-purple-500" />
-                    )}
-                    {activity.type === 'progress_updated' && (
-                      <TrendingUp className="h-4 w-4 text-blue-500" />
-                    )}
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-white">{activity.title}</p>
-                    {activity.subtitle && (
-                      <p className="truncate text-xs text-white/60">{activity.subtitle}</p>
-                    )}
-                  </div>
-
-                  <div className="text-xs text-white/40">
-                    {new Date(activity.timestamp).toLocaleDateString()}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </GlassCard>
-        </div>
-      )}
+      <RecentReads
+        stats={stats}
+        loading={statsLoading}
+        error={statsError}
+        maxItems={5}
+      />
 
       {/* Quick Actions */}
       <div>

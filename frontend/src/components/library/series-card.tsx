@@ -31,7 +31,7 @@ export function SeriesCard({ series, className }: SeriesCardProps) {
   const readingStatus = isCompleted ? 'completed' : hasProgress ? 'in-progress' : 'unread';
 
   return (
-    <GlassCard className={cn('overflow-hidden transition-all hover:scale-105', className)}>
+    <GlassCard className={cn('overflow-hidden transition-all hover:scale-105', className)} data-testid="series-card">
       <div className="relative flex aspect-[3/4] items-center justify-center bg-gradient-to-br from-muted to-muted/80">
         {/* Placeholder for cover image */}
         <div className="text-muted-foreground/60">
@@ -41,15 +41,15 @@ export function SeriesCard({ series, className }: SeriesCardProps) {
         {/* Reading status overlay */}
         <div className="absolute right-2 top-2 flex gap-1">
           {isCompleted && (
-            <Badge variant="secondary" className="text-xs">
+            <Badge variant="secondary" className="text-xs" data-testid="completion-badge">
               <Check className="mr-1 h-3 w-3" />
               Complete
             </Badge>
           )}
           {hasProgress && !isCompleted && (
-            <Badge variant="outline" className="text-xs">
+            <Badge variant="outline" className="text-xs" data-testid="progress-badge">
               <Clock className="mr-1 h-3 w-3" />
-              {progressPercentage}%
+              <span data-testid="progress-percentage">{progressPercentage}%</span>
             </Badge>
           )}
         </div>
@@ -63,7 +63,9 @@ export function SeriesCard({ series, className }: SeriesCardProps) {
               variant="strong"
               colorScheme={isCompleted ? 'success' : 'primary'}
               animated={false}
+              data-testid="progress-bar"
             />
+            <div className="sr-only" data-testid="progress-fill" style={{ width: `${progressPercentage}%` }} />
           </div>
         )}
       </div>
@@ -81,7 +83,7 @@ export function SeriesCard({ series, className }: SeriesCardProps) {
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <BookOpen className="h-4 w-4" />
-              <span>
+              <span data-testid="chapter-count-text">
                 {series.read_chapters} / {series.total_chapters} chapters
               </span>
               {readingStatus === 'completed' && <Check className="h-4 w-4 text-green-500" />}
@@ -94,6 +96,7 @@ export function SeriesCard({ series, className }: SeriesCardProps) {
               size="sm"
               colorScheme={isCompleted ? 'success' : 'primary'}
               showValue={hasProgress}
+              data-testid="progress-bar"
             />
           </div>
         )}
