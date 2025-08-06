@@ -543,6 +543,7 @@ class ChapterResponse(BaseModel):
     is_read: bool = Field(..., description="Whether chapter is marked as read")
     last_read_page: int = Field(..., description="Last read page number")
     read_at: Optional[datetime] = Field(None, description="When chapter was read")
+    started_reading_at: Optional[datetime] = Field(None, description="When reading started")
 
     # Timestamps
     created_at: datetime = Field(..., description="Creation timestamp")
@@ -570,6 +571,7 @@ class ChapterResponse(BaseModel):
             "is_read": chapter.is_read,
             "last_read_page": chapter.last_read_page,
             "read_at": chapter.read_at,
+            "started_reading_at": getattr(chapter, 'started_reading_at', None),
             "created_at": chapter.created_at,
             "updated_at": chapter.updated_at,
         }
@@ -638,6 +640,7 @@ class ChapterInfoResponse(BaseModel):
     is_read: bool = Field(..., description="Whether chapter is marked as read")
     last_read_page: int = Field(..., description="Last read page number")
     read_at: Optional[datetime] = Field(None, description="When chapter was read")
+    started_reading_at: Optional[datetime] = Field(None, description="When reading started")
 
     # Timestamps
     created_at: datetime = Field(..., description="Creation timestamp")
@@ -661,6 +664,56 @@ class ChapterMarkReadResponse(BaseModel):
     is_read: bool = Field(..., description="Updated read status")
     read_at: Optional[datetime] = Field(None, description="When chapter was marked as read")
     series_read_chapters: int = Field(..., description="Updated series read chapter count")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReadingProgressUpdateRequest(BaseModel):
+    """Schema for updating reading progress."""
+
+    current_page: int = Field(..., ge=0, description="Current page being read (0-indexed)")
+    is_complete: Optional[bool] = Field(None, description="Mark as complete if specified")
+
+    @field_validator("current_page")
+    @classmethod
+    def validate_current_page(cls, v):
+        """Validate current page is non-negative."""
+        if v < 0:
+            raise ValueError("Current page must be non-negative")
+        return v
+
+
+class ReadingProgressResponse(BaseModel):
+    """Schema for reading progress responses."""
+
+    chapter_id: UUID = Field(..., description="Chapter unique identifier")
+    series_id: UUID = Field(..., description="Series unique identifier")
+    current_page: int = Field(..., description="Current page number (0-indexed)")
+    total_pages: int = Field(..., description="Total pages in chapter")
+    progress_percentage: float = Field(..., description="Reading progress as percentage (0-100)")
+    is_read: bool = Field(..., description="Whether chapter is marked as read")
+    started_at: Optional[datetime] = Field(None, description="When reading started")
+    read_at: Optional[datetime] = Field(None, description="When chapter was completed")
+    updated_at: datetime = Field(..., description="Last progress update")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserReadingStatsResponse(BaseModel):
+    """Schema for user reading statistics."""
+
+    total_series: int = Field(..., description="Total series in library")
+    total_chapters: int = Field(..., description="Total chapters in library")
+    read_chapters: int = Field(..., description="Number of read chapters")
+    in_progress_chapters: int = Field(..., description="Chapters with partial progress")
+    overall_progress_percentage: float = Field(..., description="Overall reading progress (0-100)")
+    reading_streak_days: int = Field(..., description="Current reading streak in days")
+    chapters_read_this_week: int = Field(..., description="Chapters read this week")
+    chapters_read_this_month: int = Field(..., description="Chapters read this month")
+    favorite_genres: List[str] = Field(default_factory=list, description="Most read genres")
+    recent_activity: List[ChapterResponse] = Field(
+        default_factory=list, description="Recent reading activity (up to 10)"
+    )
 
     model_config = ConfigDict(from_attributes=True)
 

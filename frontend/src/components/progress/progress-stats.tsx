@@ -4,7 +4,7 @@
 
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { GlassCard } from '@/components/ui/glass-card';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { cn } from '@/lib/utils';
@@ -31,14 +31,19 @@ export interface ProgressStatsProps {
 
 export function ProgressStats({ stats, loading, error, className }: ProgressStatsProps) {
   const formatReadingTime = (hours: number) => {
+    if (!hours || isNaN(hours) || hours < 0) return '0m';
     if (hours < 1) return `${Math.round(hours * 60)}m`;
     if (hours < 24) return `${Math.round(hours)}h`;
     return `${Math.round(hours / 24)}d`;
   };
 
-  const overallProgress = stats && stats.total_chapters > 0 
-    ? Math.round((stats.chapters_read / stats.total_chapters) * 100)
-    : 0;
+  const overallProgress = useMemo(() => {
+    if (!stats || !stats.total_chapters || stats.total_chapters <= 0 || stats.chapters_read == null) {
+      return 0;
+    }
+    const progress = Math.round((stats.chapters_read / stats.total_chapters) * 100);
+    return isNaN(progress) ? 0 : Math.min(100, Math.max(0, progress));
+  }, [stats]);
 
   return (
     <div className={cn('space-y-6', className)} data-testid="dashboard-stats">
@@ -172,7 +177,7 @@ export function ProgressStats({ stats, loading, error, className }: ProgressStat
               </div>
               <div className="text-right">
                 <p className="text-3xl font-bold text-white" data-testid="overall-progress">
-                  {overallProgress}%
+                  {isNaN(overallProgress) ? 0 : overallProgress}%
                 </p>
                 <p className="text-sm text-slate-400">Complete</p>
               </div>
@@ -192,23 +197,33 @@ export function ProgressStats({ stats, loading, error, className }: ProgressStat
             <div className="grid grid-cols-3 gap-4 pt-2" data-testid="series-breakdown">
               <div className="text-center">
                 <p className="text-2xl font-bold text-green-500">
-                  {stats.total_series > 0 ? 
-                    Math.round((stats.chapters_read / stats.total_chapters) * stats.total_series) : 0}
+                  {(() => {
+                    if (!stats.total_series || !stats.total_chapters || stats.total_chapters <= 0) return 0;
+                    const completed = Math.round(((stats.chapters_read || 0) / stats.total_chapters) * stats.total_series);
+                    return isNaN(completed) ? 0 : Math.max(0, completed);
+                  })()}
                 </p>
-                <p className="text-xs text-slate-400">Completed:</p>
+                <p className="text-xs text-slate-400">Completed</p>
               </div>
               <div className="text-center">
                 <p className="text-2xl font-bold text-orange-500">
-                  {stats.total_series > 0 ? 
-                    Math.max(0, stats.total_series - Math.round((stats.chapters_read / stats.total_chapters) * stats.total_series)) : 0}
+                  {(() => {
+                    if (!stats.total_series || !stats.total_chapters || stats.total_chapters <= 0) return 0;
+                    const completed = Math.round(((stats.chapters_read || 0) / stats.total_chapters) * stats.total_series);
+                    const inProgress = Math.max(0, stats.total_series - (isNaN(completed) ? 0 : completed));
+                    return isNaN(inProgress) ? 0 : inProgress;
+                  })()}
                 </p>
-                <p className="text-xs text-slate-400">In Progress:</p>
+                <p className="text-xs text-slate-400">In Progress</p>
               </div>
               <div className="text-center">
                 <p className="text-2xl font-bold text-slate-400">
-                  {Math.max(0, stats.total_series - stats.chapters_read)}
+                  {(() => {
+                    const unread = Math.max(0, (stats.total_series || 0) - (stats.chapters_read || 0));
+                    return isNaN(unread) ? 0 : unread;
+                  })()}
                 </p>
-                <p className="text-xs text-slate-400">Unread:</p>
+                <p className="text-xs text-slate-400">Unread</p>
               </div>
             </div>
           </div>

@@ -298,32 +298,34 @@ async def update_reading_progress(
             detail=f"Invalid page number {progress.last_read_page}. Chapter has {chapter.page_count} pages.",
         )
 
-    # Update progress
-    update_data = {
-        "last_read_page": progress.last_read_page,
-        "is_read": progress.is_read
-        if progress.is_read is not None
-        else (progress.last_read_page >= chapter.page_count - 1),
-    }
+    # Use the enhanced reading progress service for comprehensive tracking
+    try:
+        from kiremisu.services.reading_progress import ReadingProgressService
+        from kiremisu.database.schemas import ReadingProgressUpdateRequest
+        
+        # Convert from ChapterProgressUpdate to ReadingProgressUpdateRequest
+        progress_request = ReadingProgressUpdateRequest(
+            current_page=progress.last_read_page,
+            is_complete=progress.is_read
+        )
+        
+        # Update progress using the enhanced service (this handles all the logic)
+        await ReadingProgressService.update_chapter_progress(
+            db, str(chapter_id), progress_request
+        )
+        
+        # Get updated chapter
+        result = await db.execute(select(Chapter).where(Chapter.id == chapter_id))
+        updated_chapter = result.scalar_one()
+        
+    except ValueError as e:
+        # Convert service errors to appropriate HTTP exceptions
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
 
-    if progress.is_read or progress.last_read_page >= chapter.page_count - 1:
-        from datetime import datetime
-
-        update_data["read_at"] = datetime.utcnow()
-
-    await db.execute(update(Chapter).where(Chapter.id == chapter_id).values(**update_data))
-    await db.commit()
-
-    # Get updated chapter
-    result = await db.execute(select(Chapter).where(Chapter.id == chapter_id))
-    updated_chapter = result.scalar_one()
-
-    return ChapterProgressResponse(
-        id=updated_chapter.id,
-        last_read_page=updated_chapter.last_read_page,
-        is_read=updated_chapter.is_read,
-        read_at=updated_chapter.read_at,
-    )
+    return ChapterProgressResponse.from_model(updated_chapter)
 
 
 @router.get("/series/{series_id}/chapters")
@@ -371,6 +373,7 @@ async def get_series_chapters(series_id: UUID, db: AsyncSession = Depends(get_db
                 "is_read": chapter.is_read,
                 "last_read_page": chapter.last_read_page,
                 "read_at": chapter.read_at.isoformat() if chapter.read_at else None,
+                "started_reading_at": getattr(chapter, 'started_reading_at', None).isoformat() if getattr(chapter, 'started_reading_at', None) else None,
             }
             for chapter in chapters
         ],

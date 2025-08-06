@@ -376,7 +376,7 @@ export const chaptersApi = {
   },
 
   getChapterPageUrl(chapterId: string, pageNumber: number): string {
-    return `${api.defaults.baseURL}/api/reader/chapter/${chapterId}/page/${pageNumber}`;
+    return `${api.defaults.baseURL}/api/reader/chapter/${chapterId}/page/${pageNumber - 1}`;
   },
 
   async getSeriesChapters(

@@ -10,6 +10,7 @@ export interface KeyboardNavigationOptions {
   onFirstPage?: () => void;
   onLastPage?: () => void;
   onToggleFullscreen?: () => void;
+  onToggleControls?: () => void;
   onExit?: () => void;
   disabled?: boolean;
 }
@@ -20,6 +21,7 @@ export function useKeyboardNavigation({
   onFirstPage,
   onLastPage,
   onToggleFullscreen,
+  onToggleControls,
   onExit,
   disabled = false,
 }: KeyboardNavigationOptions) {
@@ -41,6 +43,10 @@ export function useKeyboardNavigation({
         'f',
         'F',
         'Escape',
+        'a',
+        'd',
+        'u',
+        'U',
       ];
 
       if (navigationKeys.includes(event.key)) {
@@ -52,11 +58,13 @@ export function useKeyboardNavigation({
         case 'ArrowRight':
         case ' ': // Space bar
         case 'PageDown':
+        case 'd': // Alternative navigation
           onNextPage();
           break;
 
         case 'ArrowLeft':
         case 'PageUp':
+        case 'a': // Alternative navigation
           onPrevPage();
           break;
 
@@ -89,6 +97,13 @@ export function useKeyboardNavigation({
           }
           break;
 
+        case 'u':
+        case 'U':
+          if (onToggleControls) {
+            onToggleControls();
+          }
+          break;
+
         case 'Escape':
           if (onExit) {
             onExit();
@@ -96,7 +111,7 @@ export function useKeyboardNavigation({
           break;
       }
     },
-    [onNextPage, onPrevPage, onFirstPage, onLastPage, onToggleFullscreen, onExit, disabled]
+    [onNextPage, onPrevPage, onFirstPage, onLastPage, onToggleFullscreen, onToggleControls, onExit, disabled]
   );
 
   useEffect(() => {

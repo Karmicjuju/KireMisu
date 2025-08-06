@@ -94,6 +94,7 @@ export function PageNavigation({
                 disabled={currentPage === 1}
                 className="hover:bg-white/20"
                 aria-label="Previous page"
+                data-testid="prev-page-button"
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -120,6 +121,7 @@ export function PageNavigation({
                 disabled={currentPage === totalPages}
                 className="hover:bg-white/20"
                 aria-label="Next page"
+                data-testid="next-page-button"
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>

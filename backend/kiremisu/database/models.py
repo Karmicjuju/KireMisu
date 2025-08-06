@@ -170,7 +170,8 @@ class Chapter(Base):
     # Reading progress
     is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
     last_read_page: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    started_reading_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -198,6 +199,8 @@ class Chapter(Base):
         Index("ix_chapters_series_read", "series_id", "is_read"),
         # Index for recent read chapters (for dashboard and progress queries)
         Index("ix_chapters_read_at", "is_read", "read_at"),
+        # Index for started reading tracking (for progress queries)
+        Index("ix_chapters_started_reading_at", "started_reading_at"),
     )
 
 

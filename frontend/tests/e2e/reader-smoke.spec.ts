@@ -97,7 +97,7 @@ test.describe('Reader Smoke Tests', () => {
     await expect(page.getByText('Chapter 1 - First Chapter')).toBeVisible();
 
     // Verify page counter components
-    await expect(page.getByText('/ 5')).toBeVisible();
+    await expect(page.getByTestId('page-counter')).toBeVisible();
     await expect(page.locator('input[value="1"]')).toBeVisible();
 
     // Verify progress bar exists
@@ -109,25 +109,17 @@ test.describe('Reader Smoke Tests', () => {
     await expect(page.locator('img[alt*="Page 1"]')).toBeVisible({ timeout: 10000 });
 
     // Click next page button
-    await page
-      .getByRole('button')
-      .filter({ has: page.locator('svg').first() })
-      .last()
-      .click();
+    await page.getByTestId('next-page-button').click();
 
     // Verify we're on page 2
-    await expect(page.getByText('2 / 5')).toBeVisible();
+    await expect(page.getByTestId('page-counter')).toContainText('2 / 5');
     await expect(page.locator('img[alt*="Page 2"]')).toBeVisible();
 
     // Click previous page button
-    await page
-      .getByRole('button')
-      .filter({ has: page.locator('svg').first() })
-      .first()
-      .click();
+    await page.getByTestId('prev-page-button').click();
 
     // Verify we're back on page 1
-    await expect(page.getByText('1 / 5')).toBeVisible();
+    await expect(page.getByTestId('page-counter')).toContainText('1 / 5');
     await expect(page.locator('img[alt*="Page 1"]')).toBeVisible();
   });
 
@@ -137,21 +129,21 @@ test.describe('Reader Smoke Tests', () => {
 
     // Use right arrow key to go to next page
     await page.keyboard.press('ArrowRight');
-    await expect(page.getByText('2 / 5')).toBeVisible();
+    await expect(page.getByTestId('page-counter')).toContainText('2 / 5');
     await expect(page.locator('img[alt*="Page 2"]')).toBeVisible();
 
     // Use left arrow key to go to previous page
     await page.keyboard.press('ArrowLeft');
-    await expect(page.getByText('1 / 5')).toBeVisible();
+    await expect(page.getByTestId('page-counter')).toContainText('1 / 5');
     await expect(page.locator('img[alt*="Page 1"]')).toBeVisible();
 
     // Use spacebar to go to next page
     await page.keyboard.press('Space');
-    await expect(page.getByText('2 / 5')).toBeVisible();
+    await expect(page.getByTestId('page-counter')).toContainText('2 / 5');
 
     // Use 'a' key to go to previous page (alternative shortcut)
     await page.keyboard.press('a');
-    await expect(page.getByText('1 / 5')).toBeVisible();
+    await expect(page.getByTestId('page-counter')).toContainText('1 / 5');
   });
 
   test('should navigate using image click zones', async ({ page }) => {
@@ -164,14 +156,14 @@ test.describe('Reader Smoke Tests', () => {
     if (bbox) {
       // Click on right side of image to go to next page
       await page.mouse.click(bbox.x + bbox.width * 0.75, bbox.y + bbox.height / 2);
-      await expect(page.getByText('2 / 5')).toBeVisible();
+      await expect(page.getByTestId('page-counter')).toContainText('2 / 5');
 
       // Click on left side of image to go to previous page
       const image2 = page.locator('img[alt*="Page 2"]');
       const bbox2 = await image2.boundingBox();
       if (bbox2) {
         await page.mouse.click(bbox2.x + bbox2.width * 0.25, bbox2.y + bbox2.height / 2);
-        await expect(page.getByText('1 / 5')).toBeVisible();
+        await expect(page.getByTestId('page-counter')).toContainText('1 / 5');
       }
     }
   });
@@ -197,12 +189,12 @@ test.describe('Reader Smoke Tests', () => {
     // Navigate to page 2
     await page.keyboard.press('ArrowRight');
 
-    // Check for loading spinner
-    await expect(page.locator('.animate-spin')).toBeVisible();
+    // Check for loading spinner (be more specific to avoid multiple spinners)
+    await expect(page.locator('.animate-spin').first()).toBeVisible();
 
     // Wait for loading to complete
-    await expect(page.locator('.animate-spin')).not.toBeVisible({ timeout: 2000 });
-    await expect(page.getByText('2 / 5')).toBeVisible();
+    await expect(page.locator('.animate-spin').first()).not.toBeVisible({ timeout: 2000 });
+    await expect(page.getByTestId('page-counter')).toContainText('2 / 5');
   });
 
   test('should update reading progress', async ({ page }) => {
@@ -250,21 +242,21 @@ test.describe('Reader Smoke Tests', () => {
 
     // Initially UI should be visible
     await expect(page.getByText('Test Manga Series')).toBeVisible();
-    await expect(page.getByText('1 / 5')).toBeVisible();
+    await expect(page.getByTestId('page-counter')).toBeVisible();
 
     // Press U to hide UI
     await page.keyboard.press('u');
 
     // UI should be hidden (check with timeout as it might animate)
     await expect(page.getByText('Test Manga Series')).not.toBeVisible({ timeout: 2000 });
-    await expect(page.getByText('1 / 5')).not.toBeVisible({ timeout: 2000 });
+    await expect(page.getByTestId('page-counter')).not.toBeVisible({ timeout: 2000 });
 
     // Press U again to show UI
     await page.keyboard.press('u');
 
     // UI should be visible again
     await expect(page.getByText('Test Manga Series')).toBeVisible();
-    await expect(page.getByText('1 / 5')).toBeVisible();
+    await expect(page.getByTestId('page-counter')).toBeVisible();
   });
 
   test('should go back to library when clicking back button', async ({ page }) => {
@@ -295,16 +287,16 @@ test.describe('Reader Smoke Tests', () => {
     // Go to page 3 first
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowRight');
-    await expect(page.getByText('3 / 5')).toBeVisible();
+    await expect(page.getByTestId('page-counter')).toContainText('3 / 5');
 
     // Press Home to go to first page
     await page.keyboard.press('Home');
-    await expect(page.getByText('1 / 5')).toBeVisible();
+    await expect(page.getByTestId('page-counter')).toContainText('1 / 5');
     await expect(page.locator('img[alt*="Page 1"]')).toBeVisible();
 
     // Press End to go to last page
     await page.keyboard.press('End');
-    await expect(page.getByText('5 / 5')).toBeVisible();
+    await expect(page.getByTestId('page-counter')).toContainText('5 / 5');
     await expect(page.locator('img[alt*="Page 5"]')).toBeVisible();
   });
 
@@ -313,22 +305,14 @@ test.describe('Reader Smoke Tests', () => {
     await expect(page.locator('img[alt*="Page 1"]')).toBeVisible({ timeout: 10000 });
 
     // On first page, previous button should be disabled
-    const prevButton = page
-      .getByRole('button')
-      .filter({ has: page.locator('svg').first() })
-      .first();
-    await expect(prevButton).toBeDisabled();
+    await expect(page.getByTestId('prev-page-button')).toBeDisabled();
 
     // Navigate to last page
     await page.keyboard.press('End');
-    await expect(page.getByText('5 / 5')).toBeVisible();
+    await expect(page.getByTestId('page-counter')).toContainText('5 / 5');
 
     // On last page, next button should be disabled
-    const nextButton = page
-      .getByRole('button')
-      .filter({ has: page.locator('svg').first() })
-      .last();
-    await expect(nextButton).toBeDisabled();
+    await expect(page.getByTestId('next-page-button')).toBeDisabled();
   });
 
   test('should show keyboard shortcuts help', async ({ page }) => {
@@ -381,14 +365,11 @@ test.describe('Reader Smoke Tests', () => {
     await page.keyboard.press('Tab');
 
     // Should be able to activate buttons with Enter/Space
-    const nextButton = page
-      .getByRole('button')
-      .filter({ has: page.locator('svg').first() })
-      .last();
+    const nextButton = page.getByTestId('next-page-button');
     await nextButton.focus();
     await expect(nextButton).toBeFocused();
 
     await page.keyboard.press('Enter');
-    await expect(page.getByText('2 / 5')).toBeVisible();
+    await expect(page.getByTestId('page-counter')).toContainText('2 / 5');
   });
 });
