@@ -409,6 +409,7 @@ export function MangaReader({ chapterId, initialPage = 1, className }: MangaRead
       )}
       onMouseMove={resetControlsTimer}
       onTouchStart={resetControlsTimer}
+      data-testid="manga-reader"
     >
       {/* Header controls */}
       <div
@@ -430,10 +431,21 @@ export function MangaReader({ chapterId, initialPage = 1, className }: MangaRead
             </Button>
             <div>
               <h1 className="font-semibold">{chapter.series_title}</h1>
-              <p className="text-sm text-white/70">
-                Chapter {chapter.chapter_number}
-                {chapter.title && ` - ${chapter.title}`}
-              </p>
+              <div className="space-y-1">
+                <p className="text-sm text-white/70">
+                  Chapter {chapter.chapter_number}
+                  {chapter.title && ` - ${chapter.title}`}
+                </p>
+                <div className="flex items-center gap-2 text-xs text-white/60">
+                  <span data-testid="page-counter">
+                    {currentPage} / {pagesInfo.total_pages}
+                  </span>
+                  <span>•</span>
+                  <span data-testid="progress-text">
+                    Progress: {Math.round((currentPage / pagesInfo.total_pages) * 100)}%
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 

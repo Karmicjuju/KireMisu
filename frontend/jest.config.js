@@ -25,6 +25,7 @@ const customJestConfig = {
   },
   testMatch: [
     '<rootDir>/tests/unit/**/*.{js,jsx,ts,tsx}',
+    '<rootDir>/tests/integration/**/*.{js,jsx,ts,tsx}',
     '<rootDir>/src/**/__tests__/**/*.{js,jsx,ts,tsx}',
     '<rootDir>/src/**/*.{test,spec}.{js,jsx,ts,tsx}',
   ],

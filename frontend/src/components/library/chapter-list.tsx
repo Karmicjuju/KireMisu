@@ -88,6 +88,7 @@ const ChapterItem = React.forwardRef<HTMLDivElement, ChapterItemProps>(
             'flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 p-3 transition-all hover:bg-white/10',
             chapter.is_read && 'opacity-75'
           )}
+          data-testid={`chapter-${chapter.id}`}
         >
           <div className="flex-shrink-0">
             <MarkReadButton
@@ -95,6 +96,7 @@ const ChapterItem = React.forwardRef<HTMLDivElement, ChapterItemProps>(
               onToggle={handleMarkRead}
               variant="ghost"
               size="sm"
+              data-testid="mark-read-button"
             />
           </div>
 
@@ -112,6 +114,7 @@ const ChapterItem = React.forwardRef<HTMLDivElement, ChapterItemProps>(
                   size="sm"
                   variant="subtle"
                   colorScheme="primary"
+                  data-testid="chapter-progress-bar"
                 />
               </div>
             )}
@@ -133,6 +136,7 @@ const ChapterItem = React.forwardRef<HTMLDivElement, ChapterItemProps>(
       <GlassCard
         ref={ref}
         className={cn('transition-all hover:scale-[1.02]', chapter.is_read && 'opacity-75')}
+        data-testid={`chapter-${chapter.id}`}
       >
         <div className="p-4">
           <div className="mb-3 flex items-start justify-between">
@@ -173,7 +177,12 @@ const ChapterItem = React.forwardRef<HTMLDivElement, ChapterItemProps>(
               </div>
             </div>
 
-            <MarkReadButton isRead={chapter.is_read} onToggle={handleMarkRead} variant="subtle" />
+            <MarkReadButton 
+              isRead={chapter.is_read} 
+              onToggle={handleMarkRead} 
+              variant="subtle"
+              data-testid="mark-read-button"
+            />
           </div>
 
           {showProgress && (
@@ -183,6 +192,7 @@ const ChapterItem = React.forwardRef<HTMLDivElement, ChapterItemProps>(
                 label="Reading Progress"
                 showValue={progressPercentage > 0}
                 colorScheme={chapter.is_read ? 'success' : 'primary'}
+                data-testid="chapter-progress-bar"
               />
             </div>
           )}
@@ -286,7 +296,7 @@ const ChapterList = React.forwardRef<HTMLDivElement, ChapterListProps>(
     }
 
     return (
-      <div ref={ref} className={cn('space-y-4', className)}>
+      <div ref={ref} className={cn('space-y-4', className)} data-testid="chapter-list">
         {showMarkAll && (
           <div className="flex items-center justify-between">
             <div className="text-sm text-white/60">
