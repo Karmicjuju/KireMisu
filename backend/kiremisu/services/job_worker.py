@@ -59,7 +59,7 @@ class JobWorker:
 
             # Complete job successfully - mark as completed
             await self._update_job_status(
-                db, job.id, "completed", completed_at=datetime.now(timezone.utc), error_message=None
+                db, job.id, "completed", completed_at=datetime.now(timezone.utc).replace(tzinfo=None), error_message=None
             )
 
             # Commit all changes in single transaction
@@ -115,7 +115,7 @@ class JobWorker:
                     db,
                     job.id,
                     "failed",
-                    completed_at=datetime.now(timezone.utc),
+                    completed_at=datetime.now(timezone.utc).replace(tzinfo=None),
                     error_message=error_msg,
                 )
                 logger.error(f"Job {job.id} failed permanently after {job.retry_count} retries")
@@ -224,7 +224,7 @@ class JobWorker:
             error_message: Optional error message
             retry_count: Optional retry count
         """
-        update_values = {"status": status, "updated_at": datetime.now(timezone.utc)}
+        update_values = {"status": status, "updated_at": datetime.now(timezone.utc).replace(tzinfo=None)}
 
         # Handle started_at explicitly - None means clear it for retries
         if started_at is not None:
@@ -252,7 +252,7 @@ class JobWorker:
         await db.execute(
             update(LibraryPath)
             .where(LibraryPath.id == library_path_id)
-            .values(last_scan=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
+            .values(last_scan=datetime.now(timezone.utc).replace(tzinfo=None), updated_at=datetime.now(timezone.utc).replace(tzinfo=None))
         )
         # Note: Commit is handled by caller for transaction consistency
 
@@ -265,7 +265,7 @@ class JobWorker:
         await db.execute(
             update(LibraryPath)
             .where(LibraryPath.enabled == True)
-            .values(last_scan=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
+            .values(last_scan=datetime.now(timezone.utc).replace(tzinfo=None), updated_at=datetime.now(timezone.utc).replace(tzinfo=None))
         )
         # Note: Commit is handled by caller for transaction consistency
 
@@ -355,7 +355,7 @@ class JobWorkerRunner:
                 .where(
                     and_(
                         JobQueue.status == "pending",
-                        JobQueue.scheduled_at <= datetime.now(timezone.utc),
+                        JobQueue.scheduled_at <= datetime.now(timezone.utc).replace(tzinfo=None),
                     )
                 )
                 .order_by(JobQueue.priority.desc(), JobQueue.scheduled_at.asc())
@@ -375,7 +375,7 @@ class JobWorkerRunner:
                         JobQueue.status == "pending",  # Double-check they're still pending
                     )
                 )
-                .values(status="running", started_at=datetime.now(timezone.utc))
+                .values(status="running", started_at=datetime.now(timezone.utc).replace(tzinfo=None))
                 .returning(JobQueue)
             )
 
