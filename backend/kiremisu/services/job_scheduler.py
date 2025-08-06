@@ -52,7 +52,7 @@ class JobScheduler:
                     job_type="library_scan",
                     payload={"library_path_id": str(path.id), "library_path": path.path},
                     priority=1,  # Normal priority for scheduled scans
-                    scheduled_at=datetime.now(timezone.utc),
+                    scheduled_at=datetime.now(timezone.utc).replace(tzinfo=None),
                 )
 
                 db.add(job)
@@ -104,7 +104,7 @@ class JobScheduler:
             job_type="library_scan",
             payload=payload,
             priority=priority,
-            scheduled_at=datetime.now(timezone.utc),
+            scheduled_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
 
         db.add(job)
@@ -147,7 +147,7 @@ class JobScheduler:
             job_type="download",
             payload=payload,
             priority=priority,
-            scheduled_at=datetime.now(timezone.utc),
+            scheduled_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
 
         db.add(job)
@@ -248,7 +248,7 @@ class JobScheduler:
         """
         from sqlalchemy import delete
 
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=older_than_days)
+        cutoff_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=older_than_days)
 
         # Delete completed jobs older than cutoff using bulk delete
         result = await db.execute(
@@ -286,7 +286,7 @@ class JobScheduler:
 
         # Check if enough time has passed since last scan
         next_scan_time = library_path.last_scan + timedelta(hours=library_path.scan_interval_hours)
-        return datetime.now(timezone.utc) >= next_scan_time
+        return datetime.now(timezone.utc).replace(tzinfo=None) >= next_scan_time
 
     @staticmethod
     async def _get_existing_job(db: AsyncSession, library_path_id: UUID) -> Optional[JobQueue]:
