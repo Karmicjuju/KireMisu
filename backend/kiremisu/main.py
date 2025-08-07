@@ -15,6 +15,7 @@ from kiremisu.api.series import router as series_router
 from kiremisu.api.dashboard import router as dashboard_router
 from kiremisu.api.annotations import router as annotations_router
 from kiremisu.api.mangadx import router as mangadx_router, cleanup_mangadx_services
+from kiremisu.api.downloads import router as downloads_router
 from kiremisu.api.tags import router as tags_router
 from kiremisu.api.file_operations import router as file_operations_router
 from kiremisu.api.filesystem import router as filesystem_router
@@ -120,6 +121,7 @@ app.include_router(series_router)
 app.include_router(dashboard_router)
 app.include_router(annotations_router)
 app.include_router(mangadx_router)
+app.include_router(downloads_router)
 app.include_router(tags_router)
 app.include_router(file_operations_router)
 app.include_router(filesystem_router)

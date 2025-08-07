@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.database.models import JobQueue, LibraryPath
 from kiremisu.services.importer import ImporterService
+from kiremisu.services.download_service import DownloadService
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class JobWorker:
 
     def __init__(self):
         self.importer = ImporterService()
+        self.download_service = DownloadService()
 
     async def execute_job(self, db: AsyncSession, job: JobQueue) -> Dict[str, Any]:
         """Execute a single job and update its status.
@@ -174,34 +176,27 @@ class JobWorker:
             Dict with download results
         """
         payload = job.payload
-        download_type = payload.get("download_type", "mangadx")
         manga_id = payload.get("manga_id")
-        series_id = payload.get("series_id")
 
         if not manga_id:
             raise JobExecutionError("Download job missing required 'manga_id' in payload")
 
-        logger.info(f"Executing download job for {download_type} manga_id: {manga_id}")
+        logger.info(f"Executing download job {job.id} for manga_id: {manga_id}")
 
-        # For now, this is a placeholder implementation
-        # In a full implementation, this would:
-        # 1. Connect to external API (MangaDx, etc.)
-        # 2. Download chapter files
-        # 3. Store them in appropriate directory structure
-        # 4. Update database with new chapters
-
-        result = {
-            "job_type": "download",
-            "download_type": download_type,
-            "manga_id": manga_id,
-            "series_id": series_id,
-            "status": "completed",
-            "downloaded_chapters": 0,  # Placeholder
-            "message": f"Download job completed for {download_type} manga {manga_id}",
-        }
-
-        logger.info(f"Download job completed: {result}")
-        return result
+        try:
+            # Use the download service to execute the job
+            result = await self.download_service.execute_download_job(db, job)
+            
+            logger.info(f"Download job {job.id} completed successfully")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Download job {job.id} failed: {e}")
+            raise JobExecutionError(f"Download job execution failed: {e}")
+        
+        finally:
+            # Clean up download service resources
+            await self.download_service.cleanup()
 
     async def _update_job_status(
         self,

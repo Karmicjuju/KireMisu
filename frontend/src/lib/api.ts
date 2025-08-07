@@ -640,4 +640,184 @@ export const tagsApi = {
   },
 };
 
+// Download interfaces
+export interface DownloadJobProgressInfo {
+  total_chapters: number;
+  downloaded_chapters: number;
+  current_chapter?: {
+    id: string;
+    title: string;
+    started_at: string;
+  } | null;
+  current_chapter_progress: number; // 0.0-1.0
+  error_count: number;
+  errors: Array<{
+    chapter_id: string;
+    error: string;
+    timestamp: string;
+  }>;
+  started_at?: string;
+  estimated_completion?: string;
+}
+
+export interface DownloadJobRequest {
+  download_type: 'single' | 'batch' | 'series';
+  manga_id: string;
+  chapter_ids?: string[];
+  volume_number?: string;
+  series_id?: string;
+  destination_path?: string;
+  priority?: number; // 1-10
+  notify_on_completion?: boolean;
+}
+
+export interface DownloadJobResponse {
+  id: string;
+  job_type: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  download_type: string;
+  manga_id: string;
+  series_id?: string;
+  batch_type?: string;
+  volume_number?: string;
+  destination_path?: string;
+  progress?: DownloadJobProgressInfo;
+  priority: number;
+  retry_count: number;
+  max_retries: number;
+  error_message?: string;
+  scheduled_at: string;
+  started_at?: string;
+  completed_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DownloadJobListResponse {
+  jobs: DownloadJobResponse[];
+  total: number;
+  active_downloads: number;
+  pending_downloads: number;
+  failed_downloads: number;
+  completed_downloads: number;
+  status_filter?: string;
+  download_type_filter?: string;
+  pagination?: {
+    page: number;
+    per_page: number;
+    total_items: number;
+    total_pages: number;
+    has_prev: boolean;
+    has_next: boolean;
+    prev_page?: number;
+    next_page?: number;
+  };
+}
+
+export interface DownloadJobActionRequest {
+  action: 'cancel' | 'retry' | 'pause' | 'resume';
+  reason?: string;
+}
+
+export interface DownloadJobActionResponse {
+  job_id: string;
+  action: string;
+  success: boolean;
+  message: string;
+  new_status?: string;
+}
+
+export interface DownloadStatsResponse {
+  total_jobs: number;
+  active_jobs: number;
+  pending_jobs: number;
+  failed_jobs: number;
+  completed_jobs: number;
+  jobs_created_today: number;
+  jobs_completed_today: number;
+  chapters_downloaded_today: number;
+  average_job_duration_minutes?: number;
+  success_rate_percentage: number;
+  current_download_speed_mbps?: number;
+  total_downloaded_size_gb?: number;
+  available_storage_gb?: number;
+  stats_generated_at?: string;
+}
+
+export interface BulkDownloadRequest {
+  downloads: DownloadJobRequest[];
+  global_priority?: number;
+  batch_name?: string;
+  stagger_delay_seconds?: number;
+}
+
+export interface BulkDownloadResponse {
+  batch_id: string;
+  status: string;
+  message: string;
+  total_requested: number;
+  successfully_queued: number;
+  failed_to_queue: number;
+  job_ids: string[];
+  errors: string[];
+}
+
+export const downloadsApi = {
+  async createDownloadJob(request: DownloadJobRequest): Promise<DownloadJobResponse> {
+    const response = await api.post<DownloadJobResponse>('/api/downloads/', request);
+    return response.data;
+  },
+
+  async getDownloadJobs(options?: {
+    status?: string;
+    download_type?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<DownloadJobListResponse> {
+    const params = new URLSearchParams();
+    if (options?.status) params.append('status_filter', options.status);
+    if (options?.download_type) params.append('download_type_filter', options.download_type);
+    if (options?.page) params.append('page', options.page.toString());
+    if (options?.per_page) params.append('per_page', options.per_page.toString());
+
+    const response = await api.get<DownloadJobListResponse>(
+      `/api/downloads/${params.toString() ? `?${params.toString()}` : ''}`
+    );
+    return response.data;
+  },
+
+  async getDownloadJob(jobId: string): Promise<DownloadJobResponse> {
+    const response = await api.get<DownloadJobResponse>(`/api/downloads/${jobId}`);
+    return response.data;
+  },
+
+  async performJobAction(jobId: string, action: DownloadJobActionRequest): Promise<DownloadJobActionResponse> {
+    const response = await api.post<DownloadJobActionResponse>(
+      `/api/downloads/${jobId}/actions`,
+      action
+    );
+    return response.data;
+  },
+
+  async createBulkDownloads(request: BulkDownloadRequest): Promise<BulkDownloadResponse> {
+    const response = await api.post<BulkDownloadResponse>('/api/downloads/bulk', request);
+    return response.data;
+  },
+
+  async getDownloadStats(): Promise<DownloadStatsResponse> {
+    const response = await api.get<DownloadStatsResponse>('/api/downloads/stats/overview');
+    return response.data;
+  },
+
+  async deleteDownloadJob(jobId: string, force?: boolean): Promise<{ message: string }> {
+    const params = new URLSearchParams();
+    if (force) params.append('force', 'true');
+
+    const response = await api.delete<{ message: string }>(
+      `/api/downloads/${jobId}${params.toString() ? `?${params.toString()}` : ''}`
+    );
+    return response.data;
+  },
+};
+
 export default api;

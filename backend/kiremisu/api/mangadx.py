@@ -21,6 +21,8 @@ from kiremisu.database.schemas import (
     MangaDxMangaInfo,
     MangaDxSearchRequest,
     MangaDxSearchResponse,
+    DownloadJobRequest,
+    DownloadJobResponse,
 )
 from kiremisu.services.mangadx_client import (
     MangaDxClient,
@@ -30,6 +32,7 @@ from kiremisu.services.mangadx_client import (
     MangaDxServerError,
 )
 from kiremisu.services.mangadx_import import MangaDxImportService, MangaDxImportError
+from kiremisu.services.download_service import DownloadService
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,7 @@ router = APIRouter(prefix="/api/mangadx", tags=["mangadx"])
 # Global instances (will be initialized in dependency)
 _mangadx_client: Optional[MangaDxClient] = None
 _import_service: Optional[MangaDxImportService] = None
+_download_service: Optional[DownloadService] = None
 
 
 async def get_mangadx_client() -> MangaDxClient:
@@ -70,6 +74,16 @@ async def get_import_service() -> MangaDxImportService:
         )
     
     return _import_service
+
+
+async def get_download_service() -> DownloadService:
+    """Get download service instance."""
+    global _download_service
+    
+    if _download_service is None:
+        _download_service = DownloadService()
+    
+    return _download_service
 
 
 def _handle_mangadx_error(error: Exception, operation: str) -> HTTPException:
@@ -453,13 +467,231 @@ async def bulk_import_manga_metadata(
         raise _handle_mangadx_error(e, "schedule bulk import") from e
 
 
+# Download integration endpoints
+@router.post("/manga/{manga_id}/download", response_model=DownloadJobResponse, status_code=status.HTTP_201_CREATED)
+async def download_manga_series(
+    manga_id: str,
+    download_request: DownloadJobRequest,
+    db_session: AsyncSession = Depends(get_db),
+    download_service: DownloadService = Depends(get_download_service),
+):
+    """
+    Create a download job for a MangaDx manga.
+    
+    Creates a download job for the specified manga, supporting different
+    download types (single chapter, batch, or entire series).
+    
+    Args:
+        manga_id: MangaDx manga UUID
+        download_request: Download configuration
+        db_session: Database session
+        download_service: Download service instance
+        
+    Returns:
+        DownloadJobResponse with created job details
+        
+    Raises:
+        HTTPException: For download scheduling errors
+    """
+    logger.info(f"Creating download job for MangaDx manga: {manga_id}")
+    
+    try:
+        # Validate that the manga exists on MangaDx first
+        client = await get_mangadx_client()
+        try:
+            await client.get_manga(manga_id)
+        except MangaDxNotFoundError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Manga {manga_id} not found on MangaDx"
+            )
+        
+        # Override the manga_id from the URL
+        download_request.manga_id = manga_id
+        
+        # Create the download job based on type
+        if download_request.download_type == "single":
+            if not download_request.chapter_ids or len(download_request.chapter_ids) != 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Single download requires exactly one chapter_id"
+                )
+            
+            job_id = await download_service.enqueue_single_chapter_download(
+                db=db_session,
+                manga_id=manga_id,
+                chapter_id=download_request.chapter_ids[0],
+                series_id=download_request.series_id,
+                priority=download_request.priority,
+                destination_path=download_request.destination_path,
+            )
+            
+        elif download_request.download_type == "batch":
+            if not download_request.chapter_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Batch download requires chapter_ids"
+                )
+            
+            job_id = await download_service.enqueue_batch_download(
+                db=db_session,
+                manga_id=manga_id,
+                chapter_ids=download_request.chapter_ids,
+                batch_type="multiple",
+                series_id=download_request.series_id,
+                volume_number=download_request.volume_number,
+                priority=download_request.priority,
+                destination_path=download_request.destination_path,
+            )
+            
+        elif download_request.download_type == "series":
+            job_id = await download_service.enqueue_series_download(
+                db=db_session,
+                manga_id=manga_id,
+                series_id=download_request.series_id,
+                priority=download_request.priority,
+                destination_path=download_request.destination_path,
+            )
+            
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid download_type: {download_request.download_type}"
+            )
+        
+        # Get the created job to return
+        from sqlalchemy import select
+        from kiremisu.database.models import JobQueue
+        
+        result = await db_session.execute(select(JobQueue).where(JobQueue.id == job_id))
+        job = result.scalar_one_or_none()
+        
+        if not job:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to retrieve created download job"
+            )
+        
+        return DownloadJobResponse.from_job_model(job)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create download job for manga {manga_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create download job: {str(e)}"
+        )
+    finally:
+        await download_service.cleanup()
+
+
+@router.post("/import-and-download", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def import_and_download_manga(
+    import_request: MangaDxImportRequest,
+    download_chapters: bool = False,
+    download_priority: int = 3,
+    db_session: AsyncSession = Depends(get_db),
+    import_service: MangaDxImportService = Depends(get_import_service),
+    download_service: DownloadService = Depends(get_download_service),
+):
+    """
+    Import manga metadata from MangaDx and optionally download chapters.
+    
+    This is a convenience endpoint that combines metadata import with
+    optional chapter downloading in a single operation.
+    
+    Args:
+        import_request: Import configuration
+        download_chapters: Whether to also download all chapters
+        download_priority: Priority for download job (if downloading)
+        db_session: Database session
+        import_service: Import service instance
+        download_service: Download service instance
+        
+    Returns:
+        Combined import and download results
+        
+    Raises:
+        HTTPException: For import or download errors
+    """
+    logger.info(f"Import and download operation for MangaDx manga: {import_request.mangadx_id}")
+    
+    try:
+        # First, import the metadata
+        import_result = await import_service.import_manga_metadata(
+            db_session=db_session,
+            mangadx_id=import_request.mangadx_id,
+            target_series_id=import_request.target_series_id,
+            import_cover_art=import_request.import_cover_art,
+            import_chapters=import_request.import_chapters,
+            overwrite_existing=import_request.overwrite_existing,
+            custom_title=import_request.custom_title,
+        )
+        
+        result = {
+            "import_result": {
+                "success": import_result.success,
+                "series_id": import_result.series_id,
+                "operation": import_result.operation,
+                "metadata_fields_updated": import_result.metadata_fields_updated,
+                "cover_art_downloaded": import_result.cover_art_downloaded,
+                "chapters_imported": import_result.chapters_imported,
+            },
+            "download_result": None
+        }
+        
+        # If import was successful and download requested, create download job
+        if download_chapters and import_result.success and import_result.series_id:
+            try:
+                download_job_id = await download_service.enqueue_series_download(
+                    db=db_session,
+                    manga_id=import_request.mangadx_id,
+                    series_id=import_result.series_id,
+                    priority=download_priority,
+                )
+                
+                # Get the created download job
+                from sqlalchemy import select
+                from kiremisu.database.models import JobQueue
+                
+                job_result = await db_session.execute(select(JobQueue).where(JobQueue.id == download_job_id))
+                download_job = job_result.scalar_one_or_none()
+                
+                if download_job:
+                    result["download_result"] = {
+                        "job_id": str(download_job_id),
+                        "status": download_job.status,
+                        "priority": download_job.priority,
+                        "scheduled_at": download_job.scheduled_at.isoformat(),
+                    }
+                    
+            except Exception as download_error:
+                logger.warning(f"Import succeeded but download failed: {download_error}")
+                result["download_result"] = {
+                    "error": str(download_error),
+                    "message": "Import completed successfully but download job creation failed"
+                }
+        
+        return result
+        
+    except Exception as e:
+        raise _handle_mangadx_error(e, f"import and download manga {import_request.mangadx_id}") from e
+    finally:
+        await download_service.cleanup()
+
+
 # Cleanup function for application shutdown
 async def cleanup_mangadx_services():
     """Clean up MangaDx services on application shutdown."""
-    global _mangadx_client
+    global _mangadx_client, _download_service
     
     if _mangadx_client:
         await _mangadx_client.close()
         _mangadx_client = None
+    
+    if _download_service:
+        await _download_service.cleanup()
+        _download_service = None
     
     logger.info("MangaDx services cleaned up")

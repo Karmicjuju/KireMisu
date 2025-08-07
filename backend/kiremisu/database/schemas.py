@@ -1,10 +1,13 @@
 """Pydantic schemas for API requests and responses."""
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Generic, TypeVar
+from typing import Any, Dict, List, Optional, Generic, TypeVar, Literal, TYPE_CHECKING
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, validator
+
+if TYPE_CHECKING:
+    from kiremisu.database.models import JobQueue
 
 # Generic type for paginated responses
 T = TypeVar("T")
@@ -1258,3 +1261,248 @@ class FileOperationListResponse(BaseModel):
     total: int = Field(..., description="Total number of operations")
     status_filter: Optional[str] = Field(None, description="Applied status filter")
     operation_type_filter: Optional[str] = Field(None, description="Applied operation type filter")
+
+
+# Download Job schemas
+class DownloadJobProgressInfo(BaseModel):
+    """Schema for download job progress information."""
+    
+    total_chapters: int = Field(..., description="Total number of chapters to download")
+    downloaded_chapters: int = Field(..., description="Number of chapters completed")
+    current_chapter: Optional[Dict[str, Any]] = Field(None, description="Current chapter being downloaded")
+    current_chapter_progress: float = Field(default=0.0, ge=0.0, le=1.0, description="Current chapter progress (0.0-1.0)")
+    error_count: int = Field(default=0, description="Number of chapters that failed to download")
+    errors: List[Dict[str, Any]] = Field(default_factory=list, description="List of error details")
+    started_at: Optional[str] = Field(None, description="Download start timestamp (ISO format)")
+    estimated_completion: Optional[str] = Field(None, description="Estimated completion timestamp (ISO format)")
+    
+    @property
+    def progress_percentage(self) -> float:
+        """Calculate overall progress percentage."""
+        if self.total_chapters == 0:
+            return 0.0
+        base_progress = self.downloaded_chapters / self.total_chapters
+        current_contribution = self.current_chapter_progress / self.total_chapters if self.current_chapter else 0.0
+        return min(100.0, (base_progress + current_contribution) * 100.0)
+    
+    @property
+    def is_complete(self) -> bool:
+        """Check if download is complete."""
+        return self.downloaded_chapters >= self.total_chapters and not self.current_chapter
+
+
+class DownloadJobRequest(BaseModel):
+    """Schema for download job requests."""
+    
+    download_type: Literal["single", "batch", "series"] = Field(..., description="Type of download")
+    manga_id: str = Field(..., description="External manga ID (MangaDx UUID)")
+    
+    # Chapter selection
+    chapter_ids: Optional[List[str]] = Field(None, description="Specific chapter IDs to download (for single/batch)")
+    volume_number: Optional[str] = Field(None, description="Volume number (for volume downloads)")
+    
+    # Local association
+    series_id: Optional[UUID] = Field(None, description="Local series ID to associate with")
+    
+    # Download options
+    destination_path: Optional[str] = Field(None, description="Custom destination path")
+    priority: int = Field(default=3, ge=1, le=10, description="Job priority (1-10, higher = more urgent)")
+    
+    # Notification options
+    notify_on_completion: bool = Field(default=True, description="Send notification when download completes")
+    
+    @field_validator("download_type")
+    @classmethod
+    def validate_download_type(cls, v):
+        """Validate download type."""
+        if v == "single" and not cls.chapter_ids:
+            raise ValueError("Single download requires chapter_ids")
+        elif v == "batch" and not cls.chapter_ids:
+            raise ValueError("Batch download requires chapter_ids")
+        return v
+
+
+class DownloadJobResponse(BaseModel):
+    """Schema for download job responses."""
+    
+    id: UUID = Field(..., description="Job unique identifier")
+    job_type: str = Field(default="download", description="Job type")
+    status: Literal["pending", "running", "completed", "failed"] = Field(..., description="Job status")
+    
+    # Download metadata
+    download_type: str = Field(..., description="Type of download")
+    manga_id: str = Field(..., description="External manga ID")
+    series_id: Optional[UUID] = Field(None, description="Associated local series ID")
+    batch_type: Optional[str] = Field(None, description="Batch type (single, multiple, volume, series)")
+    volume_number: Optional[str] = Field(None, description="Volume number for volume downloads")
+    destination_path: Optional[str] = Field(None, description="Download destination path")
+    
+    # Progress tracking
+    progress: Optional[DownloadJobProgressInfo] = Field(None, description="Download progress information")
+    
+    # Job metadata
+    priority: int = Field(..., description="Job priority")
+    retry_count: int = Field(..., description="Number of retry attempts")
+    max_retries: int = Field(..., description="Maximum retry attempts")
+    
+    # Error handling
+    error_message: Optional[str] = Field(None, description="Error message if job failed")
+    
+    # Timing
+    scheduled_at: datetime = Field(..., description="Job scheduled time")
+    started_at: Optional[datetime] = Field(None, description="Job start time")
+    completed_at: Optional[datetime] = Field(None, description="Job completion time")
+    created_at: datetime = Field(..., description="Job creation time")
+    updated_at: datetime = Field(..., description="Last update time")
+    
+    # Computed properties
+    @property
+    def duration_seconds(self) -> Optional[float]:
+        """Calculate job duration in seconds."""
+        if not self.started_at:
+            return None
+        end_time = self.completed_at or datetime.now(timezone.utc).replace(tzinfo=None)
+        return (end_time - self.started_at).total_seconds()
+    
+    @property
+    def estimated_remaining_seconds(self) -> Optional[float]:
+        """Estimate remaining time based on current progress."""
+        if not self.progress or not self.started_at or self.progress.total_chapters == 0:
+            return None
+        
+        if self.progress.is_complete:
+            return 0.0
+        
+        elapsed = (datetime.now(timezone.utc).replace(tzinfo=None) - self.started_at).total_seconds()
+        progress_ratio = self.progress.progress_percentage / 100.0
+        
+        if progress_ratio <= 0:
+            return None
+        
+        total_estimated = elapsed / progress_ratio
+        return max(0.0, total_estimated - elapsed)
+    
+    model_config = ConfigDict(from_attributes=True)
+    
+    @classmethod
+    def from_job_model(cls, job: "JobQueue") -> "DownloadJobResponse":
+        """Create DownloadJobResponse from JobQueue model."""
+        payload = job.payload or {}
+        
+        # Extract progress information
+        progress_data = payload.get("progress", {})
+        progress = None
+        if progress_data:
+            progress = DownloadJobProgressInfo(**progress_data)
+        
+        return cls(
+            id=job.id,
+            job_type=job.job_type,
+            status=job.status,
+            download_type=payload.get("download_type", "mangadx"),
+            manga_id=payload.get("manga_id", ""),
+            series_id=UUID(payload["series_id"]) if payload.get("series_id") else None,
+            batch_type=payload.get("batch_type"),
+            volume_number=payload.get("volume_number"),
+            destination_path=payload.get("destination_path"),
+            progress=progress,
+            priority=job.priority,
+            retry_count=job.retry_count,
+            max_retries=job.max_retries,
+            error_message=job.error_message,
+            scheduled_at=job.scheduled_at,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+        )
+
+
+class DownloadJobListResponse(BaseModel):
+    """Schema for listing download jobs."""
+    
+    jobs: List[DownloadJobResponse] = Field(..., description="List of download jobs")
+    total: int = Field(..., description="Total number of jobs")
+    active_downloads: int = Field(..., description="Number of currently active downloads")
+    pending_downloads: int = Field(..., description="Number of pending downloads")
+    failed_downloads: int = Field(..., description="Number of failed downloads")
+    completed_downloads: int = Field(..., description="Number of completed downloads")
+    
+    # Filters applied
+    status_filter: Optional[str] = Field(None, description="Applied status filter")
+    download_type_filter: Optional[str] = Field(None, description="Applied download type filter")
+    
+    # Pagination info
+    pagination: Optional[PaginationMeta] = Field(None, description="Pagination metadata")
+
+
+class DownloadJobActionRequest(BaseModel):
+    """Schema for download job actions (cancel, retry, etc.)."""
+    
+    action: Literal["cancel", "retry", "pause", "resume"] = Field(..., description="Action to perform")
+    reason: Optional[str] = Field(None, description="Optional reason for the action")
+
+
+class DownloadJobActionResponse(BaseModel):
+    """Schema for download job action responses."""
+    
+    job_id: UUID = Field(..., description="Job ID that action was performed on")
+    action: str = Field(..., description="Action that was performed")
+    success: bool = Field(..., description="Whether action was successful")
+    message: str = Field(..., description="Human-readable result message")
+    new_status: Optional[str] = Field(None, description="New job status after action")
+
+
+class DownloadStatsResponse(BaseModel):
+    """Schema for download system statistics."""
+    
+    # Current queue status
+    total_jobs: int = Field(..., description="Total number of download jobs")
+    active_jobs: int = Field(..., description="Currently running jobs")
+    pending_jobs: int = Field(..., description="Pending jobs in queue")
+    failed_jobs: int = Field(..., description="Failed jobs")
+    completed_jobs: int = Field(..., description="Successfully completed jobs")
+    
+    # Recent activity (last 24 hours)
+    jobs_created_today: int = Field(..., description="Jobs created in last 24 hours")
+    jobs_completed_today: int = Field(..., description="Jobs completed in last 24 hours")
+    chapters_downloaded_today: int = Field(..., description="Chapters downloaded in last 24 hours")
+    
+    # System health
+    average_job_duration_minutes: Optional[float] = Field(None, description="Average job duration in minutes")
+    success_rate_percentage: float = Field(..., description="Overall success rate percentage")
+    current_download_speed_mbps: Optional[float] = Field(None, description="Current download speed in Mbps")
+    
+    # Storage usage
+    total_downloaded_size_gb: Optional[float] = Field(None, description="Total size of downloaded content in GB")
+    available_storage_gb: Optional[float] = Field(None, description="Available storage space in GB")
+    
+    # Last updated
+    stats_generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class BulkDownloadRequest(BaseModel):
+    """Schema for bulk download requests."""
+    
+    downloads: List[DownloadJobRequest] = Field(
+        ..., 
+        min_length=1, 
+        max_length=50, 
+        description="List of download requests (max 50)"
+    )
+    global_priority: Optional[int] = Field(None, ge=1, le=10, description="Global priority override")
+    batch_name: Optional[str] = Field(None, description="Optional name for the batch")
+    stagger_delay_seconds: int = Field(default=5, ge=0, le=300, description="Delay between job starts (0-300s)")
+
+
+class BulkDownloadResponse(BaseModel):
+    """Schema for bulk download responses."""
+    
+    batch_id: UUID = Field(..., description="Unique batch identifier")
+    status: str = Field(..., description="Batch status (scheduled/partial/failed)")
+    message: str = Field(..., description="Human-readable status message")
+    total_requested: int = Field(..., description="Total number of downloads requested")
+    successfully_queued: int = Field(..., description="Number of downloads successfully queued")
+    failed_to_queue: int = Field(..., description="Number of downloads that failed to queue")
+    job_ids: List[UUID] = Field(..., description="List of created job IDs")
+    errors: List[str] = Field(default_factory=list, description="Error messages for failed requests")
