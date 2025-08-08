@@ -1,9 +1,11 @@
 """Download service for manga chapters from external sources."""
 
 import asyncio
+import json
 import logging
 import os
 import shutil
+import time
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -155,6 +157,44 @@ class DownloadService:
         self.mangadx_client = MangaDxClient()
         self.download_timeout = 300.0  # 5 minutes per chapter
         self.retry_attempts = 3
+
+    async def _fetch_manga_metadata(self, manga_id: str) -> Dict[str, Optional[str]]:
+        """Fetch manga metadata from MangaDx API for better UI display."""
+        try:
+            async with self.mangadx_client:
+                manga_data = await self.mangadx_client.get_manga(manga_id)
+                
+                # Extract title (prefer English, fall back to original)
+                title = None
+                if manga_data.title:
+                    title = (manga_data.title.get("en") or 
+                            manga_data.title.get("ja-ro") or
+                            manga_data.title.get("ja") or
+                            list(manga_data.title.values())[0] if manga_data.title.values() else None)
+                
+                # Extract author using the relationships method from MangaDxMangaResponse
+                author = None
+                if hasattr(manga_data, 'relationships') and manga_data.relationships:
+                    author_info, _ = manga_data.get_author_info()
+                    author = author_info
+                
+                # Extract cover URL (basic - would need cover art relationship processing)
+                cover_url = None
+                # Cover art processing would require additional API calls
+                
+                return {
+                    "manga_title": title,
+                    "manga_author": author,  
+                    "manga_cover_url": cover_url
+                }
+                
+        except Exception as e:
+            logger.warning(f"Failed to fetch metadata for manga {manga_id}: {e}")
+            return {
+                "manga_title": None,
+                "manga_author": None,
+                "manga_cover_url": None
+            }
     
     async def enqueue_single_chapter_download(
         self,
@@ -181,6 +221,9 @@ class DownloadService:
         """
         job_id = uuid4()
         
+        # Fetch manga metadata for better UI display
+        metadata = await self._fetch_manga_metadata(manga_id)
+        
         payload = {
             "job_id": str(job_id),
             "download_type": "mangadx",
@@ -190,6 +233,7 @@ class DownloadService:
             "series_id": str(series_id) if series_id else None,
             "destination_path": destination_path,
             "progress": {},
+            **metadata,  # Include manga_title, manga_author, manga_cover_url
         }
         
         job = JobQueue(
@@ -203,7 +247,8 @@ class DownloadService:
         db.add(job)
         await db.commit()
         
-        logger.info(f"Enqueued single chapter download job {job_id} for chapter {chapter_id}")
+        title_info = f" ({metadata['manga_title']})" if metadata.get('manga_title') else ""
+        logger.info(f"Enqueued single chapter download job {job_id} for chapter {chapter_id}{title_info}")
         return job_id
     
     async def enqueue_batch_download(
@@ -235,6 +280,9 @@ class DownloadService:
         """
         job_id = uuid4()
         
+        # Fetch manga metadata for better UI display
+        metadata = await self._fetch_manga_metadata(manga_id)
+        
         payload = {
             "job_id": str(job_id),
             "download_type": "mangadx",
@@ -245,6 +293,7 @@ class DownloadService:
             "volume_number": volume_number,
             "destination_path": destination_path,
             "progress": {},
+            **metadata,  # Include manga_title, manga_author, manga_cover_url
         }
         
         job = JobQueue(
@@ -258,7 +307,8 @@ class DownloadService:
         db.add(job)
         await db.commit()
         
-        logger.info(f"Enqueued batch download job {job_id} for {len(chapter_ids)} chapters")
+        title_info = f" ({metadata['manga_title']})" if metadata.get('manga_title') else ""
+        logger.info(f"Enqueued batch download job {job_id} for {len(chapter_ids)} chapters{title_info}")
         return job_id
     
     async def enqueue_series_download(
@@ -334,12 +384,14 @@ class DownloadService:
             async with self.mangadx_client:
                 for chapter_id in job_data.chapter_ids:
                     try:
-                        # Download individual chapter
+                        # Download individual chapter with configurable quality
+                        download_quality = job_data.payload.get("download_quality", "data")
                         chapter_result = await self._download_single_chapter(
                             progress_tracker=progress_tracker,
                             manga_id=job_data.manga_id,
                             chapter_id=chapter_id,
                             destination_path=destination_path,
+                            quality=download_quality,
                         )
                         downloaded_chapters.append(chapter_result)
                         await progress_tracker.complete_chapter(success=True)
@@ -382,56 +434,317 @@ class DownloadService:
         manga_id: str,
         chapter_id: str,
         destination_path: str,
+        quality: str = "data",
     ) -> Dict[str, Any]:
         """
-        Download a single chapter from MangaDx.
+        Download a single chapter from MangaDx with real implementation.
         
         Args:
             progress_tracker: Progress tracker for updates
             manga_id: MangaDx manga UUID
             chapter_id: MangaDx chapter UUID
             destination_path: Local destination path
+            quality: Download quality ("data" for full, "data-saver" for compressed)
             
         Returns:
             Dict with chapter download results
         """
-        chapter_title = f"Chapter {chapter_id}"  # Placeholder
-        await progress_tracker.start_chapter(chapter_id, chapter_title)
-        
         try:
-            # Get chapter information from MangaDx
-            # This is a placeholder implementation - real implementation would:
-            # 1. Get chapter metadata from MangaDx API
-            # 2. Get at-home server URL for chapter pages
-            # 3. Download all pages and create CBZ file
+            logger.info(f"Starting real download for chapter {chapter_id} from manga {manga_id}")
             
-            await asyncio.sleep(1)  # Simulate download time
-            await progress_tracker.update_chapter_progress(0.5)
+            # Step 1: Get chapter metadata (10% progress)
+            await progress_tracker.update_chapter_progress(0.1)
+            chapter_response = await self.mangadx_client._make_request("GET", f"/chapter/{chapter_id}")
             
-            # Create a placeholder CBZ file
-            chapter_filename = f"{chapter_title.replace(' ', '_')}.cbz"
-            chapter_file_path = os.path.join(destination_path, chapter_filename)
+            # Import here to avoid circular imports
+            from kiremisu.database.schemas import MangaDxChapterResponse
+            chapter_data = MangaDxChapterResponse(**chapter_response["data"])
+            
+            # Create chapter title from metadata
+            chapter_title = self._format_chapter_title(chapter_data)
+            await progress_tracker.start_chapter(chapter_id, chapter_title)
+            
+            logger.info(f"Downloaded chapter metadata: {chapter_title}")
+            
+            # Step 2: Get @Home server information (20% progress)
+            await progress_tracker.update_chapter_progress(0.2)
+            at_home_response = await self.mangadx_client.get_chapter_at_home_server(chapter_id)
+            
+            logger.info(f"Got @Home server: {at_home_response.base_url}")
+            
+            # Step 3: Download all pages (20% to 90% progress)
+            await progress_tracker.update_chapter_progress(0.3)
+            page_filenames = at_home_response.chapter.get_page_filenames(quality)
+            
+            if not page_filenames:
+                raise DownloadError(f"No pages found for chapter {chapter_id}")
+            
+            logger.info(f"Downloading {len(page_filenames)} pages for chapter {chapter_id}")
+            
+            # Download pages with progress updates
+            page_data_list = []
+            total_pages = len(page_filenames)
+            
+            # Create a progress callback for individual page downloads
+            async def page_download_progress(page_index: int):
+                """Update progress as each page completes."""
+                base_progress = 0.3
+                download_progress = 0.6 * (page_index / total_pages)
+                await progress_tracker.update_chapter_progress(base_progress + download_progress)
+            
+            page_data_list = await self._download_chapter_pages_with_progress(
+                chapter_id=chapter_id,
+                base_url=at_home_response.base_url,
+                chapter_hash=at_home_response.chapter.hash,
+                page_filenames=page_filenames,
+                quality=quality,
+                progress_callback=page_download_progress,
+            )
+            
+            logger.info(f"Downloaded {len(page_data_list)} pages for chapter {chapter_id}")
+            
+            # Step 4: Create CBZ file (90% to 100% progress)  
+            await progress_tracker.update_chapter_progress(0.9)
             
             # Ensure destination directory exists
             os.makedirs(destination_path, exist_ok=True)
             
-            # Create empty CBZ file as placeholder
-            with zipfile.ZipFile(chapter_file_path, 'w') as zf:
-                zf.writestr("page_001.jpg", b"placeholder_image_data")
+            # Create sanitized filename
+            safe_filename = self._create_safe_filename(chapter_data, chapter_id)
+            chapter_file_path = os.path.join(destination_path, f"{safe_filename}.cbz")
+            
+            # Create CBZ archive with downloaded pages
+            await self._create_cbz_archive(
+                chapter_file_path=chapter_file_path,
+                page_data_list=page_data_list,
+                chapter_metadata=chapter_data,
+            )
             
             await progress_tracker.update_chapter_progress(1.0)
+            
+            file_size = os.path.getsize(chapter_file_path)
+            logger.info(f"Created CBZ file: {chapter_file_path} ({file_size / 1024 / 1024:.1f}MB)")
             
             return {
                 "chapter_id": chapter_id,
                 "title": chapter_title,
                 "file_path": chapter_file_path,
-                "file_size": os.path.getsize(chapter_file_path),
-                "page_count": 1,  # Placeholder
+                "file_size": file_size,
+                "page_count": len(page_data_list),
+                "download_quality": quality,
+                "chapter_number": chapter_data.get_chapter_number(),
+                "volume_number": chapter_data.get_volume_number(),
             }
             
         except Exception as e:
             logger.error(f"Failed to download chapter {chapter_id}: {e}")
             raise DownloadError(f"Chapter download failed: {e}")
+    
+    async def _download_chapter_pages_with_progress(
+        self,
+        chapter_id: str,
+        base_url: str,
+        chapter_hash: str,
+        page_filenames: List[str],
+        quality: str = "data",
+        progress_callback = None,
+        max_concurrent: int = 3,
+        timeout_per_page: float = 30.0,
+        max_retries_per_page: int = 3,
+    ) -> List[bytes]:
+        """
+        Download chapter pages with progress tracking and enhanced error handling.
+        
+        Args:
+            chapter_id: MangaDx chapter UUID
+            base_url: @Home server base URL
+            chapter_hash: Chapter hash for URL construction
+            page_filenames: List of page filenames
+            quality: Quality setting ("data" or "data-saver")
+            progress_callback: Optional callback for progress updates
+            max_concurrent: Maximum concurrent downloads
+            timeout_per_page: Timeout per page in seconds
+            max_retries_per_page: Maximum retries per failed page
+            
+        Returns:
+            List of downloaded page image data as bytes
+        """
+        if not page_filenames:
+            return []
+        
+        # Construct page URLs
+        quality_path = "data-saver" if quality == "data-saver" else "data"
+        page_urls = [
+            f"{base_url}/{quality_path}/{chapter_hash}/{filename}"
+            for filename in page_filenames
+        ]
+        
+        downloaded_pages = [None] * len(page_urls)
+        failed_pages = []
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        async def download_single_page(url: str, page_index: int) -> bool:
+            """Download a single page with retries."""
+            async with semaphore:
+                for attempt in range(max_retries_per_page):
+                    try:
+                        # Rate limiting
+                        await self.mangadx_client.rate_limiter.acquire()
+                        
+                        logger.debug(f"Downloading page {page_index + 1}/{len(page_urls)} (attempt {attempt + 1})")
+                        
+                        response = await self.mangadx_client.client.get(
+                            url,
+                            timeout=httpx.Timeout(timeout_per_page),
+                            follow_redirects=True,
+                        )
+                        
+                        if response.status_code == 200:
+                            downloaded_pages[page_index] = response.content
+                            
+                            # Update progress if callback provided
+                            if progress_callback:
+                                await progress_callback(page_index + 1)
+                            
+                            return True
+                        else:
+                            logger.warning(f"Page {page_index + 1} HTTP {response.status_code} (attempt {attempt + 1})")
+                            if attempt == max_retries_per_page - 1:
+                                raise DownloadError(f"HTTP {response.status_code}")
+                    
+                    except Exception as e:
+                        logger.warning(f"Page {page_index + 1} download failed (attempt {attempt + 1}): {e}")
+                        if attempt == max_retries_per_page - 1:
+                            failed_pages.append((page_index + 1, str(e)))
+                            return False
+                        
+                        # Exponential backoff for retries
+                        await asyncio.sleep(min(2 ** attempt, 10))
+                
+                return False
+        
+        # Download all pages concurrently
+        tasks = [download_single_page(url, i) for i, url in enumerate(page_urls)]
+        await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Filter out None values (failed downloads)
+        successful_pages = [page for page in downloaded_pages if page is not None]
+        
+        if failed_pages:
+            failure_rate = len(failed_pages) / len(page_urls)
+            error_msg = f"{len(failed_pages)}/{len(page_urls)} pages failed to download"
+            logger.error(f"Chapter {chapter_id}: {error_msg}")
+            
+            # Fail if too many pages failed
+            if failure_rate > 0.3:  # Allow up to 30% page failure
+                raise DownloadError(f"Too many page failures ({failure_rate:.1%}): {error_msg}")
+        
+        logger.info(f"Successfully downloaded {len(successful_pages)}/{len(page_urls)} pages")
+        return successful_pages
+    
+    async def _create_cbz_archive(
+        self,
+        chapter_file_path: str,
+        page_data_list: List[bytes],
+        chapter_metadata: "MangaDxChapterResponse",
+    ):
+        """
+        Create a CBZ archive from downloaded page data.
+        
+        Args:
+            chapter_file_path: Path where CBZ file should be created
+            page_data_list: List of page image data as bytes
+            chapter_metadata: Chapter metadata for archive info
+        """
+        try:
+            with zipfile.ZipFile(chapter_file_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+                # Add pages with sequential naming
+                for i, page_data in enumerate(page_data_list, 1):
+                    # Detect image format from bytes
+                    if page_data.startswith(b'\xff\xd8\xff'):
+                        ext = 'jpg'
+                    elif page_data.startswith(b'\x89PNG'):
+                        ext = 'png'
+                    elif page_data.startswith(b'WEBP'):
+                        ext = 'webp'
+                    else:
+                        ext = 'jpg'  # Default fallback
+                    
+                    page_filename = f"{i:03d}.{ext}"
+                    zf.writestr(page_filename, page_data)
+                
+                # Add metadata file
+                metadata = {
+                    "title": chapter_metadata.attributes.title or f"Chapter {chapter_metadata.attributes.chapter}",
+                    "chapter": chapter_metadata.attributes.chapter,
+                    "volume": chapter_metadata.attributes.volume,
+                    "pages": len(page_data_list),
+                    "language": chapter_metadata.attributes.translated_language,
+                    "mangadx_id": chapter_metadata.id,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+                
+                import json
+                zf.writestr("metadata.json", json.dumps(metadata, indent=2))
+        
+        except Exception as e:
+            logger.error(f"Failed to create CBZ archive {chapter_file_path}: {e}")
+            # Clean up partial file
+            if os.path.exists(chapter_file_path):
+                try:
+                    os.remove(chapter_file_path)
+                except:
+                    pass
+            raise DownloadError(f"CBZ creation failed: {e}")
+    
+    def _format_chapter_title(self, chapter_data: "MangaDxChapterResponse") -> str:
+        """Format a human-readable chapter title."""
+        parts = []
+        
+        if chapter_data.attributes.volume:
+            parts.append(f"Vol.{chapter_data.attributes.volume}")
+        
+        if chapter_data.attributes.chapter:
+            parts.append(f"Ch.{chapter_data.attributes.chapter}")
+        
+        if chapter_data.attributes.title:
+            parts.append(chapter_data.attributes.title)
+        
+        if not parts:
+            parts.append(f"Chapter {chapter_data.id[:8]}")
+        
+        return " - ".join(parts)
+    
+    def _create_safe_filename(self, chapter_data: "MangaDxChapterResponse", chapter_id: str) -> str:
+        """Create a filesystem-safe filename for the chapter."""
+        parts = []
+        
+        if chapter_data.attributes.volume:
+            parts.append(f"v{chapter_data.attributes.volume}")
+        
+        if chapter_data.attributes.chapter:
+            # Pad chapter numbers for proper sorting
+            try:
+                ch_num = float(chapter_data.attributes.chapter)
+                if ch_num.is_integer():
+                    parts.append(f"c{int(ch_num):04d}")
+                else:
+                    parts.append(f"c{ch_num:07.1f}")
+            except:
+                parts.append(f"c{chapter_data.attributes.chapter}")
+        
+        if chapter_data.attributes.title:
+            # Sanitize title for filename
+            safe_title = "".join(c for c in chapter_data.attributes.title if c.isalnum() or c in (' ', '-', '_')).strip()
+            if safe_title:
+                parts.append(safe_title[:50])  # Limit length
+        
+        filename = "_".join(parts) if parts else f"chapter_{chapter_id[:8]}"
+        
+        # Replace spaces with underscores and ensure safe characters
+        filename = "".join(c if c.isalnum() or c in ('-', '_', '.') else '_' for c in filename)
+        
+        return filename
     
     async def _get_destination_path(self, db: AsyncSession, job_data: DownloadJobData) -> str:
         """
@@ -485,19 +798,68 @@ class DownloadService:
         except Exception as e:
             logger.error(f"Failed to update series {series_id} with downloads: {e}")
     
-    async def _get_all_chapter_ids(self, manga_id: str) -> List[str]:
+    async def _get_all_chapter_ids(
+        self, 
+        manga_id: str, 
+        language: List[str] = ["en"],
+        max_chapters: Optional[int] = None
+    ) -> List[str]:
         """
-        Get all chapter IDs for a manga from MangaDx.
+        Get all chapter IDs for a manga from MangaDx API.
         
         Args:
             manga_id: MangaDx manga UUID
+            language: List of language codes to filter by
+            max_chapters: Optional limit on number of chapters to return
             
         Returns:
             List of chapter UUIDs
         """
-        # This is a placeholder implementation
-        # Real implementation would use MangaDx chapter listing API
-        return [f"chapter-{i}" for i in range(1, 6)]  # Placeholder: 5 chapters
+        try:
+            logger.info(f"Fetching all chapters for manga {manga_id}")
+            
+            all_chapter_ids = []
+            offset = 0
+            limit = 100  # Reduced limit to avoid 400 Bad Request errors
+            
+            # Paginate through all chapters
+            while True:
+                chapter_response = await self.mangadx_client.get_manga_chapters(
+                    manga_id=manga_id,
+                    translated_language=language,
+                    limit=limit,
+                    offset=offset,
+                    order_by="chapter",
+                    order_direction="asc",
+                )
+                
+                # Extract chapter IDs from response
+                chapter_ids = [chapter.id for chapter in chapter_response.data]
+                all_chapter_ids.extend(chapter_ids)
+                
+                logger.info(f"Retrieved {len(chapter_ids)} chapters (offset {offset}, total so far: {len(all_chapter_ids)})")
+                
+                # Check if we have more chapters or hit our limit
+                if not chapter_response.has_more:
+                    break
+                    
+                if max_chapters and len(all_chapter_ids) >= max_chapters:
+                    all_chapter_ids = all_chapter_ids[:max_chapters]
+                    break
+                
+                offset += limit
+                
+                # Safety check to prevent infinite loops
+                if offset > 10000:  # Reasonable upper limit
+                    logger.warning(f"Hit safety limit of 10000 chapters for manga {manga_id}")
+                    break
+            
+            logger.info(f"Found {len(all_chapter_ids)} total chapters for manga {manga_id}")
+            return all_chapter_ids
+            
+        except Exception as e:
+            logger.error(f"Failed to get chapters for manga {manga_id}: {e}")
+            raise DownloadError(f"Failed to get chapter list: {e}")
     
     async def get_download_jobs(
         self,

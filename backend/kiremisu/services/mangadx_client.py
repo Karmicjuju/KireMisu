@@ -182,7 +182,7 @@ class MangaDxClient:
     retry logic, and structured error handling.
     """
     
-    BASE_URL = "https://api.mangadx.org"
+    BASE_URL = "https://api.mangadex.org"
     
     def __init__(
         self,
@@ -414,7 +414,28 @@ class MangaDxClient:
         
         try:
             response_data = await self._make_request("GET", "/manga", params=params)
-            return MangaDxSearchResponse(**response_data)
+            
+            # Parse the raw MangaDx API response format
+            manga_responses = []
+            for item in response_data.get("data", []):
+                # Extract the attributes and add ID to create flat structure
+                attributes = item.get("attributes", {})
+                manga_data = {
+                    "id": item.get("id", ""),
+                    "type": item.get("type", "manga"),
+                    "relationships": item.get("relationships", []),
+                    **attributes  # Flatten attributes into the main object
+                }
+                manga_responses.append(MangaDxMangaResponse(**manga_data))
+            
+            return MangaDxSearchResponse(
+                result=response_data.get("result", "ok"),
+                response=response_data.get("response", "collection"),
+                data=manga_responses,
+                limit=response_data.get("limit", limit),
+                offset=response_data.get("offset", offset),
+                total=response_data.get("total", 0)
+            )
         
         except Exception as e:
             logger.error(f"Error searching MangaDx: {e}")
@@ -442,7 +463,17 @@ class MangaDxClient:
         
         try:
             response_data = await self._make_request("GET", f"/manga/{manga_id}", params=params)
-            return MangaDxMangaResponse(**response_data["data"])
+            
+            # Parse the raw MangaDx API response format
+            item = response_data.get("data", {})
+            attributes = item.get("attributes", {})
+            manga_data = {
+                "id": item.get("id", ""),
+                "type": item.get("type", "manga"),
+                "relationships": item.get("relationships", []),
+                **attributes  # Flatten attributes into the main object
+            }
+            return MangaDxMangaResponse(**manga_data)
         
         except Exception as e:
             logger.error(f"Error fetching MangaDx manga {manga_id}: {e}")
@@ -460,13 +491,277 @@ class MangaDxClient:
         Returns:
             Full URL to cover art image
         """
-        base_url = "https://uploads.mangadx.org/covers"
+        base_url = "https://uploads.mangadex.org/covers"
         
         if size == "original":
             return f"{base_url}/{manga_id}/{cover_filename}"
         else:
             return f"{base_url}/{manga_id}/{cover_filename}.{size}.jpg"
     
+    async def get_manga_chapters(
+        self,
+        manga_id: str,
+        translated_language: List[str] = ["en"],
+        limit: int = 100,
+        offset: int = 0,
+        order_by: str = "chapter",
+        order_direction: str = "asc",
+    ) -> "MangaDxChapterListResponse":
+        """
+        Get chapters for a manga from MangaDx API.
+        
+        Args:
+            manga_id: MangaDx manga UUID
+            translated_language: List of language codes to filter by
+            limit: Number of results to return (max 500)
+            offset: Offset for pagination
+            order_by: Field to order by (chapter, volume, createdAt, updatedAt)
+            order_direction: Order direction (asc, desc)
+            
+        Returns:
+            MangaDxChapterListResponse with chapter data
+            
+        Raises:
+            MangaDxError: For API errors
+            MangaDxNotFoundError: If manga not found
+        """
+        params = {
+            "manga": manga_id,
+            "limit": min(limit, 100),  # Reduced limit to avoid 400 Bad Request errors
+            "offset": offset,
+            "translatedLanguage[]": translated_language,
+            "contentRating[]": ["safe", "suggestive", "erotica"],  # Default content ratings
+            f"order[{order_by}]": order_direction,
+            "includes[]": ["scanlation_group", "user"],  # Include relationships
+        }
+        
+        logger.info(f"Fetching chapters for manga {manga_id}: language={translated_language}, limit={limit}")
+        
+        try:
+            response_data = await self._make_request("GET", "/chapter", params=params)
+            
+            # Import here to avoid circular imports
+            from kiremisu.database.schemas import MangaDxChapterListResponse
+            return MangaDxChapterListResponse(**response_data)
+        
+        except Exception as e:
+            logger.error(f"Error fetching chapters for manga {manga_id}: {e}")
+            raise
+
+    async def get_chapter_at_home_server(self, chapter_id: str) -> "MangaDxAtHomeResponse":
+        """
+        Get @Home server information for chapter page downloads.
+        
+        Args:
+            chapter_id: MangaDx chapter UUID
+            
+        Returns:
+            MangaDxAtHomeResponse with server URL and page data
+            
+        Raises:
+            MangaDxError: For API errors
+            MangaDxNotFoundError: If chapter not found
+        """
+        logger.info(f"Getting @Home server info for chapter {chapter_id}")
+        
+        try:
+            response_data = await self._make_request("GET", f"/at-home/server/{chapter_id}")
+            
+            # Import here to avoid circular imports  
+            from kiremisu.database.schemas import MangaDxAtHomeResponse
+            return MangaDxAtHomeResponse(**response_data)
+        
+        except Exception as e:
+            logger.error(f"Error getting @Home server for chapter {chapter_id}: {e}")
+            raise
+
+    async def download_chapter_pages(
+        self,
+        chapter_id: str,
+        base_url: str,
+        chapter_hash: str,
+        page_filenames: List[str],
+        quality: str = "data",
+        max_concurrent: int = 3,
+        timeout_per_page: float = 30.0,
+    ) -> List[bytes]:
+        """
+        Download all pages for a chapter from MangaDx @Home network.
+        
+        Args:
+            chapter_id: MangaDx chapter UUID (for logging)
+            base_url: @Home server base URL
+            chapter_hash: Chapter hash for URL construction
+            page_filenames: List of page filenames to download
+            quality: Quality setting ("data" for full, "data-saver" for compressed)
+            max_concurrent: Maximum concurrent downloads
+            timeout_per_page: Timeout per page download in seconds
+            
+        Returns:
+            List of downloaded page image data as bytes
+            
+        Raises:
+            MangaDxError: For download errors
+        """
+        if not page_filenames:
+            logger.warning(f"No pages to download for chapter {chapter_id}")
+            return []
+        
+        logger.info(f"Downloading {len(page_filenames)} pages for chapter {chapter_id} at {quality} quality")
+        
+        # Construct page URLs
+        quality_path = "data-saver" if quality == "data-saver" else "data"
+        page_urls = [
+            f"{base_url}/{quality_path}/{chapter_hash}/{filename}"
+            for filename in page_filenames
+        ]
+        
+        downloaded_pages = []
+        failed_downloads = []
+        
+        # Create a semaphore to limit concurrent downloads
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        async def download_single_page(url: str, page_index: int) -> tuple[int, bytes]:
+            """Download a single page with rate limiting."""
+            async with semaphore:
+                # Apply rate limiting before each page download
+                await self.rate_limiter.acquire()
+                
+                try:
+                    logger.debug(f"Downloading page {page_index + 1}/{len(page_urls)}: {url}")
+                    
+                    response = await self.client.get(
+                        url,
+                        timeout=httpx.Timeout(timeout_per_page),
+                        follow_redirects=True,
+                    )
+                    
+                    if response.status_code == 200:
+                        return page_index, response.content
+                    else:
+                        raise MangaDxError(f"Failed to download page {page_index + 1}: HTTP {response.status_code}")
+                
+                except httpx.TimeoutException:
+                    raise MangaDxError(f"Timeout downloading page {page_index + 1}")
+                except httpx.NetworkError as e:
+                    raise MangaDxError(f"Network error downloading page {page_index + 1}: {e}")
+        
+        # Download all pages concurrently
+        try:
+            download_tasks = [
+                download_single_page(url, i) 
+                for i, url in enumerate(page_urls)
+            ]
+            
+            # Use asyncio.gather with return_exceptions to handle individual failures
+            results = await asyncio.gather(*download_tasks, return_exceptions=True)
+            
+            # Process results and separate successful downloads from failures
+            for result in results:
+                if isinstance(result, Exception):
+                    failed_downloads.append(str(result))
+                    downloaded_pages.append(None)  # Placeholder for failed download
+                else:
+                    page_index, page_data = result
+                    downloaded_pages.append((page_index, page_data))
+            
+            # Sort by page index to maintain order
+            downloaded_pages = [
+                data for _, data in sorted([p for p in downloaded_pages if p is not None])
+            ]
+            
+            if failed_downloads:
+                error_summary = f"{len(failed_downloads)} pages failed to download"
+                logger.error(f"Chapter {chapter_id} download incomplete: {error_summary}")
+                
+                # If more than 20% of pages failed, raise an error
+                failure_rate = len(failed_downloads) / len(page_urls)
+                if failure_rate > 0.2:
+                    raise MangaDxError(f"Too many page download failures ({failure_rate:.1%}): {error_summary}")
+            
+            logger.info(f"Downloaded {len(downloaded_pages)}/{len(page_urls)} pages for chapter {chapter_id}")
+            return downloaded_pages
+        
+        except Exception as e:
+            logger.error(f"Failed to download pages for chapter {chapter_id}: {e}")
+            raise MangaDxError(f"Page download failed: {e}")
+
+    async def download_full_chapter(
+        self,
+        chapter_id: str,
+        quality: str = "data",
+        max_concurrent: int = 3,
+    ) -> "MangaDxDownloadedChapter":
+        """
+        Download a complete chapter including metadata and all pages.
+        
+        This is a convenience method that combines chapter metadata fetching,
+        @Home server lookup, and page downloads into a single operation.
+        
+        Args:
+            chapter_id: MangaDx chapter UUID
+            quality: Quality setting ("data" for full, "data-saver" for compressed)  
+            max_concurrent: Maximum concurrent page downloads
+            
+        Returns:
+            MangaDxDownloadedChapter with chapter info and downloaded data
+            
+        Raises:
+            MangaDxError: For any step of the download process
+        """
+        start_time = time.time()
+        
+        logger.info(f"Starting full chapter download: {chapter_id} at {quality} quality")
+        
+        try:
+            # Step 1: Get chapter metadata
+            logger.debug(f"Fetching chapter metadata for {chapter_id}")
+            chapter_response = await self._make_request("GET", f"/chapter/{chapter_id}")
+            
+            # Import here to avoid circular imports
+            from kiremisu.database.schemas import MangaDxChapterResponse, MangaDxDownloadedChapter
+            chapter_data = MangaDxChapterResponse(**chapter_response["data"])
+            
+            # Step 2: Get @Home server info
+            logger.debug(f"Getting @Home server info for {chapter_id}")
+            at_home_response = await self.get_chapter_at_home_server(chapter_id)
+            
+            # Step 3: Download all pages
+            page_filenames = at_home_response.chapter.get_page_filenames(quality)
+            page_data_list = await self.download_chapter_pages(
+                chapter_id=chapter_id,
+                base_url=at_home_response.base_url,
+                chapter_hash=at_home_response.chapter.hash,
+                page_filenames=page_filenames,
+                quality=quality,
+                max_concurrent=max_concurrent,
+            )
+            
+            # Calculate download statistics
+            download_duration = time.time() - start_time
+            total_size = sum(len(page_data) for page_data in page_data_list)
+            
+            logger.info(f"Chapter {chapter_id} download completed: {len(page_data_list)} pages, "
+                       f"{total_size / 1024 / 1024:.1f}MB in {download_duration:.1f}s")
+            
+            # Return download result (without actual page data to save memory)
+            return MangaDxDownloadedChapter(
+                chapter_id=chapter_id,
+                title=chapter_data.attributes.title,
+                chapter_number=chapter_data.get_chapter_number(),
+                volume_number=chapter_data.get_volume_number(),
+                file_path="",  # Will be set by the download service when CBZ is created
+                file_size=total_size,
+                page_count=len(page_data_list),
+                download_quality=quality,
+                download_duration_seconds=download_duration,
+            ), page_data_list
+        
+        except Exception as e:
+            logger.error(f"Full chapter download failed for {chapter_id}: {e}")
+            raise
+
     async def health_check(self) -> bool:
         """
         Check if MangaDx API is accessible.
@@ -475,8 +770,20 @@ class MangaDxClient:
             True if API is healthy, False otherwise
         """
         try:
-            await self._make_request("GET", "/ping")
-            return True
+            # The /ping endpoint returns text/plain "pong", not JSON
+            # So we need to handle this differently
+            url = urljoin(self.BASE_URL, "/ping")
+            
+            await self.rate_limiter.acquire()
+            response = await self.client.get(url)
+            
+            # Check if response is successful and contains expected text
+            if response.status_code == 200 and response.text.strip() == "pong":
+                return True
+            else:
+                logger.warning(f"MangaDx health check unexpected response: {response.status_code} - {response.text}")
+                return False
+                
         except Exception as e:
             logger.warning(f"MangaDx API health check failed: {e}")
             return False

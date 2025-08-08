@@ -140,8 +140,10 @@ class TestDownloadService:
     @pytest.fixture
     def download_service(self):
         """Create download service instance."""
-        with patch('kiremisu.services.download_service.MangaDxClient'):
-            return DownloadService()
+        with patch('kiremisu.services.download_service.MangaDxClient') as mock_client:
+            service = DownloadService()
+            service.mangadx_client._make_request = AsyncMock()
+            return service
     
     @pytest.fixture
     def mock_db(self):
@@ -233,11 +235,11 @@ class TestDownloadService:
         job_data = DownloadJobData({"manga_id": "manga-123"})
         
         # Mock database query result
-        mock_result = AsyncMock()
+        mock_result = MagicMock()
         mock_library_path = MagicMock()
         mock_library_path.path = "/app/data/library"
         mock_result.scalar_one_or_none.return_value = mock_library_path
-        mock_db.execute.return_value = mock_result
+        mock_db.execute = AsyncMock(return_value=mock_result)
         
         result = await download_service._get_destination_path(mock_db, job_data)
         
@@ -249,9 +251,9 @@ class TestDownloadService:
         """Test error when no library paths configured."""
         job_data = DownloadJobData({"manga_id": "manga-123"})
         
-        mock_result = AsyncMock()
+        mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None
-        mock_db.execute.return_value = mock_result
+        mock_db.execute = AsyncMock(return_value=mock_result)
         
         with pytest.raises(DownloadError, match="No enabled library paths configured"):
             await download_service._get_destination_path(mock_db, job_data)
@@ -341,11 +343,11 @@ class TestDownloadService:
         mock_db.execute.return_value = mock_result
         
         # Mock count query
-        mock_count_result = AsyncMock()
+        mock_count_result = MagicMock()
         mock_count_result.fetchall.return_value = [(1, "job1"), (2, "job2")]
         
         # Set up execute to return different results for different queries
-        mock_db.execute.side_effect = [mock_count_result, mock_result]
+        mock_db.execute = AsyncMock(side_effect=[mock_count_result, mock_result])
         
         jobs, total = await download_service.get_download_jobs(
             db=mock_db,
@@ -407,6 +409,11 @@ class TestDownloadService:
         progress_tracker = MagicMock()
         progress_tracker.start_chapter = AsyncMock()
         progress_tracker.update_chapter_progress = AsyncMock()
+        
+        # Mock the MangaDx API response
+        download_service.mangadx_client._make_request.return_value = {
+            "data": {"attributes": {"pages": ["page1.jpg"]}}
+        }
         
         with patch('os.makedirs'):
             with patch('zipfile.ZipFile') as mock_zipfile:

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   DownloadJobResponse, 
   DownloadJobListResponse, 
@@ -49,6 +49,7 @@ export function useDownloads(options: UseDownloadsOptions = {}): UseDownloadsRet
   });
   const [pagination, setPagination] = useState<DownloadJobListResponse['pagination']>();
   const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -64,11 +65,14 @@ export function useDownloads(options: UseDownloadsOptions = {}): UseDownloadsRet
   const pollIntervalRef = useRef<NodeJS.Timeout>();
   const mountedRef = useRef(true);
 
-  const fetchDownloads = useCallback(async () => {
+  const fetchDownloads = useCallback(async (isBackgroundRefresh = false) => {
     if (!enabled || !mountedRef.current) return;
 
     try {
-      setLoading(true);
+      // Only show loading spinner on initial load or explicit user refresh
+      if (!isBackgroundRefresh) {
+        setLoading(true);
+      }
       setError(null);
 
       const response = await downloadsApi.getDownloadJobs({
@@ -89,36 +93,61 @@ export function useDownloads(options: UseDownloadsOptions = {}): UseDownloadsRet
         completed_downloads: response.completed_downloads,
       });
       setPagination(response.pagination);
+      
+      if (initialLoad) {
+        setInitialLoad(false);
+      }
     } catch (err) {
       if (!mountedRef.current) return;
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch downloads';
       setError(errorMessage);
       console.error('Failed to fetch downloads:', err);
     } finally {
-      if (mountedRef.current) {
+      if (mountedRef.current && !isBackgroundRefresh) {
         setLoading(false);
       }
     }
   }, [status, download_type, page, per_page, enabled]);
 
-  // Setup polling for real-time updates
+  // Setup polling for real-time updates with smart background refresh
   useEffect(() => {
     if (!enabled) return;
 
-    // Initial fetch
-    fetchDownloads();
-
-    // Setup polling interval
-    if (pollInterval > 0) {
-      pollIntervalRef.current = setInterval(fetchDownloads, pollInterval);
-    }
+    // Initial fetch (with loading indicator)
+    fetchDownloads(false);
 
     return () => {
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
       }
     };
-  }, [fetchDownloads, pollInterval, enabled]);
+  }, [fetchDownloads, enabled]);
+
+  // Separate effect for managing polling based on active downloads
+  useEffect(() => {
+    if (!enabled || pollInterval <= 0) return;
+
+    // Always clear existing interval
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = undefined;
+    }
+
+    // Only set up polling if there are active or pending downloads
+    const hasActiveWork = stats.active_downloads > 0 || stats.pending_downloads > 0;
+    if (hasActiveWork) {
+      pollIntervalRef.current = setInterval(() => {
+        fetchDownloads(true); // Background refresh - no loading spinner
+      }, pollInterval);
+    }
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = undefined;
+      }
+    };
+  }, [fetchDownloads, pollInterval, enabled, stats.active_downloads, stats.pending_downloads]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -138,8 +167,8 @@ export function useDownloads(options: UseDownloadsOptions = {}): UseDownloadsRet
         description: `Download job created successfully for ${request.download_type} download`,
       });
       
-      // Refresh the downloads list
-      await fetchDownloads();
+      // Refresh the downloads list (explicit user action)
+      await fetchDownloads(false);
       
       return response;
     } catch (err) {
@@ -164,8 +193,8 @@ export function useDownloads(options: UseDownloadsOptions = {}): UseDownloadsRet
           description: response.message,
         });
         
-        // Refresh the downloads list
-        await fetchDownloads();
+        // Refresh the downloads list (explicit user action)
+        await fetchDownloads(false);
         return true;
       } else {
         toast({
@@ -195,8 +224,8 @@ export function useDownloads(options: UseDownloadsOptions = {}): UseDownloadsRet
         description: 'Download job has been deleted successfully',
       });
       
-      // Refresh the downloads list
-      await fetchDownloads();
+      // Refresh the downloads list (explicit user action)
+      await fetchDownloads(false);
       return true;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to delete download';
@@ -216,7 +245,7 @@ export function useDownloads(options: UseDownloadsOptions = {}): UseDownloadsRet
     pagination,
     loading,
     error,
-    refetch: fetchDownloads,
+    refetch: () => fetchDownloads(false), // Explicit refresh with loading indicator
     createDownload,
     performAction,
     deleteDownload,

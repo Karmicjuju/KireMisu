@@ -10,6 +10,7 @@ This module tests the R-2 reading progress API functionality including:
 
 import pytest
 from httpx import AsyncClient
+from fastapi.testclient import TestClient
 from uuid import uuid4
 
 from kiremisu.database.models import Chapter, Series

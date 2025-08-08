@@ -5,12 +5,14 @@ import { Download, Plus, TrendingUp, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { GlassCard } from '@/components/ui/glass-card';
 import { DownloadQueue } from '@/components/downloads';
+import { MangaDxSearchDialog } from '@/components/mangadx';
 import { useDownloads } from '@/hooks/use-downloads';
 import { useDownloadStats } from '@/hooks/use-download-progress';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Downloads() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [showMangaDxDialog, setShowMangaDxDialog] = useState(false);
   const { toast } = useToast();
   
   const { 
@@ -24,11 +26,11 @@ export default function Downloads() {
   } = useDownloads({
     status: statusFilter === 'all' ? undefined : statusFilter,
     per_page: 50,
-    pollInterval: 3000, // Poll every 3 seconds
+    pollInterval: 8000, // Reduced frequency to 8 seconds to minimize background loading
   });
 
   const { stats: systemStats } = useDownloadStats({
-    pollInterval: 10000, // Poll every 10 seconds for system stats
+    pollInterval: 15000, // Default polling interval for system stats
   });
 
   const handleCancel = async (jobId: string) => {
@@ -72,10 +74,15 @@ export default function Downloads() {
   };
 
   const handleAddDownload = () => {
-    // TODO: Open download modal or navigate to MangaDx search
+    setShowMangaDxDialog(true);
+  };
+
+  const handleImportSuccess = () => {
+    // Refresh downloads list when a manga is successfully imported
+    refetch();
     toast({
-      title: 'Add Download',
-      description: 'Navigate to MangaDx search to find and download manga',
+      title: 'Import Successful',
+      description: 'Manga has been imported. You can now download chapters.',
     });
   };
 
@@ -188,6 +195,13 @@ export default function Downloads() {
           onClearCompleted={handleClearCompleted}
         />
       </div>
+
+      {/* MangaDx Search Dialog */}
+      <MangaDxSearchDialog
+        open={showMangaDxDialog}
+        onOpenChange={setShowMangaDxDialog}
+        onImportSuccess={handleImportSuccess}
+      />
     </div>
   );
 }

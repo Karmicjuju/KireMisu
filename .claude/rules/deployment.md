@@ -46,7 +46,7 @@ LIBRARY_SCAN_INTERVAL=3600  # seconds
 THUMBNAIL_CACHE_PATH=/app/cache/thumbnails
 
 # External API Configuration
-MANGADX_API_URL=https://api.mangadx.org
+MANGADX_API_URL=https://api.mangadex.org
 MANGADX_RATE_LIMIT=5  # requests per second
 MANGADX_API_TIMEOUT=30
 
@@ -76,7 +76,7 @@ class Settings(BaseSettings):
     database_url: str
     library_paths: List[str]
     secret_key: str
-    mangadx_api_url: str = "https://api.mangadx.org"
+    mangadx_api_url: str = "https://api.mangadex.org"
     
     @validator('library_paths')
     def validate_library_paths(cls, v):
@@ -219,7 +219,7 @@ metadata:
   name: kiremisu-config
   namespace: kiremisu
 data:
-  MANGADX_API_URL: "https://api.mangadx.org"
+  MANGADX_API_URL: "https://api.mangadex.org"
   LOG_LEVEL: "INFO"
   LOG_FORMAT: "json"
   WORKER_CONCURRENCY: "4"

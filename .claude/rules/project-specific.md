@@ -216,7 +216,7 @@ FROM python:3.11-slim as runtime
 # Essential environment variables
 DATABASE_URL: postgresql+asyncpg://user:pass@db:5432/kiremisu
 LIBRARY_PATHS: /manga:/light-novels:/comics
-MANGADX_API_URL: https://api.mangadx.org
+MANGADX_API_URL: https://api.mangadex.org
 REDIS_URL: redis://redis:6379/0  # For caching and background jobs
 SECRET_KEY: # Required for API authentication
 ```

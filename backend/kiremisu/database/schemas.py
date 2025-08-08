@@ -1,10 +1,11 @@
 """Pydantic schemas for API requests and responses."""
 
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any, Dict, List, Optional, Generic, TypeVar, Literal, TYPE_CHECKING
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator, validator
 
 if TYPE_CHECKING:
     from kiremisu.database.models import JobQueue
@@ -491,10 +492,14 @@ class SeriesResponse(BaseModel):
     @classmethod
     def from_model(cls, series):
         """Create SeriesResponse from Series model."""
-        # Handle user_tags relationship
+        # Handle user_tags relationship safely
         user_tags = []
-        if hasattr(series, 'user_tags') and series.user_tags:
-            user_tags = [TagResponse.from_model(tag) for tag in series.user_tags]
+        try:
+            if hasattr(series, 'user_tags') and series.user_tags:
+                user_tags = [TagResponse.from_model(tag) for tag in series.user_tags]
+        except Exception:
+            # If user_tags relationship fails, continue with empty list
+            user_tags = []
         
         return cls(
             id=series.id,
@@ -833,6 +838,30 @@ class AnnotationResponse(AnnotationBase):
 
     # Optional chapter information (when loaded with relationship)
     chapter: Optional[ChapterResponse] = Field(None, description="Parent chapter information")
+    
+    model_config = ConfigDict(from_attributes=True)
+
+    @classmethod
+    def from_model(cls, annotation, include_chapter: bool = False):
+        """Create AnnotationResponse from Annotation model."""
+        data = {
+            "id": annotation.id,
+            "chapter_id": annotation.chapter_id,
+            "content": annotation.content,
+            "page_number": annotation.page_number,
+            "annotation_type": annotation.annotation_type,
+            "position_x": getattr(annotation, "position_x", None),
+            "position_y": getattr(annotation, "position_y", None),
+            "color": getattr(annotation, "color", None),
+            "created_at": annotation.created_at,
+            "updated_at": annotation.updated_at,
+        }
+
+        # Include chapter if available and requested
+        if include_chapter and hasattr(annotation, "chapter") and annotation.chapter:
+            data["chapter"] = ChapterResponse.from_model(annotation.chapter)
+
+        return cls(**data)
 
 
 # File Operation schemas
@@ -915,28 +944,6 @@ class FileOperationResponse(BaseModel):
     updated_at: datetime = Field(..., description="Last update time")
 
     model_config = ConfigDict(from_attributes=True)
-
-    @classmethod
-    def from_model(cls, annotation, include_chapter: bool = False):
-        """Create AnnotationResponse from Annotation model."""
-        data = {
-            "id": annotation.id,
-            "chapter_id": annotation.chapter_id,
-            "content": annotation.content,
-            "page_number": annotation.page_number,
-            "annotation_type": annotation.annotation_type,
-            "position_x": getattr(annotation, "position_x", None),
-            "position_y": getattr(annotation, "position_y", None),
-            "color": getattr(annotation, "color", None),
-            "created_at": annotation.created_at,
-            "updated_at": annotation.updated_at,
-        }
-
-        # Include chapter if available and requested
-        if include_chapter and hasattr(annotation, "chapter") and annotation.chapter:
-            data["chapter"] = ChapterResponse.from_model(annotation.chapter)
-
-        return cls(**data)
 
 
 class AnnotationListResponse(BaseModel):
@@ -1311,15 +1318,14 @@ class DownloadJobRequest(BaseModel):
     # Notification options
     notify_on_completion: bool = Field(default=True, description="Send notification when download completes")
     
-    @field_validator("download_type")
-    @classmethod
-    def validate_download_type(cls, v):
-        """Validate download type."""
-        if v == "single" and not cls.chapter_ids:
+    @model_validator(mode='after')
+    def validate_download_type(self):
+        """Validate download type requirements."""
+        if self.download_type == "single" and not self.chapter_ids:
             raise ValueError("Single download requires chapter_ids")
-        elif v == "batch" and not cls.chapter_ids:
+        elif self.download_type == "batch" and not self.chapter_ids:
             raise ValueError("Batch download requires chapter_ids")
-        return v
+        return self
 
 
 class DownloadJobResponse(BaseModel):
@@ -1336,6 +1342,11 @@ class DownloadJobResponse(BaseModel):
     batch_type: Optional[str] = Field(None, description="Batch type (single, multiple, volume, series)")
     volume_number: Optional[str] = Field(None, description="Volume number for volume downloads")
     destination_path: Optional[str] = Field(None, description="Download destination path")
+    
+    # Manga metadata for better UI display
+    manga_title: Optional[str] = Field(None, description="Human-readable manga title")
+    manga_author: Optional[str] = Field(None, description="Manga author name")
+    manga_cover_url: Optional[str] = Field(None, description="Manga cover image URL")
     
     # Progress tracking
     progress: Optional[DownloadJobProgressInfo] = Field(None, description="Download progress information")
@@ -1405,6 +1416,9 @@ class DownloadJobResponse(BaseModel):
             batch_type=payload.get("batch_type"),
             volume_number=payload.get("volume_number"),
             destination_path=payload.get("destination_path"),
+            manga_title=payload.get("manga_title"),
+            manga_author=payload.get("manga_author"),
+            manga_cover_url=payload.get("manga_cover_url"),
             progress=progress,
             priority=job.priority,
             retry_count=job.retry_count,
@@ -1506,3 +1520,120 @@ class BulkDownloadResponse(BaseModel):
     failed_to_queue: int = Field(..., description="Number of downloads that failed to queue")
     job_ids: List[UUID] = Field(..., description="List of created job IDs")
     errors: List[str] = Field(default_factory=list, description="Error messages for failed requests")
+
+
+# MangaDx Chapter and @Home API schemas
+class MangaDxChapterAttributes(BaseModel):
+    """Schema for MangaDx chapter attributes."""
+    
+    title: Optional[str] = Field(None, description="Chapter title")
+    volume: Optional[str] = Field(None, description="Volume number")
+    chapter: Optional[str] = Field(None, description="Chapter number") 
+    pages: int = Field(default=0, description="Number of pages")
+    translated_language: str = Field(..., alias="translatedLanguage", description="Chapter language code")
+    external_url: Optional[str] = Field(None, alias="externalUrl", description="External URL if hosted elsewhere")
+    is_unavailable: bool = Field(default=False, alias="isUnavailable", description="Whether chapter is unavailable")
+    publish_at: datetime = Field(..., alias="publishAt", description="Publication timestamp")
+    readable_at: datetime = Field(..., alias="readableAt", description="Readable timestamp")
+    created_at: datetime = Field(..., alias="createdAt", description="Creation timestamp")
+    updated_at: datetime = Field(..., alias="updatedAt", description="Update timestamp")
+    version: int = Field(default=1, description="Chapter version")
+
+
+class MangaDxChapterResponse(BaseModel):
+    """Schema for MangaDx individual chapter response."""
+    
+    id: str = Field(..., description="MangaDx chapter UUID")
+    type: str = Field(default="chapter", description="Resource type")
+    attributes: MangaDxChapterAttributes = Field(..., description="Chapter attributes")
+    relationships: List[Dict[str, Any]] = Field(default_factory=list, description="Chapter relationships")
+    
+    def get_chapter_number(self) -> Optional[float]:
+        """Extract chapter number as float."""
+        chapter_str = self.attributes.chapter
+        if not chapter_str:
+            return None
+        try:
+            return float(chapter_str)
+        except (ValueError, TypeError):
+            return None
+    
+    def get_volume_number(self) -> Optional[int]:
+        """Extract volume number as integer."""
+        volume_str = self.attributes.volume
+        if not volume_str:
+            return None
+        try:
+            return int(volume_str)
+        except (ValueError, TypeError):
+            return None
+
+
+class MangaDxChapterListResponse(BaseModel):
+    """Schema for MangaDx chapter listing response."""
+    
+    result: str = Field(default="ok", description="Request result status")
+    response: str = Field(default="collection", description="Response type")
+    data: List[MangaDxChapterResponse] = Field(default_factory=list, description="List of chapters")
+    limit: int = Field(..., description="Results per page limit")
+    offset: int = Field(..., description="Current page offset")
+    total: int = Field(..., description="Total number of chapters available")
+    
+    @property
+    def has_more(self) -> bool:
+        """Check if more chapters are available."""
+        return self.offset + len(self.data) < self.total
+
+
+class MangaDxAtHomeChapterData(BaseModel):
+    """Schema for MangaDx @Home chapter data."""
+    
+    hash: str = Field(..., description="Chapter hash for URL construction")
+    data: List[str] = Field(..., description="Full quality page filenames")
+    data_saver: List[str] = Field(..., alias="dataSaver", description="Compressed quality page filenames")
+    
+    def get_page_filenames(self, quality: str = "data") -> List[str]:
+        """Get page filenames for specified quality."""
+        if quality == "data-saver":
+            return self.data_saver
+        return self.data
+
+
+class MangaDxAtHomeResponse(BaseModel):
+    """Schema for MangaDx @Home server response."""
+    
+    result: str = Field(default="ok", description="Request result status") 
+    base_url: str = Field(..., alias="baseUrl", description="Base URL for page downloads")
+    chapter: MangaDxAtHomeChapterData = Field(..., description="Chapter data and page info")
+    
+    def construct_page_url(self, page_filename: str, quality: str = "data") -> str:
+        """Construct full page URL."""
+        quality_path = "data-saver" if quality == "data-saver" else "data"
+        return f"{self.base_url}/{quality_path}/{self.chapter.hash}/{page_filename}"
+    
+    def get_all_page_urls(self, quality: str = "data") -> List[str]:
+        """Get all page URLs for the chapter."""
+        page_filenames = self.chapter.get_page_filenames(quality)
+        return [self.construct_page_url(filename, quality) for filename in page_filenames]
+
+
+class MangaDxDownloadQuality(str, Enum):
+    """Enum for MangaDx download quality options."""
+    
+    FULL = "data"
+    COMPRESSED = "data-saver"
+
+
+class MangaDxDownloadedChapter(BaseModel):
+    """Schema for downloaded chapter information."""
+    
+    chapter_id: str = Field(..., description="MangaDx chapter UUID")
+    title: Optional[str] = Field(None, description="Chapter title")
+    chapter_number: Optional[float] = Field(None, description="Chapter number")
+    volume_number: Optional[int] = Field(None, description="Volume number")
+    file_path: str = Field(..., description="Local file path to CBZ file")
+    file_size: int = Field(..., description="File size in bytes")
+    page_count: int = Field(..., description="Number of pages downloaded")
+    download_quality: str = Field(..., description="Download quality used")
+    download_duration_seconds: Optional[float] = Field(None, description="Time taken to download")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Download timestamp")

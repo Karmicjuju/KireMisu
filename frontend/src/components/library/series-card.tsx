@@ -18,9 +18,10 @@ import { Book, BookOpen, Play, Check, Clock } from 'lucide-react';
 export interface SeriesCardProps {
   series: SeriesResponse;
   className?: string;
+  viewMode?: 'grid' | 'list';
 }
 
-export function SeriesCard({ series, className }: SeriesCardProps) {
+export function SeriesCard({ series, className, viewMode = 'grid' }: SeriesCardProps) {
   const progressPercentage =
     series.total_chapters > 0
       ? Math.round((series.read_chapters / series.total_chapters) * 100)
@@ -30,25 +31,118 @@ export function SeriesCard({ series, className }: SeriesCardProps) {
   const hasProgress = progressPercentage > 0;
   const readingStatus = isCompleted ? 'completed' : hasProgress ? 'in-progress' : 'unread';
 
+  if (viewMode === 'list') {
+    return (
+      <GlassCard className={cn('overflow-hidden transition-all hover:bg-accent/5', className)} data-testid="series-card">
+        <div className="flex items-center gap-4 p-4">
+          {/* Compact Cover */}
+          <div className="relative flex h-16 w-12 items-center justify-center bg-gradient-to-br from-muted to-muted/80 rounded-sm flex-shrink-0">
+            <Book className="h-6 w-6 text-muted-foreground/60" />
+            {/* Progress indicator */}
+            {hasProgress && (
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted rounded-b-sm overflow-hidden">
+                <div 
+                  className={cn(
+                    "h-full transition-all",
+                    isCompleted ? "bg-green-500" : "bg-primary"
+                  )} 
+                  style={{ width: `${progressPercentage}%` }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 min-w-0 space-y-1">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h3 className="font-medium text-sm line-clamp-1">{series.title_primary}</h3>
+                {series.author && (
+                  <p className="text-xs text-muted-foreground line-clamp-1">by {series.author}</p>
+                )}
+              </div>
+              
+              {/* Status badge */}
+              <div className="flex-shrink-0">
+                {isCompleted && (
+                  <Badge variant="secondary" className="text-xs h-5">
+                    <Check className="mr-1 h-2.5 w-2.5" />
+                    Complete
+                  </Badge>
+                )}
+                {hasProgress && !isCompleted && (
+                  <Badge variant="outline" className="text-xs h-5">
+                    <Clock className="mr-1 h-2.5 w-2.5" />
+                    {progressPercentage}%
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            {/* Progress and chapters */}
+            {series.total_chapters > 0 && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <BookOpen className="h-3 w-3" />
+                <span>{series.read_chapters} / {series.total_chapters} chapters</span>
+              </div>
+            )}
+
+            {/* Genres (limited) */}
+            {series.genres.length > 0 && (
+              <div className="flex gap-1">
+                {series.genres.slice(0, 2).map((genre) => (
+                  <Badge key={genre} variant="outline" className="text-xs h-4 px-1">
+                    {genre}
+                  </Badge>
+                ))}
+                {series.genres.length > 2 && (
+                  <Badge variant="outline" className="text-xs h-4 px-1">
+                    +{series.genres.length - 2}
+                  </Badge>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/library/series/${series.id}`}>View</Link>
+            </Button>
+            {series.total_chapters > 0 && (
+              <Button asChild size="sm">
+                <Link href={`/library/series/${series.id}/continue`}>
+                  <Play className="mr-1 h-3 w-3" />
+                  {hasProgress ? 'Continue' : 'Start'}
+                </Link>
+              </Button>
+            )}
+          </div>
+        </div>
+      </GlassCard>
+    );
+  }
+
+  // Grid view - more compact than before
   return (
     <GlassCard className={cn('overflow-hidden transition-all hover:scale-105', className)} data-testid="series-card">
-      <div className="relative flex aspect-[3/4] items-center justify-center bg-gradient-to-br from-muted to-muted/80">
+      <div className="relative flex aspect-[2/3] items-center justify-center bg-gradient-to-br from-muted to-muted/80">
         {/* Placeholder for cover image */}
         <div className="text-muted-foreground/60">
-          <Book className="h-16 w-16" />
+          <Book className="h-12 w-12" />
         </div>
 
         {/* Reading status overlay */}
-        <div className="absolute right-2 top-2 flex gap-1">
+        <div className="absolute right-2 top-2">
           {isCompleted && (
             <Badge variant="secondary" className="text-xs" data-testid="completion-badge">
-              <Check className="mr-1 h-3 w-3" />
+              <Check className="mr-1 h-2.5 w-2.5" />
               Complete
             </Badge>
           )}
           {hasProgress && !isCompleted && (
             <Badge variant="outline" className="text-xs" data-testid="progress-badge">
-              <Clock className="mr-1 h-3 w-3" />
+              <Clock className="mr-1 h-2.5 w-2.5" />
               <span data-testid="progress-percentage">{progressPercentage}%</span>
             </Badge>
           )}
@@ -65,77 +159,55 @@ export function SeriesCard({ series, className }: SeriesCardProps) {
               animated={false}
               data-testid="progress-bar"
             />
-            <div className="sr-only" data-testid="progress-fill" style={{ width: `${progressPercentage}%` }} />
           </div>
         )}
       </div>
 
-      <div className="space-y-3 p-4">
+      <div className="space-y-2 p-3">
         <div>
-          <h3 className="mb-1 line-clamp-2 font-semibold">{series.title_primary}</h3>
+          <h3 className="mb-1 line-clamp-2 text-sm font-semibold">{series.title_primary}</h3>
           {series.author && (
-            <p className="line-clamp-1 text-sm text-muted-foreground">by {series.author}</p>
+            <p className="line-clamp-1 text-xs text-muted-foreground">by {series.author}</p>
           )}
         </div>
 
-        {/* Enhanced progress section */}
+        {/* Compact progress section */}
         {series.total_chapters > 0 && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <BookOpen className="h-4 w-4" />
-              <span data-testid="chapter-count-text">
-                {series.read_chapters} / {series.total_chapters} chapters
-              </span>
-              {readingStatus === 'completed' && <Check className="h-4 w-4 text-green-500" />}
-              {readingStatus === 'in-progress' && <Clock className="h-4 w-4 text-primary" />}
-            </div>
-
-            <ProgressBar
-              value={series.read_chapters}
-              max={series.total_chapters}
-              size="sm"
-              colorScheme={isCompleted ? 'success' : 'primary'}
-              showValue={hasProgress}
-              data-testid="progress-bar"
-            />
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <BookOpen className="h-3 w-3" />
+            <span data-testid="chapter-count-text">
+              {series.read_chapters} / {series.total_chapters}
+            </span>
+            {readingStatus === 'completed' && <Check className="h-3 w-3 text-green-500" />}
+            {readingStatus === 'in-progress' && <Clock className="h-3 w-3 text-primary" />}
           </div>
         )}
 
+        {/* Limited genres */}
         {series.genres.length > 0 && (
           <div className="flex flex-wrap gap-1">
-            {series.genres.slice(0, 3).map((genre) => (
-              <Badge key={genre} variant="outline" className="text-xs">
+            {series.genres.slice(0, 2).map((genre) => (
+              <Badge key={genre} variant="outline" className="text-xs h-4 px-1">
                 {genre}
               </Badge>
             ))}
-            {series.genres.length > 3 && (
-              <Badge variant="outline" className="text-xs">
-                +{series.genres.length - 3}
+            {series.genres.length > 2 && (
+              <Badge variant="outline" className="text-xs h-4 px-1">
+                +{series.genres.length - 2}
               </Badge>
             )}
           </div>
         )}
 
-        {series.user_tags && series.user_tags.length > 0 && (
-          <TagChipList
-            tags={series.user_tags}
-            maxVisible={3}
-            chipProps={{
-              size: 'sm',
-              variant: 'secondary',
-            }}
-          />
-        )}
-
-        <div className="flex gap-2 pt-2">
-          <Button asChild size="sm" className="flex-1">
-            <Link href={`/library/series/${series.id}`}>View Details</Link>
+        {/* Compact actions */}
+        <div className="flex gap-1.5 pt-1">
+          <Button asChild size="sm" className="flex-1 text-xs h-7">
+            <Link href={`/library/series/${series.id}`}>View</Link>
           </Button>
-
           {series.total_chapters > 0 && (
-            <Button asChild size="sm" variant="outline">
+            <Button asChild size="sm" variant="outline" className="text-xs h-7">
               <Link href={`/library/series/${series.id}/continue`}>
-                <Play className="mr-1 h-4 w-4" />
+                <Play className="mr-1 h-2.5 w-2.5" />
                 {hasProgress ? 'Continue' : 'Start'}
               </Link>
             </Button>

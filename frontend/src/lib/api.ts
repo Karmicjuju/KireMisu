@@ -595,49 +595,6 @@ export const tagsApi = {
       `/api/annotations/chapters/${chapterId}${params.toString() ? `?${params.toString()}` : ''}`
     );
   },
-
-  async getTag(tagId: string): Promise<TagResponse> {
-    const response = await api.get<TagResponse>(`/api/tags/${tagId}`);
-    return response.data;
-  },
-
-  async createTag(tagData: TagCreate): Promise<TagResponse> {
-    const response = await api.post<TagResponse>('/api/tags/', tagData);
-    return response.data;
-  },
-
-  async updateTag(tagId: string, tagData: TagUpdate): Promise<TagResponse> {
-    const response = await api.put<TagResponse>(`/api/tags/${tagId}`, tagData);
-    return response.data;
-  },
-
-  async deleteTag(tagId: string): Promise<{ message: string }> {
-    const response = await api.delete<{ message: string }>(`/api/tags/${tagId}`);
-    return response.data;
-  },
-
-  // Series-specific tag operations
-  async getSeriesTags(seriesId: string): Promise<TagResponse[]> {
-    const response = await api.get<TagResponse[]>(`/api/tags/series/${seriesId}`);
-    return response.data;
-  },
-
-  async assignTagsToSeries(seriesId: string, assignment: SeriesTagAssignment): Promise<TagResponse[]> {
-    const response = await api.put<TagResponse[]>(`/api/tags/series/${seriesId}`, assignment);
-    return response.data;
-  },
-
-  async addTagsToSeries(seriesId: string, assignment: SeriesTagAssignment): Promise<TagResponse[]> {
-    const response = await api.post<TagResponse[]>(`/api/tags/series/${seriesId}/add`, assignment);
-    return response.data;
-  },
-
-  async removeTagsFromSeries(seriesId: string, assignment: SeriesTagAssignment): Promise<TagResponse[]> {
-    const response = await api.delete<TagResponse[]>(`/api/tags/series/${seriesId}/remove`, {
-      data: assignment,
-    });
-    return response.data;
-  },
 };
 
 // Download interfaces
@@ -681,6 +638,10 @@ export interface DownloadJobResponse {
   batch_type?: string;
   volume_number?: string;
   destination_path?: string;
+  // Manga metadata for better UI display
+  manga_title?: string;
+  manga_author?: string;
+  manga_cover_url?: string;
   progress?: DownloadJobProgressInfo;
   priority: number;
   retry_count: number;
@@ -815,6 +776,139 @@ export const downloadsApi = {
 
     const response = await api.delete<{ message: string }>(
       `/api/downloads/${jobId}${params.toString() ? `?${params.toString()}` : ''}`
+    );
+    return response.data;
+  },
+};
+
+// MangaDx integration interfaces
+export interface MangaDxSearchRequest {
+  title?: string;
+  author?: string;
+  artist?: string;
+  year?: number;
+  status?: 'ongoing' | 'completed' | 'hiatus' | 'cancelled';
+  content_rating?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface MangaDxCoverArt {
+  id: string;
+  type: 'cover_art';
+  attributes: {
+    fileName: string;
+    volume?: string;
+    locale?: string;
+  };
+}
+
+export interface MangaDxMangaInfo {
+  id: string;
+  title: string;
+  alternative_titles: string[];
+  description?: string;
+  author?: string;
+  artist?: string;
+  genres: string[];
+  tags: string[];
+  status: 'ongoing' | 'completed' | 'hiatus' | 'cancelled';
+  content_rating: 'safe' | 'suggestive' | 'erotica' | 'pornographic';
+  original_language: string;
+  publication_year?: number;
+  last_volume?: string;
+  last_chapter?: string;
+  cover_art_url?: string;
+  mangadx_created_at?: string;
+  mangadx_updated_at?: string;
+}
+
+export interface MangaDxSearchResponse {
+  results: MangaDxMangaInfo[];
+  total: number;
+  has_more: boolean;
+}
+
+export interface MangaDxImportRequest {
+  mangadx_id: string;
+  import_cover_art?: boolean;
+  import_chapters?: boolean;
+  overwrite_existing?: boolean;
+}
+
+export interface MangaDxImportResponse {
+  status: 'success' | 'error';
+  message: string;
+  series_id?: string;
+  series?: SeriesResponse;
+  created: boolean;
+  enriched: boolean;
+}
+
+export interface MangaDxEnrichmentCandidate {
+  mangadx_id: string;
+  manga_info: MangaDxMangaInfo;
+  confidence_score: number;
+  match_reasons: string[];
+}
+
+export interface MangaDxEnrichmentResponse {
+  series_id: string;
+  series_title: string;
+  candidates: MangaDxEnrichmentCandidate[];
+  message: string;
+}
+
+export interface MangaDxHealthResponse {
+  status: 'healthy' | 'unhealthy';
+  api_accessible: boolean;
+  response_time_ms?: number;
+  error_message?: string;
+  last_checked: string;
+}
+
+export interface MangaDxDownloadRequest {
+  manga_id: string;
+  download_type: 'series' | 'volume' | 'chapter_range';
+  volume_number?: string;
+  chapter_range?: {
+    start: string;
+    end: string;
+  };
+  destination_path?: string;
+  priority?: number;
+}
+
+export const mangadxApi = {
+  async search(request: MangaDxSearchRequest): Promise<MangaDxSearchResponse> {
+    const response = await api.post<MangaDxSearchResponse>('/api/mangadx/search', request);
+    return response.data;
+  },
+
+  async getManga(mangaId: string): Promise<MangaDxMangaInfo> {
+    const response = await api.get<MangaDxMangaInfo>(`/api/mangadx/manga/${mangaId}`);
+    return response.data;
+  },
+
+  async importManga(request: MangaDxImportRequest): Promise<MangaDxImportResponse> {
+    const response = await api.post<MangaDxImportResponse>('/api/mangadx/import', request);
+    return response.data;
+  },
+
+  async enrichSeries(seriesId: string): Promise<MangaDxEnrichmentResponse> {
+    const response = await api.post<MangaDxEnrichmentResponse>(`/api/mangadx/enrich/${seriesId}`);
+    return response.data;
+  },
+
+  async checkHealth(): Promise<MangaDxHealthResponse> {
+    const response = await api.get<MangaDxHealthResponse>('/api/mangadx/health');
+    return response.data;
+  },
+
+  async createDownload(request: MangaDxDownloadRequest): Promise<DownloadJobResponse> {
+    const response = await api.post<DownloadJobResponse>(
+      `/api/mangadx/manga/${request.manga_id}/download`,
+      request
     );
     return response.data;
   },
