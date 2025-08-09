@@ -9,9 +9,11 @@ from uuid import UUID
 from sqlalchemy import select, and_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiremisu.database.models import JobQueue, LibraryPath
+from kiremisu.database.models import JobQueue, LibraryPath, Series, Chapter
 from kiremisu.services.importer import ImporterService
 from kiremisu.services.download_service import DownloadService
+from kiremisu.services.mangadx_client import MangaDxClient
+from kiremisu.services.notification_service import NotificationService
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,8 @@ class JobWorker:
     def __init__(self):
         self.importer = ImporterService()
         self.download_service = DownloadService()
+        self.mangadx_client = MangaDxClient()
+        self.notification_service = NotificationService()
 
     async def execute_job(self, db: AsyncSession, job: JobQueue) -> Dict[str, Any]:
         """Execute a single job and update its status.
@@ -56,6 +60,8 @@ class JobWorker:
                 result = await self._execute_library_scan(db, job)
             elif job.job_type == "download":
                 result = await self._execute_download(db, job)
+            elif job.job_type == "chapter_update_check":
+                result = await self._execute_chapter_update_check(db, job)
             else:
                 raise JobExecutionError(f"Unknown job type: {job.job_type}")
 
@@ -197,6 +203,136 @@ class JobWorker:
         finally:
             # Clean up download service resources
             await self.download_service.cleanup()
+
+    async def _execute_chapter_update_check(self, db: AsyncSession, job: JobQueue) -> Dict[str, Any]:
+        """Execute a chapter update check job for a watched series.
+
+        Args:
+            db: Database session
+            job: JobQueue model with chapter_update_check type
+
+        Returns:
+            Dict with update check results
+        """
+        payload = job.payload
+        series_id_str = payload.get("series_id")
+        mangadx_id = payload.get("mangadx_id")
+        series_title = payload.get("series_title", "Unknown Series")
+
+        if not series_id_str or not mangadx_id:
+            raise JobExecutionError("Chapter update check job missing required fields: series_id and mangadx_id")
+
+        series_id = UUID(series_id_str)
+        logger.info(f"Executing chapter update check for series {series_title} (MangaDx: {mangadx_id})")
+
+        # Get the series from database
+        series_result = await db.execute(select(Series).where(Series.id == series_id))
+        series = series_result.scalar_one_or_none()
+
+        if not series:
+            raise JobExecutionError(f"Series not found: {series_id}")
+
+        # Get existing chapters from database for comparison
+        existing_chapters_result = await db.execute(
+            select(Chapter)
+            .where(Chapter.series_id == series_id)
+            .where(Chapter.mangadx_id.isnot(None))
+        )
+        existing_chapters = existing_chapters_result.scalars().all()
+        existing_mangadx_ids = {ch.mangadx_id for ch in existing_chapters if ch.mangadx_id}
+
+        new_chapters = []
+        try:
+            # Fetch chapters from MangaDx API with English translation filter
+            mangadx_chapters = await self.mangadx_client.get_manga_chapters(
+                manga_id=mangadx_id,
+                languages=["en"],  # Only English translations
+                limit=500,  # Get recent chapters
+            )
+
+            logger.info(f"Found {len(mangadx_chapters)} chapters on MangaDx for {series_title}")
+
+            # Check for new chapters not in our database
+            for mangadx_chapter in mangadx_chapters:
+                if mangadx_chapter.id not in existing_mangadx_ids:
+                    # This is a new chapter - create a Chapter model but don't download the file yet
+                    chapter_number = mangadx_chapter.get_chapter_number()
+                    volume_number = mangadx_chapter.get_volume_number()
+                    
+                    if chapter_number is None:
+                        logger.warning(f"Skipping chapter with invalid number: {mangadx_chapter.id}")
+                        continue
+
+                    # Create chapter record with MangaDx metadata
+                    new_chapter = Chapter(
+                        series_id=series_id,
+                        chapter_number=chapter_number,
+                        volume_number=volume_number,
+                        title=mangadx_chapter.attributes.title,
+                        mangadx_id=mangadx_chapter.id,
+                        file_path="",  # Will be set when downloaded
+                        file_size=0,
+                        page_count=mangadx_chapter.attributes.pages or 0,
+                        source_metadata={
+                            "mangadx_data": mangadx_chapter.model_dump(),
+                            "discovered_via": "chapter_update_check",
+                            "discovered_at": datetime.now(timezone.utc).isoformat(),
+                        },
+                    )
+
+                    db.add(new_chapter)
+                    new_chapters.append(new_chapter)
+
+            if new_chapters:
+                await db.commit()
+                logger.info(f"Added {len(new_chapters)} new chapters for {series_title}")
+
+                # Update series last_watched_check timestamp
+                await db.execute(
+                    update(Series)
+                    .where(Series.id == series_id)
+                    .values(
+                        last_watched_check=datetime.now(timezone.utc).replace(tzinfo=None),
+                        updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                    )
+                )
+                await db.commit()
+
+                # Create notifications for new chapters
+                notifications = await self.notification_service.create_chapter_notifications(
+                    db, series, new_chapters
+                )
+
+                logger.info(f"Created {len(notifications)} notifications for new chapters")
+            else:
+                # Still update last check timestamp even if no new chapters
+                await db.execute(
+                    update(Series)
+                    .where(Series.id == series_id)
+                    .values(
+                        last_watched_check=datetime.now(timezone.utc).replace(tzinfo=None),
+                        updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                    )
+                )
+                await db.commit()
+                logger.info(f"No new chapters found for {series_title}")
+
+        except Exception as e:
+            logger.error(f"Error checking for chapter updates: {e}", exc_info=True)
+            raise JobExecutionError(f"Failed to check for chapter updates: {e}")
+
+        result = {
+            "job_type": "chapter_update_check",
+            "series_id": series_id_str,
+            "series_title": series_title,
+            "mangadx_id": mangadx_id,
+            "chapters_found": len(mangadx_chapters) if 'mangadx_chapters' in locals() else 0,
+            "new_chapters": len(new_chapters),
+            "notifications_created": len(notifications) if 'notifications' in locals() else 0,
+        }
+
+        logger.info(f"Chapter update check completed: {result}")
+        return result
 
     async def _update_job_status(
         self,

@@ -1198,6 +1198,151 @@ class MangaDxHealthResponse(BaseModel):
     error_message: Optional[str] = Field(None, description="Error message if health check failed")
 
 
+# Notification schemas
+class NotificationResponse(BaseModel):
+    """Schema for notification API responses."""
+
+    id: UUID = Field(..., description="Notification unique identifier")
+    notification_type: str = Field(..., description="Type of notification")
+    title: str = Field(..., description="Notification title")
+    message: str = Field(..., description="Notification message")
+    
+    # Optional relationships
+    series_id: Optional[UUID] = Field(None, description="Associated series ID")
+    chapter_id: Optional[UUID] = Field(None, description="Associated chapter ID")
+    
+    # Read status
+    is_read: bool = Field(..., description="Whether notification has been read")
+    read_at: Optional[datetime] = Field(None, description="When notification was read")
+    
+    # Timestamps
+    created_at: datetime = Field(..., description="Notification creation timestamp")
+    
+    # Optional related data for convenience
+    series_title: Optional[str] = Field(None, description="Series title if associated")
+    chapter_title: Optional[str] = Field(None, description="Chapter title if associated")
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @classmethod
+    def from_model(cls, notification):
+        """Create NotificationResponse from Notification model."""
+        series_title = None
+        chapter_title = None
+        
+        # Extract series title if available
+        if hasattr(notification, 'series') and notification.series:
+            series_title = notification.series.title_primary
+        
+        # Extract chapter title if available  
+        if hasattr(notification, 'chapter') and notification.chapter:
+            chapter_num = f"Chapter {notification.chapter.chapter_number}"
+            if notification.chapter.volume_number:
+                chapter_num = f"Vol. {notification.chapter.volume_number}, {chapter_num}"
+            if notification.chapter.title:
+                chapter_num += f" - {notification.chapter.title}"
+            chapter_title = chapter_num
+        
+        return cls(
+            id=notification.id,
+            notification_type=notification.notification_type,
+            title=notification.title,
+            message=notification.message,
+            series_id=notification.series_id,
+            chapter_id=notification.chapter_id,
+            is_read=notification.is_read,
+            read_at=notification.read_at,
+            created_at=notification.created_at,
+            series_title=series_title,
+            chapter_title=chapter_title,
+        )
+
+
+class NotificationListResponse(BaseModel):
+    """Schema for notification list responses."""
+
+    notifications: List[NotificationResponse] = Field(..., description="List of notifications")
+    total: int = Field(..., description="Total number of notifications in response")
+    unread_only: bool = Field(default=False, description="Whether only unread notifications were requested")
+
+
+class NotificationStatsResponse(BaseModel):
+    """Schema for notification statistics."""
+
+    total_notifications: int = Field(..., description="Total number of notifications")
+    unread_notifications: int = Field(..., description="Number of unread notifications")
+    read_notifications: int = Field(..., description="Number of read notifications")
+    notifications_by_type: dict = Field(..., description="Notification counts by type")
+
+
+class NotificationMarkReadRequest(BaseModel):
+    """Schema for marking notification as read."""
+
+    notification_id: UUID = Field(..., description="Notification ID to mark as read")
+
+
+class NotificationMarkReadResponse(BaseModel):
+    """Schema for mark notification read response."""
+
+    id: UUID = Field(..., description="Notification ID")
+    is_read: bool = Field(..., description="Updated read status")
+    read_at: Optional[datetime] = Field(None, description="When notification was marked as read")
+    unread_count: int = Field(..., description="Updated total unread count")
+
+
+class NotificationBulkMarkReadResponse(BaseModel):
+    """Schema for bulk mark read response."""
+
+    marked_count: int = Field(..., description="Number of notifications marked as read")
+    unread_count: int = Field(..., description="Updated total unread count")
+
+
+# Watching schemas
+class WatchToggleRequest(BaseModel):
+    """Schema for toggling series watch status."""
+
+    enabled: bool = Field(..., description="Whether watching should be enabled")
+
+
+class WatchToggleResponse(BaseModel):
+    """Schema for watch toggle response."""
+
+    series_id: UUID = Field(..., description="Series ID")
+    series_title: str = Field(..., description="Series title")
+    watching_enabled: bool = Field(..., description="Updated watching status")
+    last_watched_check: Optional[datetime] = Field(None, description="Last check timestamp")
+    message: str = Field(..., description="Human-readable status message")
+
+    @classmethod
+    def from_series(cls, series):
+        """Create response from Series model."""
+        status = "enabled" if series.watching_enabled else "disabled"
+        return cls(
+            series_id=series.id,
+            series_title=series.title_primary,
+            watching_enabled=series.watching_enabled,
+            last_watched_check=series.last_watched_check,
+            message=f"Watching {status} for '{series.title_primary}'",
+        )
+
+
+class WatchingStatsResponse(BaseModel):
+    """Schema for watching system statistics."""
+
+    watched_series: int = Field(..., description="Number of series being watched")
+    eligible_series: int = Field(..., description="Number of series eligible for watching")
+    pending_update_checks: int = Field(..., description="Number of pending update check jobs")
+    
+    
+class WatchedSeriesListResponse(BaseModel):
+    """Schema for watched series list response."""
+
+    series: List[SeriesResponse] = Field(..., description="List of watched series")
+    total: int = Field(..., description="Total number of watched series")
+    page: int = Field(..., description="Current page number")
+    pages: int = Field(..., description="Total number of pages")
+
+
     @classmethod
     def from_model(cls, operation):
         """Create FileOperationResponse from FileOperation model."""

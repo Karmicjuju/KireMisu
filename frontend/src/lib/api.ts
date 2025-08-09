@@ -176,6 +176,9 @@ export interface SeriesResponse {
   user_tags: TagResponse[];
   total_chapters: number;
   read_chapters: number;
+  watching_enabled: boolean;
+  watching_config?: Record<string, any>;
+  last_watched_check?: string;
   created_at: string;
   updated_at: string;
 }
@@ -911,6 +914,135 @@ export const mangadxApi = {
       request
     );
     return response.data;
+  },
+};
+
+// Notification interfaces
+export interface NotificationResponse {
+  id: string;
+  user_id?: string;
+  type: 'new_chapter' | 'chapter_available' | 'download_complete' | 'download_failed' | 'series_complete' | 'library_update';
+  title: string;
+  message?: string;
+  link?: string;
+  is_read: boolean;
+  data?: Record<string, any>;
+  created_at: string;
+  read_at?: string;
+}
+
+export interface NotificationCreateRequest {
+  type: NotificationResponse['type'];
+  title: string;
+  message?: string;
+  link?: string;
+  data?: Record<string, any>;
+}
+
+export interface NotificationListResponse {
+  notifications: NotificationResponse[];
+  total: number;
+  unread_count: number;
+}
+
+// Watching interfaces
+export interface WatchingResponse {
+  series_id: string;
+  series_title: string;
+  watching_enabled: boolean;
+  last_watched_check?: string | null;
+  message?: string;
+}
+
+export interface WatchingToggleRequest {
+  enabled: boolean;
+}
+
+// Notification API functions
+export const notificationsApi = {
+  async getNotifications(options?: {
+    limit?: number;
+    offset?: number;
+    unread_only?: boolean;
+  }): Promise<NotificationResponse[]> {
+    const params = new URLSearchParams();
+    if (options?.limit) params.append('limit', options.limit.toString());
+    if (options?.offset) params.append('offset', options.offset.toString());
+    if (options?.unread_only) params.append('unread_only', 'true');
+
+    const response = await api.get<NotificationListResponse>(
+      `/api/notifications${params.toString() ? `?${params.toString()}` : ''}`
+    );
+    return response.data.notifications;
+  },
+
+  async getNotification(notificationId: string): Promise<NotificationResponse> {
+    const response = await api.get<NotificationResponse>(`/api/notifications/${notificationId}`);
+    return response.data;
+  },
+
+  async markAsRead(notificationId: string): Promise<NotificationResponse> {
+    const response = await api.put<NotificationResponse>(
+      `/api/notifications/${notificationId}/mark-read`
+    );
+    return response.data;
+  },
+
+  async markAllAsRead(): Promise<{ marked_count: number }> {
+    const response = await api.put<{ marked_count: number }>('/api/notifications/mark-all-read');
+    return response.data;
+  },
+
+  async deleteNotification(notificationId: string): Promise<void> {
+    await api.delete(`/api/notifications/${notificationId}`);
+  },
+
+  async deleteAllRead(): Promise<{ deleted_count: number }> {
+    const response = await api.delete<{ deleted_count: number }>('/api/notifications/read');
+    return response.data;
+  },
+
+  async getStats(): Promise<{ total: number; unread: number }> {
+    const response = await api.get<{ total: number; unread: number }>('/api/notifications/stats');
+    return response.data;
+  },
+};
+
+// Watching API functions
+export const watchingApi = {
+  async getWatchingList(options?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<WatchingResponse[]> {
+    const params = new URLSearchParams();
+    if (options?.limit) params.append('limit', options.limit.toString());
+    if (options?.offset) params.append('offset', options.offset.toString());
+
+    const response = await api.get<WatchingResponse[]>(
+      `/api/watching${params.toString() ? `?${params.toString()}` : ''}`
+    );
+    return response.data;
+  },
+
+  async getWatchingStatus(seriesId: string): Promise<WatchingResponse> {
+    const response = await api.get<WatchingResponse>(`/api/watching/${seriesId}`);
+    return response.data;
+  },
+
+  async toggleWatch(seriesId: string, enabled: boolean): Promise<WatchingResponse> {
+    const response = await api.post<WatchingResponse>(`/api/series/${seriesId}/watch`, {
+      enabled
+    });
+    return response.data;
+  },
+
+  async watchSeries(seriesId: string): Promise<WatchingResponse> {
+    const response = await api.post<WatchingResponse>(`/api/watching/${seriesId}`);
+    return response.data;
+  },
+
+  async unwatchSeries(seriesId: string): Promise<void> {
+    await api.delete(`/api/watching/${seriesId}`);
   },
 };
 

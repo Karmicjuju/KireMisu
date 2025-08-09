@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { TagChipList } from '@/components/tags';
+import { WatchToggle } from './watch-toggle';
 import { cn } from '@/lib/utils';
 import { SeriesResponse } from '@/lib/api';
 import { Book, BookOpen, Play, Check, Clock } from 'lucide-react';
@@ -106,6 +107,12 @@ export function SeriesCard({ series, className, viewMode = 'grid' }: SeriesCardP
 
           {/* Actions */}
           <div className="flex items-center gap-2 flex-shrink-0">
+            <WatchToggle 
+              seriesId={series.id}
+              isWatching={series.watching_enabled}
+              variant="icon"
+              size="sm"
+            />
             <Button asChild size="sm" variant="outline">
               <Link href={`/library/series/${series.id}`}>View</Link>
             </Button>
@@ -201,6 +208,13 @@ export function SeriesCard({ series, className, viewMode = 'grid' }: SeriesCardP
 
         {/* Compact actions */}
         <div className="flex gap-1.5 pt-1">
+          <WatchToggle 
+            seriesId={series.id}
+            isWatching={series.watching_enabled}
+            variant="icon"
+            size="sm"
+            className="h-7 w-7"
+          />
           <Button asChild size="sm" className="flex-1 text-xs h-7">
             <Link href={`/library/series/${series.id}`}>View</Link>
           </Button>
