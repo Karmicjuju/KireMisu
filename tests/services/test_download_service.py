@@ -441,6 +441,91 @@ class TestDownloadService:
         
         download_service.mangadx_client.close.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_download_service_context_manager(self):
+        """Test async context manager for download service."""
+        from kiremisu.api.downloads import get_download_service_context
+        
+        # Test that context manager creates and cleans up service properly
+        async with get_download_service_context() as service:
+            assert isinstance(service, DownloadService)
+            # Service should be properly initialized
+            assert service is not None
+        
+        # After context exit, cleanup should have been called
+        # Note: We can't easily verify cleanup was called without mocking
+        # but the important thing is that the context manager works
+
+    @pytest.mark.asyncio
+    async def test_download_service_context_manager_exception_handling(self):
+        """Test context manager handles exceptions and still cleans up."""
+        from kiremisu.api.downloads import get_download_service_context
+        
+        cleanup_called = False
+        
+        # Mock the service to track cleanup
+        with patch('kiremisu.api.downloads.DownloadService') as mock_service_class:
+            mock_service = AsyncMock()
+            
+            async def mock_cleanup():
+                nonlocal cleanup_called
+                cleanup_called = True
+            
+            mock_service.cleanup = mock_cleanup
+            mock_service_class.return_value = mock_service
+            
+            # Test that cleanup is called even when exception occurs
+            with pytest.raises(ValueError):
+                async with get_download_service_context() as service:
+                    assert service == mock_service
+                    raise ValueError("Test exception")
+            
+            # Cleanup should have been called despite exception
+            assert cleanup_called is True
+
+    @pytest.mark.asyncio  
+    async def test_download_service_context_manager_cleanup_failure(self):
+        """Test context manager handles cleanup failures gracefully."""
+        from kiremisu.api.downloads import get_download_service_context
+        
+        with patch('kiremisu.api.downloads.DownloadService') as mock_service_class:
+            mock_service = AsyncMock()
+            mock_service.cleanup.side_effect = Exception("Cleanup failed")
+            mock_service_class.return_value = mock_service
+            
+            # Context manager should not raise exception even if cleanup fails
+            try:
+                async with get_download_service_context() as service:
+                    assert service == mock_service
+                    # Normal operation should work
+                    pass
+            except Exception as e:
+                pytest.fail(f"Context manager should handle cleanup failure gracefully, but raised: {e}")
+            
+            # Cleanup should have been attempted
+            mock_service.cleanup.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_download_service_resource_management(self):
+        """Test that download service properly manages resources."""
+        download_service = DownloadService()
+        
+        # Mock external resources
+        mock_mangadx_client = AsyncMock()
+        mock_mangadx_client.close = AsyncMock()
+        download_service.mangadx_client = mock_mangadx_client
+        
+        # Mock any other resources that need cleanup
+        download_service._temp_files = ["/tmp/test1", "/tmp/test2"]  # Hypothetical
+        
+        # Test cleanup
+        await download_service.cleanup()
+        
+        # Verify cleanup was called
+        mock_mangadx_client.close.assert_called_once()
+        
+        # In real implementation, would also verify temp file cleanup, etc.
+
 
 class TestDownloadServiceIntegration:
     """Integration tests for download service with real-like scenarios."""

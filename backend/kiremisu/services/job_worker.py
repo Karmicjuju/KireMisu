@@ -269,13 +269,13 @@ class JobWorkerRunner:
     """Background worker that polls and executes jobs from the queue."""
 
     def __init__(
-        self, db_session_factory, poll_interval_seconds: int = 10, max_concurrent_jobs: int = 3
+        self, db_session_factory, poll_interval_seconds: int = 30, max_concurrent_jobs: int = 3
     ):
         """Initialize job worker runner.
 
         Args:
             db_session_factory: Factory function to create database sessions
-            poll_interval_seconds: How often to poll for jobs (default 10 seconds)
+            poll_interval_seconds: How often to poll for jobs (default 30 seconds)
             max_concurrent_jobs: Maximum number of concurrent jobs (default 3)
         """
         self.db_session_factory = db_session_factory

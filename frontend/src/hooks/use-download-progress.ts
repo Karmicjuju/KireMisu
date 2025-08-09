@@ -1,13 +1,22 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { DownloadJobResponse, downloadsApi } from '@/lib/api';
+import { useAdaptivePolling } from '@/hooks/use-adaptive-polling';
 
 interface UseDownloadProgressOptions {
   jobId: string;
-  pollInterval?: number; // in milliseconds
+  /** @deprecated Use pollingStrategy instead */
+  pollInterval?: number;
   enabled?: boolean;
   stopOnComplete?: boolean;
+  /** Advanced polling configuration */
+  pollingStrategy?: {
+    initialInterval?: number;
+    maxInterval?: number;
+    activeInterval?: number;
+    backoffMultiplier?: number;
+  };
 }
 
 interface UseDownloadProgressReturn {
@@ -29,16 +38,31 @@ export function useDownloadProgress(options: UseDownloadProgressOptions): UseDow
 
   const {
     jobId,
-    pollInterval = 2000, // 2 seconds for active downloads
+    pollInterval = 2000,
     enabled = true,
     stopOnComplete = true,
+    pollingStrategy = {},
   } = options;
 
-  const pollIntervalRef = useRef<NodeJS.Timeout>();
   const mountedRef = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const lastFetchTimeRef = useRef(0);
 
   const fetchJob = useCallback(async () => {
     if (!enabled || !jobId || !mountedRef.current) return;
+
+    // Prevent rapid successive calls
+    const now = Date.now();
+    if (now - lastFetchTimeRef.current < 1000) {
+      return;
+    }
+    lastFetchTimeRef.current = now;
+
+    // Cancel previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
 
     try {
       setLoading(true);
@@ -50,10 +74,16 @@ export function useDownloadProgress(options: UseDownloadProgressOptions): UseDow
 
       setJob(response);
     } catch (err) {
+      // Ignore abort errors
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      
       if (!mountedRef.current) return;
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch download progress';
       setError(errorMessage);
       console.error('Failed to fetch download progress:', err);
+      throw err; // Re-throw for adaptive polling
     } finally {
       if (mountedRef.current) {
         setLoading(false);
@@ -61,93 +91,97 @@ export function useDownloadProgress(options: UseDownloadProgressOptions): UseDow
     }
   }, [jobId, enabled]);
 
-  // Setup polling based on job status
-  useEffect(() => {
-    if (!enabled || !jobId) return;
-
-    // Initial fetch
-    fetchJob();
-
-    // Setup polling interval based on job status
-    if (pollInterval > 0) {
-      pollIntervalRef.current = setInterval(() => {
-        if (!mountedRef.current) return;
-
-        // Stop polling if job is complete and stopOnComplete is true
-        if (stopOnComplete && job && (job.status === 'completed' || job.status === 'failed')) {
-          if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current);
-          }
-          return;
-        }
-
-        fetchJob();
-      }, pollInterval);
+  // Determine if job has active work that needs polling
+  const hasActiveWork = useCallback(() => {
+    if (!job) return true; // Poll until we get initial data
+    
+    const isActive = job.status === 'running' || job.status === 'pending';
+    
+    // If stopOnComplete is true, stop polling when complete/failed
+    if (stopOnComplete && (job.status === 'completed' || job.status === 'failed')) {
+      return false;
     }
+    
+    return isActive;
+  }, [job?.status, stopOnComplete]);
 
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
-    };
-  }, [fetchJob, pollInterval, enabled, jobId, job?.status, stopOnComplete]);
+  // Use adaptive polling for this specific job
+  useAdaptivePolling({
+    enabled: enabled && !!jobId,
+    hasActiveWork,
+    fetchFunction: fetchJob,
+    strategy: {
+      initialInterval: pollInterval,
+      activeInterval: Math.min(pollInterval, 1500), // Faster for active jobs
+      maxInterval: Math.max(pollInterval * 6, 15000), // Max 15s or 6x initial
+      backoffMultiplier: 1.3, // Gentler backoff for individual jobs
+      ...pollingStrategy,
+    },
+    maxConsecutiveErrors: 5, // More tolerant for individual jobs
+  });
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       mountedRef.current = false;
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
       }
     };
   }, []);
 
-  // Computed values
-  const progressPercentage = job?.progress
-    ? Math.min(100, (job.progress.downloaded_chapters / job.progress.total_chapters) * 100 +
-        (job.progress.current_chapter_progress / job.progress.total_chapters) * 100)
-    : 0;
+  // Memoize computed values to prevent unnecessary recalculations
+  const computedValues = useMemo(() => {
+    const progressPercentage = job?.progress
+      ? Math.min(100, (job.progress.downloaded_chapters / job.progress.total_chapters) * 100 +
+          (job.progress.current_chapter_progress / job.progress.total_chapters) * 100)
+      : 0;
 
-  const isActive = job?.status === 'running';
-  const isComplete = job?.status === 'completed';
-  const hasFailed = job?.status === 'failed';
+    const isActive = job?.status === 'running';
+    const isComplete = job?.status === 'completed';
+    const hasFailed = job?.status === 'failed';
 
-  const estimatedTimeRemaining = (() => {
-    if (!job?.started_at || !job?.progress || job.progress.total_chapters === 0 || isComplete) {
-      return null;
-    }
+    const estimatedTimeRemaining = (() => {
+      if (!job?.started_at || !job?.progress || job.progress.total_chapters === 0 || isComplete) {
+        return null;
+      }
 
-    const startTime = new Date(job.started_at).getTime();
-    const now = Date.now();
-    const elapsed = (now - startTime) / 1000; // seconds
+      const startTime = new Date(job.started_at).getTime();
+      const now = Date.now();
+      const elapsed = (now - startTime) / 1000; // seconds
 
-    const currentProgress = progressPercentage / 100;
-    if (currentProgress <= 0) return null;
+      const currentProgress = progressPercentage / 100;
+      if (currentProgress <= 0) return null;
 
-    const totalEstimated = elapsed / currentProgress;
-    const remaining = Math.max(0, totalEstimated - elapsed);
+      const totalEstimated = elapsed / currentProgress;
+      const remaining = Math.max(0, totalEstimated - elapsed);
 
-    if (remaining < 60) {
-      return `${Math.round(remaining)}s`;
-    } else if (remaining < 3600) {
-      return `${Math.round(remaining / 60)}m`;
-    } else {
-      const hours = Math.floor(remaining / 3600);
-      const minutes = Math.round((remaining % 3600) / 60);
-      return `${hours}h ${minutes}m`;
-    }
-  })();
+      if (remaining < 60) {
+        return `${Math.round(remaining)}s`;
+      } else if (remaining < 3600) {
+        return `${Math.round(remaining / 60)}m`;
+      } else {
+        const hours = Math.floor(remaining / 3600);
+        const minutes = Math.round((remaining % 3600) / 60);
+        return `${hours}h ${minutes}m`;
+      }
+    })();
+
+    return {
+      progressPercentage,
+      isActive,
+      isComplete,
+      hasFailed,
+      estimatedTimeRemaining,
+    };
+  }, [job]);
 
   return {
     job,
     loading,
     error,
     refetch: fetchJob,
-    progressPercentage,
-    estimatedTimeRemaining,
-    isActive,
-    isComplete,
-    hasFailed,
+    ...computedValues,
   };
 }
 
@@ -185,11 +219,25 @@ export function useDownloadStats(options: UseDownloadStatsOptions = {}): UseDown
     enabled = true,
   } = options;
 
-  const pollIntervalRef = useRef<NodeJS.Timeout>();
   const mountedRef = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const lastFetchTimeRef = useRef(0);
 
   const fetchStats = useCallback(async () => {
     if (!enabled || !mountedRef.current) return;
+
+    // Prevent rapid successive calls
+    const now = Date.now();
+    if (now - lastFetchTimeRef.current < 5000) { // Minimum 5s between stats calls
+      return;
+    }
+    lastFetchTimeRef.current = now;
+
+    // Cancel previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
 
     try {
       setLoading(true);
@@ -201,10 +249,16 @@ export function useDownloadStats(options: UseDownloadStatsOptions = {}): UseDown
 
       setStats(response);
     } catch (err) {
+      // Ignore abort errors
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      
       if (!mountedRef.current) return;
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch download stats';
       setError(errorMessage);
       console.error('Failed to fetch download stats:', err);
+      throw err; // Re-throw for potential adaptive polling
     } finally {
       if (mountedRef.current) {
         setLoading(false);
@@ -212,21 +266,18 @@ export function useDownloadStats(options: UseDownloadStatsOptions = {}): UseDown
     }
   }, [enabled]);
 
+  // Stats don't change as frequently, so we don't need hasActiveWork logic
+  // Just use simpler polling with longer intervals
   useEffect(() => {
     if (!enabled) return;
 
-    // Initial fetch
-    fetchStats();
+    fetchStats(); // Initial fetch
 
-    // Setup polling interval
-    if (pollInterval > 0) {
-      pollIntervalRef.current = setInterval(fetchStats, pollInterval);
-    }
+    // Use simple interval for stats (they change less frequently)
+    const intervalId = setInterval(fetchStats, pollInterval);
 
     return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
+      clearInterval(intervalId);
     };
   }, [fetchStats, pollInterval, enabled]);
 
@@ -234,16 +285,16 @@ export function useDownloadStats(options: UseDownloadStatsOptions = {}): UseDown
   useEffect(() => {
     return () => {
       mountedRef.current = false;
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
       }
     };
   }, []);
 
-  return {
+  return useMemo(() => ({
     stats,
     loading,
     error,
     refetch: fetchStats,
-  };
+  }), [stats, loading, error, fetchStats]);
 }

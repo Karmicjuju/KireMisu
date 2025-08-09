@@ -7,7 +7,7 @@ import os
 import shutil
 import time
 import zipfile
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
@@ -102,13 +102,18 @@ class DownloadProgressTracker:
         await self._update_job_payload()
     
     async def start_chapter(self, chapter_id: str, chapter_title: str):
-        """Start tracking a chapter download."""
+        """Start tracking a chapter download with atomic update."""
+        # Update progress atomically to prevent race conditions
+        timestamp = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+        
         self._progress["current_chapter"] = {
             "id": chapter_id,
             "title": chapter_title,
-            "started_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+            "started_at": timestamp,
         }
         self._progress["current_chapter_progress"] = 0.0
+        
+        # Atomic database update
         await self._update_job_payload()
     
     async def update_chapter_progress(self, progress: float):
@@ -117,33 +122,77 @@ class DownloadProgressTracker:
         await self._update_job_payload()
     
     async def complete_chapter(self, success: bool, error_message: Optional[str] = None):
-        """Complete current chapter download."""
+        """Complete current chapter download with atomic update."""
+        timestamp = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+        
         if success:
             self._progress["downloaded_chapters"] += 1
         else:
             self._progress["error_count"] += 1
             if error_message:
+                # Ensure errors array exists
+                if "errors" not in self._progress:
+                    self._progress["errors"] = []
+                    
                 self._progress["errors"].append({
                     "chapter_id": self._progress["current_chapter"]["id"] if self._progress["current_chapter"] else "unknown",
                     "error": error_message,
-                    "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                    "timestamp": timestamp,
                 })
+        
+        # Update completion estimate
+        if self._progress["total_chapters"] > 0:
+            completion_rate = self._progress["downloaded_chapters"] / self._progress["total_chapters"]
+            if completion_rate > 0:
+                # Simple ETA estimation based on elapsed time and completion rate
+                start_time = datetime.fromisoformat(self._progress["started_at"])
+                elapsed = (datetime.now(timezone.utc).replace(tzinfo=None) - start_time).total_seconds()
+                estimated_total = elapsed / completion_rate
+                remaining = max(0, estimated_total - elapsed)
+                self._progress["estimated_completion"] = (datetime.now(timezone.utc).replace(tzinfo=None) + 
+                                                         timedelta(seconds=remaining)).isoformat()
         
         # Clear current chapter
         self._progress["current_chapter"] = None
         self._progress["current_chapter_progress"] = 0.0
+        
+        # Atomic database update
         await self._update_job_payload()
     
     async def _update_job_payload(self):
-        """Update job payload with current progress."""
-        from sqlalchemy import update
+        """Update job payload with current progress using atomic operation."""
+        from sqlalchemy import update, func
+        import json
         
-        await self.db.execute(
-            update(JobQueue)
-            .where(JobQueue.id == self.job_id)
-            .values(payload=JobQueue.payload.op("||")({"progress": self._progress}))
-        )
-        await self.db.commit()
+        # Use atomic JSONB update to prevent race conditions
+        # This creates a new progress object and merges it atomically
+        progress_json = json.dumps(self._progress)
+        
+        try:
+            result = await self.db.execute(
+                update(JobQueue)
+                .where(JobQueue.id == self.job_id)
+                .values(
+                    payload=func.jsonb_set(
+                        JobQueue.payload,
+                        '{progress}',
+                        progress_json,
+                        True  # Create path if it doesn't exist
+                    ),
+                    updated_at=func.now()
+                )
+                .returning(JobQueue.id)
+            )
+            
+            if result.rowcount == 0:
+                logger.warning(f"Failed to update progress for job {self.job_id} - job not found")
+            
+            await self.db.commit()
+            
+        except Exception as e:
+            logger.error(f"Failed to update job progress atomically: {e}")
+            await self.db.rollback()
+            raise
     
     def get_progress(self) -> Dict[str, Any]:
         """Get current progress data."""

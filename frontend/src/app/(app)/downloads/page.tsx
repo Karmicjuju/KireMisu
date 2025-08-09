@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Download, Plus, TrendingUp, Activity } from 'lucide-react';
+import { Download, Plus, TrendingUp, Activity, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { GlassCard } from '@/components/ui/glass-card';
 import { DownloadQueue } from '@/components/downloads';
@@ -22,16 +22,17 @@ export default function Downloads() {
     error, 
     refetch, 
     performAction, 
-    deleteDownload 
+    deleteDownload,
   } = useDownloads({
     status: statusFilter === 'all' ? undefined : statusFilter,
     per_page: 50,
-    pollInterval: 8000, // Reduced frequency to 8 seconds to minimize background loading
+    // Polling settings are now automatically loaded from localStorage via usePollingSettings
   });
 
   const { stats: systemStats } = useDownloadStats({
-    pollInterval: 15000, // Default polling interval for system stats
+    pollInterval: 60000, // 1 minute stats polling
   });
+
 
   const handleCancel = async (jobId: string) => {
     await performAction(jobId, { action: 'cancel' });
@@ -118,13 +119,25 @@ export default function Downloads() {
           <h1 className="text-3xl font-bold">Downloads</h1>
           <p className="text-muted-foreground">Manage your manga downloads and queue</p>
         </div>
-        <Button 
-          onClick={handleAddDownload}
-          className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Add Download
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={refetch}
+            disabled={loading}
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button 
+            onClick={handleAddDownload}
+            className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Download
+          </Button>
+        </div>
       </div>
 
       {/* Statistics Cards */}
@@ -147,10 +160,15 @@ export default function Downloads() {
               <div className="p-2 bg-orange-500/20 rounded-lg">
                 <Activity className="h-4 w-4 text-orange-500" />
               </div>
-              <div>
+              <div className="flex-1">
                 <div className="text-2xl font-bold">{systemStats.active_jobs}</div>
                 <div className="text-xs text-muted-foreground">Active Downloads</div>
               </div>
+              {systemStats.active_jobs > 0 && (
+                <div className="text-xs text-green-600 font-medium">
+                  Live
+                </div>
+              )}
             </div>
           </GlassCard>
 

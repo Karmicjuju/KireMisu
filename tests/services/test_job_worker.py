@@ -340,7 +340,7 @@ class TestJobWorkerRunner:
     async def test_get_worker_status(self, mock_db_session_factory):
         """Test getting worker status."""
         runner = JobWorkerRunner(
-            mock_db_session_factory, poll_interval_seconds=10, max_concurrent_jobs=5
+            mock_db_session_factory, poll_interval_seconds=30, max_concurrent_jobs=5
         )
 
         status = await runner.get_worker_status()
@@ -348,7 +348,7 @@ class TestJobWorkerRunner:
         assert status["running"] is False
         assert status["active_jobs"] == 0
         assert status["max_concurrent_jobs"] == 5
-        assert status["poll_interval_seconds"] == 10
+        assert status["poll_interval_seconds"] == 30
 
         # Start runner and check status
         await runner.start()
