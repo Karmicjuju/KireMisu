@@ -2,6 +2,7 @@
 
 import { LibraryPaths } from '@/components/settings/library-paths';
 import { JobStatusDashboard } from '@/components/settings/job-status-dashboard';
+import { PollingSettings } from '@/components/settings/polling-settings';
 
 export default function SettingsPage() {
   return (
@@ -11,6 +12,7 @@ export default function SettingsPage() {
 
         <div className="space-y-8">
           <LibraryPaths />
+          <PollingSettings />
           <JobStatusDashboard />
         </div>
       </div>

@@ -40,7 +40,7 @@ class Settings(BaseSettings):
 
     # External APIs
     mangadx_api_url: str = Field(
-        default="https://api.mangadx.org", description="MangaDx API base URL"
+        default="https://api.mangadex.org", description="MangaDx API base URL"
     )
     mangadx_rate_limit_per_minute: int = Field(
         default=60, description="MangaDx API rate limit per minute"

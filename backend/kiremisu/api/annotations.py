@@ -4,8 +4,9 @@ from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import desc, and_
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import desc, and_, select, func, delete
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from kiremisu.database.connection import get_db
 from kiremisu.database.models import Annotation, Chapter
@@ -23,11 +24,12 @@ router = APIRouter(prefix="/api/annotations", tags=["annotations"])
 @router.post("/", response_model=AnnotationResponse, status_code=201)
 async def create_annotation(
     annotation_data: AnnotationCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> AnnotationResponse:
     """Create a new annotation for a chapter."""
     # Verify chapter exists
-    chapter = db.query(Chapter).filter(Chapter.id == annotation_data.chapter_id).first()
+    result = await db.execute(select(Chapter).where(Chapter.id == annotation_data.chapter_id))
+    chapter = result.scalar_one_or_none()
     if not chapter:
         raise HTTPException(status_code=404, detail="Chapter not found")
 
@@ -51,8 +53,8 @@ async def create_annotation(
     )
 
     db.add(annotation)
-    db.commit()
-    db.refresh(annotation)
+    await db.commit()
+    await db.refresh(annotation)
 
     return AnnotationResponse.from_model(annotation)
 
@@ -61,15 +63,16 @@ async def create_annotation(
 async def get_annotation(
     annotation_id: UUID,
     include_chapter: bool = Query(False, description="Include chapter information"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> AnnotationResponse:
     """Get a specific annotation by ID."""
-    query = db.query(Annotation).filter(Annotation.id == annotation_id)
+    query = select(Annotation).where(Annotation.id == annotation_id)
 
     if include_chapter:
         query = query.options(selectinload(Annotation.chapter))
 
-    annotation = query.first()
+    result = await db.execute(query)
+    annotation = result.scalar_one_or_none()
     if not annotation:
         raise HTTPException(status_code=404, detail="Annotation not found")
 
@@ -80,15 +83,17 @@ async def get_annotation(
 async def update_annotation(
     annotation_id: UUID,
     annotation_data: AnnotationUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> AnnotationResponse:
     """Update an existing annotation."""
-    annotation = db.query(Annotation).filter(Annotation.id == annotation_id).first()
+    result = await db.execute(select(Annotation).where(Annotation.id == annotation_id))
+    annotation = result.scalar_one_or_none()
     if not annotation:
         raise HTTPException(status_code=404, detail="Annotation not found")
 
     # Get chapter for validation
-    chapter = db.query(Chapter).filter(Chapter.id == annotation.chapter_id).first()
+    chapter_result = await db.execute(select(Chapter).where(Chapter.id == annotation.chapter_id))
+    chapter = chapter_result.scalar_one_or_none()
     if not chapter:
         raise HTTPException(status_code=404, detail="Associated chapter not found")
 
@@ -116,8 +121,8 @@ async def update_annotation(
     if annotation_data.color is not None:
         annotation.color = annotation_data.color
 
-    db.commit()
-    db.refresh(annotation)
+    await db.commit()
+    await db.refresh(annotation)
 
     return AnnotationResponse.from_model(annotation)
 
@@ -125,15 +130,16 @@ async def update_annotation(
 @router.delete("/{annotation_id}", status_code=204)
 async def delete_annotation(
     annotation_id: UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete an annotation."""
-    annotation = db.query(Annotation).filter(Annotation.id == annotation_id).first()
+    result = await db.execute(select(Annotation).where(Annotation.id == annotation_id))
+    annotation = result.scalar_one_or_none()
     if not annotation:
         raise HTTPException(status_code=404, detail="Annotation not found")
 
     db.delete(annotation)
-    db.commit()
+    await db.commit()
 
 
 @router.get("/", response_model=AnnotationListResponse)
@@ -143,31 +149,30 @@ async def list_annotations(
     page_number: Optional[int] = Query(None, description="Filter by page number"),
     limit: int = Query(50, ge=1, le=200, description="Maximum number of annotations to return"),
     offset: int = Query(0, ge=0, description="Number of annotations to skip"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> AnnotationListResponse:
     """List annotations with optional filtering."""
-    query = db.query(Annotation)
+    query = select(Annotation)
 
     # Apply filters
     if chapter_id:
-        query = query.filter(Annotation.chapter_id == chapter_id)
+        query = query.where(Annotation.chapter_id == chapter_id)
 
     if annotation_type:
-        query = query.filter(Annotation.annotation_type == annotation_type)
+        query = query.where(Annotation.annotation_type == annotation_type)
 
     if page_number:
-        query = query.filter(Annotation.page_number == page_number)
+        query = query.where(Annotation.page_number == page_number)
 
     # Get total count before applying pagination
-    total = query.count()
+    count_query = select(func.count()).select_from(query.subquery())
+    count_result = await db.execute(count_query)
+    total = count_result.scalar()
 
     # Apply pagination and ordering
-    annotations = (
-        query.order_by(desc(Annotation.created_at))
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    paginated_query = query.order_by(desc(Annotation.created_at)).offset(offset).limit(limit)
+    result = await db.execute(paginated_query)
+    annotations = result.scalars().all()
 
     return AnnotationListResponse(
         annotations=[AnnotationResponse.from_model(a) for a in annotations],
@@ -182,28 +187,28 @@ async def get_chapter_annotations(
     chapter_id: UUID,
     annotation_type: Optional[str] = Query(None, description="Filter by annotation type"),
     page_number: Optional[int] = Query(None, description="Filter by specific page"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> ChapterAnnotationsResponse:
     """Get all annotations for a specific chapter, grouped by page."""
     # Verify chapter exists
-    chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
+    chapter_result = await db.execute(select(Chapter).where(Chapter.id == chapter_id))
+    chapter = chapter_result.scalar_one_or_none()
     if not chapter:
         raise HTTPException(status_code=404, detail="Chapter not found")
 
     # Build query for annotations
-    query = db.query(Annotation).filter(Annotation.chapter_id == chapter_id)
+    query = select(Annotation).where(Annotation.chapter_id == chapter_id)
 
     if annotation_type:
-        query = query.filter(Annotation.annotation_type == annotation_type)
+        query = query.where(Annotation.annotation_type == annotation_type)
 
     if page_number:
-        query = query.filter(Annotation.page_number == page_number)
+        query = query.where(Annotation.page_number == page_number)
 
     # Get annotations ordered by page and creation time
-    annotations = (
-        query.order_by(Annotation.page_number.asc(), Annotation.created_at.asc())
-        .all()
-    )
+    ordered_query = query.order_by(Annotation.page_number.asc(), Annotation.created_at.asc())
+    result = await db.execute(ordered_query)
+    annotations = result.scalars().all()
 
     return ChapterAnnotationsResponse.from_chapter_and_annotations(chapter, annotations)
 
@@ -213,11 +218,12 @@ async def get_page_annotations(
     chapter_id: UUID,
     page_number: int,
     annotation_type: Optional[str] = Query(None, description="Filter by annotation type"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> List[AnnotationResponse]:
     """Get all annotations for a specific page in a chapter."""
     # Verify chapter exists
-    chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
+    chapter_result = await db.execute(select(Chapter).where(Chapter.id == chapter_id))
+    chapter = chapter_result.scalar_one_or_none()
     if not chapter:
         raise HTTPException(status_code=404, detail="Chapter not found")
 
@@ -229,7 +235,7 @@ async def get_page_annotations(
         )
 
     # Build query
-    query = db.query(Annotation).filter(
+    query = select(Annotation).where(
         and_(
             Annotation.chapter_id == chapter_id,
             Annotation.page_number == page_number,
@@ -237,10 +243,12 @@ async def get_page_annotations(
     )
 
     if annotation_type:
-        query = query.filter(Annotation.annotation_type == annotation_type)
+        query = query.where(Annotation.annotation_type == annotation_type)
 
     # Get annotations ordered by creation time
-    annotations = query.order_by(Annotation.created_at.asc()).all()
+    ordered_query = query.order_by(Annotation.created_at.asc())
+    result = await db.execute(ordered_query)
+    annotations = result.scalars().all()
 
     return [AnnotationResponse.from_model(a) for a in annotations]
 
@@ -250,7 +258,7 @@ async def create_page_annotation(
     chapter_id: UUID,
     page_number: int,
     annotation_data: AnnotationCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> AnnotationResponse:
     """Create an annotation for a specific page (convenience endpoint)."""
     # Override the chapter_id and page_number from the URL
@@ -266,19 +274,20 @@ async def delete_chapter_annotations(
     chapter_id: UUID,
     annotation_type: Optional[str] = Query(None, description="Delete only specific annotation type"),
     page_number: Optional[int] = Query(None, description="Delete only annotations on specific page"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete all annotations for a chapter (with optional filtering)."""
     # Verify chapter exists
-    chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
+    chapter_result = await db.execute(select(Chapter).where(Chapter.id == chapter_id))
+    chapter = chapter_result.scalar_one_or_none()
     if not chapter:
         raise HTTPException(status_code=404, detail="Chapter not found")
 
-    # Build query
-    query = db.query(Annotation).filter(Annotation.chapter_id == chapter_id)
+    # Build delete query
+    delete_query = delete(Annotation).where(Annotation.chapter_id == chapter_id)
 
     if annotation_type:
-        query = query.filter(Annotation.annotation_type == annotation_type)
+        delete_query = delete_query.where(Annotation.annotation_type == annotation_type)
 
     if page_number:
         if page_number < 1 or page_number > chapter.page_count:
@@ -286,11 +295,8 @@ async def delete_chapter_annotations(
                 status_code=400,
                 detail=f"Page number must be between 1 and {chapter.page_count}",
             )
-        query = query.filter(Annotation.page_number == page_number)
+        delete_query = delete_query.where(Annotation.page_number == page_number)
 
-    # Delete annotations
-    deleted_count = query.delete()
-    db.commit()
-
-    # Note: In a production system, you might want to return the count of deleted annotations
-    # or use a soft delete approach for better data integrity
+    # Execute delete
+    await db.execute(delete_query)
+    await db.commit()

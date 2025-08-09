@@ -155,7 +155,7 @@ class TestMangaDxClient:
         
         assert client.timeout == 10.0
         assert client.rate_limiter.requests_per_second == 2.0
-        assert client.BASE_URL == "https://api.mangadx.org"
+        assert client.BASE_URL == "https://api.mangadex.org"
         
         await client.close()
     
@@ -362,12 +362,12 @@ class TestMangaDxClient:
         
         # Test with specific size
         url = client.get_cover_art_url("manga-id", "cover.jpg", size="512")
-        expected = "https://uploads.mangadx.org/covers/manga-id/cover.jpg.512.jpg"
+        expected = "https://uploads.mangadex.org/covers/manga-id/cover.jpg.512.jpg"
         assert url == expected
         
         # Test with original size
         url = client.get_cover_art_url("manga-id", "cover.jpg", size="original")
-        expected = "https://uploads.mangadx.org/covers/manga-id/cover.jpg"
+        expected = "https://uploads.mangadex.org/covers/manga-id/cover.jpg"
         assert url == expected
         
         await client.close()

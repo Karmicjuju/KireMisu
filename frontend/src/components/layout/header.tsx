@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useTheme } from 'next-themes';
 import { GlassCard } from '@/components/ui/glass-card';
+import { DownloadHeader } from '@/components/downloads';
 
 export function Header() {
   const { theme, setTheme } = useTheme();
@@ -24,6 +25,9 @@ export function Header() {
 
       {/* Actions */}
       <div className="flex items-center space-x-2">
+        {/* Downloads */}
+        <DownloadHeader />
+
         {/* Notifications */}
         <Button
           variant="ghost"

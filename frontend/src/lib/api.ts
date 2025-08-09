@@ -595,47 +595,321 @@ export const tagsApi = {
       `/api/annotations/chapters/${chapterId}${params.toString() ? `?${params.toString()}` : ''}`
     );
   },
+};
 
-  async getTag(tagId: string): Promise<TagResponse> {
-    const response = await api.get<TagResponse>(`/api/tags/${tagId}`);
+// Download interfaces
+export interface DownloadJobProgressInfo {
+  total_chapters: number;
+  downloaded_chapters: number;
+  current_chapter?: {
+    id: string;
+    title: string;
+    started_at: string;
+  } | null;
+  current_chapter_progress: number; // 0.0-1.0
+  error_count: number;
+  errors: Array<{
+    chapter_id: string;
+    error: string;
+    timestamp: string;
+  }>;
+  started_at?: string;
+  estimated_completion?: string;
+}
+
+export interface DownloadJobRequest {
+  download_type: 'single' | 'batch' | 'series';
+  manga_id: string;
+  chapter_ids?: string[];
+  volume_number?: string;
+  series_id?: string;
+  destination_path?: string;
+  priority?: number; // 1-10
+  notify_on_completion?: boolean;
+}
+
+export interface DownloadJobResponse {
+  id: string;
+  job_type: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  download_type: string;
+  manga_id: string;
+  series_id?: string;
+  batch_type?: string;
+  volume_number?: string;
+  destination_path?: string;
+  // Manga metadata for better UI display
+  manga_title?: string;
+  manga_author?: string;
+  manga_cover_url?: string;
+  progress?: DownloadJobProgressInfo;
+  priority: number;
+  retry_count: number;
+  max_retries: number;
+  error_message?: string;
+  scheduled_at: string;
+  started_at?: string;
+  completed_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DownloadJobListResponse {
+  jobs: DownloadJobResponse[];
+  total: number;
+  active_downloads: number;
+  pending_downloads: number;
+  failed_downloads: number;
+  completed_downloads: number;
+  status_filter?: string;
+  download_type_filter?: string;
+  pagination?: {
+    page: number;
+    per_page: number;
+    total_items: number;
+    total_pages: number;
+    has_prev: boolean;
+    has_next: boolean;
+    prev_page?: number;
+    next_page?: number;
+  };
+}
+
+export interface DownloadJobActionRequest {
+  action: 'cancel' | 'retry' | 'pause' | 'resume';
+  reason?: string;
+}
+
+export interface DownloadJobActionResponse {
+  job_id: string;
+  action: string;
+  success: boolean;
+  message: string;
+  new_status?: string;
+}
+
+export interface DownloadStatsResponse {
+  total_jobs: number;
+  active_jobs: number;
+  pending_jobs: number;
+  failed_jobs: number;
+  completed_jobs: number;
+  jobs_created_today: number;
+  jobs_completed_today: number;
+  chapters_downloaded_today: number;
+  average_job_duration_minutes?: number;
+  success_rate_percentage: number;
+  current_download_speed_mbps?: number;
+  total_downloaded_size_gb?: number;
+  available_storage_gb?: number;
+  stats_generated_at?: string;
+}
+
+export interface BulkDownloadRequest {
+  downloads: DownloadJobRequest[];
+  global_priority?: number;
+  batch_name?: string;
+  stagger_delay_seconds?: number;
+}
+
+export interface BulkDownloadResponse {
+  batch_id: string;
+  status: string;
+  message: string;
+  total_requested: number;
+  successfully_queued: number;
+  failed_to_queue: number;
+  job_ids: string[];
+  errors: string[];
+}
+
+export const downloadsApi = {
+  async createDownloadJob(request: DownloadJobRequest): Promise<DownloadJobResponse> {
+    const response = await api.post<DownloadJobResponse>('/api/downloads/', request);
     return response.data;
   },
 
-  async createTag(tagData: TagCreate): Promise<TagResponse> {
-    const response = await api.post<TagResponse>('/api/tags/', tagData);
+  async getDownloadJobs(options?: {
+    status?: string;
+    download_type?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<DownloadJobListResponse> {
+    const params = new URLSearchParams();
+    if (options?.status) params.append('status_filter', options.status);
+    if (options?.download_type) params.append('download_type_filter', options.download_type);
+    if (options?.page) params.append('page', options.page.toString());
+    if (options?.per_page) params.append('per_page', options.per_page.toString());
+
+    const response = await api.get<DownloadJobListResponse>(
+      `/api/downloads/${params.toString() ? `?${params.toString()}` : ''}`
+    );
     return response.data;
   },
 
-  async updateTag(tagId: string, tagData: TagUpdate): Promise<TagResponse> {
-    const response = await api.put<TagResponse>(`/api/tags/${tagId}`, tagData);
+  async getDownloadJob(jobId: string): Promise<DownloadJobResponse> {
+    const response = await api.get<DownloadJobResponse>(`/api/downloads/${jobId}`);
     return response.data;
   },
 
-  async deleteTag(tagId: string): Promise<{ message: string }> {
-    const response = await api.delete<{ message: string }>(`/api/tags/${tagId}`);
+  async performJobAction(jobId: string, action: DownloadJobActionRequest): Promise<DownloadJobActionResponse> {
+    const response = await api.post<DownloadJobActionResponse>(
+      `/api/downloads/${jobId}/actions`,
+      action
+    );
     return response.data;
   },
 
-  // Series-specific tag operations
-  async getSeriesTags(seriesId: string): Promise<TagResponse[]> {
-    const response = await api.get<TagResponse[]>(`/api/tags/series/${seriesId}`);
+  async createBulkDownloads(request: BulkDownloadRequest): Promise<BulkDownloadResponse> {
+    const response = await api.post<BulkDownloadResponse>('/api/downloads/bulk', request);
     return response.data;
   },
 
-  async assignTagsToSeries(seriesId: string, assignment: SeriesTagAssignment): Promise<TagResponse[]> {
-    const response = await api.put<TagResponse[]>(`/api/tags/series/${seriesId}`, assignment);
+  async getDownloadStats(): Promise<DownloadStatsResponse> {
+    const response = await api.get<DownloadStatsResponse>('/api/downloads/stats/overview');
     return response.data;
   },
 
-  async addTagsToSeries(seriesId: string, assignment: SeriesTagAssignment): Promise<TagResponse[]> {
-    const response = await api.post<TagResponse[]>(`/api/tags/series/${seriesId}/add`, assignment);
+  async deleteDownloadJob(jobId: string, force?: boolean): Promise<{ message: string }> {
+    const params = new URLSearchParams();
+    if (force) params.append('force', 'true');
+
+    const response = await api.delete<{ message: string }>(
+      `/api/downloads/${jobId}${params.toString() ? `?${params.toString()}` : ''}`
+    );
+    return response.data;
+  },
+};
+
+// MangaDx integration interfaces
+export interface MangaDxSearchRequest {
+  title?: string;
+  author?: string;
+  artist?: string;
+  year?: number;
+  status?: 'ongoing' | 'completed' | 'hiatus' | 'cancelled';
+  content_rating?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface MangaDxCoverArt {
+  id: string;
+  type: 'cover_art';
+  attributes: {
+    fileName: string;
+    volume?: string;
+    locale?: string;
+  };
+}
+
+export interface MangaDxMangaInfo {
+  id: string;
+  title: string;
+  alternative_titles: string[];
+  description?: string;
+  author?: string;
+  artist?: string;
+  genres: string[];
+  tags: string[];
+  status: 'ongoing' | 'completed' | 'hiatus' | 'cancelled';
+  content_rating: 'safe' | 'suggestive' | 'erotica' | 'pornographic';
+  original_language: string;
+  publication_year?: number;
+  last_volume?: string;
+  last_chapter?: string;
+  cover_art_url?: string;
+  mangadx_created_at?: string;
+  mangadx_updated_at?: string;
+}
+
+export interface MangaDxSearchResponse {
+  results: MangaDxMangaInfo[];
+  total: number;
+  has_more: boolean;
+}
+
+export interface MangaDxImportRequest {
+  mangadx_id: string;
+  import_cover_art?: boolean;
+  import_chapters?: boolean;
+  overwrite_existing?: boolean;
+}
+
+export interface MangaDxImportResponse {
+  status: 'success' | 'error';
+  message: string;
+  series_id?: string;
+  series?: SeriesResponse;
+  created: boolean;
+  enriched: boolean;
+}
+
+export interface MangaDxEnrichmentCandidate {
+  mangadx_id: string;
+  manga_info: MangaDxMangaInfo;
+  confidence_score: number;
+  match_reasons: string[];
+}
+
+export interface MangaDxEnrichmentResponse {
+  series_id: string;
+  series_title: string;
+  candidates: MangaDxEnrichmentCandidate[];
+  message: string;
+}
+
+export interface MangaDxHealthResponse {
+  status: 'healthy' | 'unhealthy';
+  api_accessible: boolean;
+  response_time_ms?: number;
+  error_message?: string;
+  last_checked: string;
+}
+
+export interface MangaDxDownloadRequest {
+  manga_id: string;
+  download_type: 'series' | 'volume' | 'chapter_range';
+  volume_number?: string;
+  chapter_range?: {
+    start: string;
+    end: string;
+  };
+  destination_path?: string;
+  priority?: number;
+}
+
+export const mangadxApi = {
+  async search(request: MangaDxSearchRequest): Promise<MangaDxSearchResponse> {
+    const response = await api.post<MangaDxSearchResponse>('/api/mangadx/search', request);
     return response.data;
   },
 
-  async removeTagsFromSeries(seriesId: string, assignment: SeriesTagAssignment): Promise<TagResponse[]> {
-    const response = await api.delete<TagResponse[]>(`/api/tags/series/${seriesId}/remove`, {
-      data: assignment,
-    });
+  async getManga(mangaId: string): Promise<MangaDxMangaInfo> {
+    const response = await api.get<MangaDxMangaInfo>(`/api/mangadx/manga/${mangaId}`);
+    return response.data;
+  },
+
+  async importManga(request: MangaDxImportRequest): Promise<MangaDxImportResponse> {
+    const response = await api.post<MangaDxImportResponse>('/api/mangadx/import', request);
+    return response.data;
+  },
+
+  async enrichSeries(seriesId: string): Promise<MangaDxEnrichmentResponse> {
+    const response = await api.post<MangaDxEnrichmentResponse>(`/api/mangadx/enrich/${seriesId}`);
+    return response.data;
+  },
+
+  async checkHealth(): Promise<MangaDxHealthResponse> {
+    const response = await api.get<MangaDxHealthResponse>('/api/mangadx/health');
+    return response.data;
+  },
+
+  async createDownload(request: MangaDxDownloadRequest): Promise<DownloadJobResponse> {
+    const response = await api.post<DownloadJobResponse>(
+      `/api/mangadx/manga/${request.manga_id}/download`,
+      request
+    );
     return response.data;
   },
 };
