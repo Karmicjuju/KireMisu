@@ -166,3 +166,68 @@ def create_secure_http_exception(
     sanitized_message = SecureErrorHandler.sanitize_error_message(error_message, request_id)
 
     return HTTPException(status_code=status_code, detail=sanitized_message)
+
+
+def create_standardized_error_response(
+    status_code: int,
+    message: str,
+    error_code: str = None,
+    request_id: str = None,
+    details: list = None
+) -> dict:
+    """
+    Create a standardized error response using the new error schemas.
+    
+    Args:
+        status_code: HTTP status code
+        message: Error message
+        error_code: Application-specific error code
+        request_id: Request tracking ID
+        details: List of error details
+    
+    Returns:
+        Standardized error response dictionary
+    """
+    from kiremisu.database.schemas import ErrorResponse
+    
+    error_response = ErrorResponse.create(
+        message=SecureErrorHandler.sanitize_error_message(message, request_id),
+        status_code=status_code,
+        error_code=error_code,
+        request_id=request_id,
+        details=details
+    )
+    
+    return error_response.model_dump()
+
+
+def create_not_found_error(
+    resource_type: str,
+    resource_id: str = None,
+    request_id: str = None
+) -> dict:
+    """Create a standardized 404 error response."""
+    from kiremisu.database.schemas import NotFoundErrorResponse
+    
+    error_response = NotFoundErrorResponse.create_for_resource(
+        resource_type=resource_type,
+        resource_id=resource_id,
+        request_id=request_id
+    )
+    
+    return error_response.model_dump()
+
+
+def create_validation_error(
+    validation_exception,
+    request_id: str = None
+) -> dict:
+    """Create a standardized validation error response."""
+    from kiremisu.database.schemas import ValidationErrorResponse
+    
+    error_response = ValidationErrorResponse.from_pydantic_error(
+        validation_exception,
+        request_id=request_id
+    )
+    
+    return error_response.model_dump()

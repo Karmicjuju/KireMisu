@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from kiremisu.database.models import Notification, Series, Chapter
+from kiremisu.core.metrics import metrics_collector
 
 logger = logging.getLogger(__name__)
 
@@ -31,41 +32,58 @@ class NotificationService:
         Returns:
             List of created Notification models
         """
-        notifications = []
-
-        for chapter in new_chapters:
-            # Format notification title and message
-            title = f"New chapter available: {series.title_primary}"
+        # Start metrics tracking for notification creation
+        async with metrics_collector.track_polling_operation(
+            "notification_creation",
+            series_id=series.id,
+            series_count=1
+        ) as tracker:
+            notifications = []
             
-            chapter_title = f"Chapter {chapter.chapter_number}"
-            if chapter.volume_number:
-                chapter_title = f"Vol. {chapter.volume_number}, {chapter_title}"
-            if chapter.title:
-                chapter_title += f" - {chapter.title}"
-            
-            message = f"New chapter '{chapter_title}' is now available for reading."
+            logger.info(f"Creating notifications for {len(new_chapters)} new chapters in series: {series.title_primary}")
 
-            # Create notification
-            notification = Notification(
-                notification_type="new_chapter",
+            for chapter in new_chapters:
+                logger.debug(f"Creating notification for chapter {chapter.chapter_number} of series {series.id}")
+                
+                # Format notification title and message
+                title = f"New chapter available: {series.title_primary}"
+                
+                chapter_title = f"Chapter {chapter.chapter_number}"
+                if chapter.volume_number:
+                    chapter_title = f"Vol. {chapter.volume_number}, {chapter_title}"
+                if chapter.title:
+                    chapter_title += f" - {chapter.title}"
+                
+                message = f"New chapter '{chapter_title}' is now available for reading."
+
+                # Create notification
+                notification = Notification(
+                    notification_type="new_chapter",
                 title=title,
                 message=message,
                 series_id=series.id,
                 chapter_id=chapter.id,
-            )
+                )
 
-            db.add(notification)
-            notifications.append(notification)
+                db.add(notification)
+                notifications.append(notification)
 
-            logger.info(
-                f"Created notification for new chapter: {series.title_primary} - {chapter_title}"
-            )
+                logger.info(
+                    f"Created notification for new chapter: {series.title_primary} - {chapter_title}"
+                )
 
-        if notifications:
-            await db.commit()
-            logger.info(f"Created {len(notifications)} notifications for series: {series.title_primary}")
+            if notifications:
+                await db.commit()
+                logger.info(f"Created {len(notifications)} notifications for series: {series.title_primary}")
+                
+                # Update metrics
+                tracker.notifications_created = len(notifications)
+                metrics_collector.increment_counter("notifications.sent.last_hour", len(notifications))
+                metrics_collector.increment_counter("notifications.total.created", len(notifications))
+            else:
+                logger.debug(f"No notifications created for series: {series.title_primary}")
 
-        return notifications
+            return notifications
 
     @staticmethod
     async def get_unread_count(db: AsyncSession) -> int:

@@ -472,7 +472,7 @@ class Notification(Base):
         Index("ix_notifications_series", "series_id", "created_at"),
         # Check constraint for notification type
         CheckConstraint(
-            "notification_type IN ('new_chapter', 'series_update', 'system_alert', 'download_complete')",
+            "notification_type IN ('new_chapter', 'chapter_available', 'download_complete', 'download_failed', 'series_complete', 'library_update', 'system_alert', 'series_update')",
             name="ck_notification_type",
         ),
     )

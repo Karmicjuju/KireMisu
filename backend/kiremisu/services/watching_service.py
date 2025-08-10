@@ -8,8 +8,10 @@ from uuid import UUID
 
 from sqlalchemy import select, update, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from kiremisu.database.models import JobQueue, Series
+from kiremisu.core.metrics import metrics_collector
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +61,11 @@ class WatchingService:
 
         await db.commit()
 
-        # Refresh the series to get updated values
-        await db.refresh(series)
+        # Update the series object locally instead of refreshing to avoid additional query
+        series.watching_enabled = enabled
+        series.updated_at = update_values["updated_at"]
+        if enabled:
+            series.last_watched_check = None
 
         logger.info(
             f"Successfully {'enabled' if enabled else 'disabled'} watching for series: {series.title_primary}"
@@ -77,63 +82,82 @@ class WatchingService:
         Returns:
             Dict with counts of scheduled jobs and skipped series
         """
-        logger.info("Starting chapter update check job scheduling")
+        # Start metrics tracking for this polling operation
+        async with metrics_collector.track_polling_operation(
+            "watching_schedule_checks",
+            series_count=0  # Will be updated with actual count
+        ) as tracker:
+            logger.info("Starting chapter update check job scheduling")
 
-        # Get all series with watching enabled that have MangaDx IDs
-        result = await db.execute(
-            select(Series).where(
-                and_(
-                    Series.watching_enabled == True,
-                    Series.mangadx_id.isnot(None),
+            # Get all series with watching enabled that have MangaDx IDs
+            result = await db.execute(
+                select(Series).where(
+                    and_(
+                        Series.watching_enabled == True,
+                        Series.mangadx_id.isnot(None),
+                    )
                 )
             )
-        )
-        watched_series = result.scalars().all()
+            watched_series = result.scalars().all()
+            tracker.series_processed = len(watched_series)
 
-        scheduled_count = 0
-        skipped_count = 0
+            # Update metrics with watched series count
+            metrics_collector.set_gauge("watching.series_count", len(watched_series))
 
-        for series in watched_series:
-            # Check if there's already a pending/running job for this series
-            existing_job = await WatchingService._get_existing_update_job(db, series.id)
+            scheduled_count = 0
+            skipped_count = 0
 
-            if existing_job:
-                logger.debug(f"Skipping update check for series {series.id}: existing job found")
-                skipped_count += 1
-                continue
+            for series in watched_series:
+                logger.debug(f"Processing series for update check: {series.title_primary} (ID: {series.id})")
+                
+                # Check if there's already a pending/running job for this series
+                existing_job = await WatchingService._get_existing_update_job(db, series.id)
 
-            # Create new chapter update check job
-            job = JobQueue(
-                job_type="chapter_update_check",
-                payload={
-                    "series_id": str(series.id),
-                    "mangadx_id": series.mangadx_id,
-                    "series_title": series.title_primary,
-                },
-                priority=2,  # Medium priority for automatic update checks
-                scheduled_at=datetime.now(timezone.utc).replace(tzinfo=None),
-            )
+                if existing_job:
+                    logger.debug(f"Skipping update check for series {series.id}: existing job found (status: {existing_job.status})")
+                    skipped_count += 1
+                    metrics_collector.increment_counter("watching.scheduling.skipped")
+                    continue
 
-            db.add(job)
-            scheduled_count += 1
-            logger.info(f"Scheduled chapter update check job for series: {series.title_primary}")
+                # Create new chapter update check job
+                job = JobQueue(
+                    job_type="chapter_update_check",
+                    payload={
+                        "series_id": str(series.id),
+                        "mangadx_id": series.mangadx_id,
+                        "series_title": series.title_primary,
+                        "last_watched_check": series.last_watched_check.isoformat() if series.last_watched_check else None,
+                    },
+                    priority=2,  # Medium priority for automatic update checks
+                    scheduled_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                )
 
-        await db.commit()
+                db.add(job)
+                scheduled_count += 1
+                metrics_collector.increment_counter("watching.scheduling.scheduled")
+                logger.info(f"Scheduled chapter update check job for series: {series.title_primary}")
 
-        result = {
-            "scheduled": scheduled_count,
-            "skipped": skipped_count,
-            "total_watched": len(watched_series),
-        }
+            await db.commit()
 
-        logger.info(f"Chapter update check scheduling completed: {result}")
-        return result
+            result = {
+                "scheduled": scheduled_count,
+                "skipped": skipped_count,
+                "total_watched": len(watched_series),
+            }
+
+            # Update metrics counters
+            metrics_collector.increment_counter("watching.checks.last_hour", scheduled_count)
+            metrics_collector.set_gauge("watching.jobs.scheduled", scheduled_count)
+            metrics_collector.set_gauge("watching.jobs.skipped", skipped_count)
+
+            logger.info(f"Chapter update check scheduling completed: {result}")
+            return result
 
     @staticmethod
     async def get_watched_series(
         db: AsyncSession, skip: int = 0, limit: int = 100
     ) -> List[Series]:
-        """Get list of watched series.
+        """Get list of watched series with optimized loading to prevent N+1 queries.
 
         Args:
             db: Database session
@@ -141,16 +165,17 @@ class WatchingService:
             limit: Maximum number of series to return
 
         Returns:
-            List of watched Series models
+            List of watched Series models with user_tags eagerly loaded
         """
         result = await db.execute(
             select(Series)
+            .options(joinedload(Series.user_tags))  # Eagerly load user_tags to prevent N+1 queries
             .where(Series.watching_enabled == True)
             .order_by(Series.title_primary.asc())
             .offset(skip)
             .limit(limit)
         )
-        return result.scalars().all()
+        return result.scalars().unique().all()  # unique() needed when using joinedload
 
     @staticmethod
     async def get_watched_series_count(db: AsyncSession) -> int:

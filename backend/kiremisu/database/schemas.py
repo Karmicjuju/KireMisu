@@ -1211,7 +1211,7 @@ class NotificationResponse(BaseModel):
     """Schema for notification API responses."""
 
     id: UUID = Field(..., description="Notification unique identifier")
-    notification_type: str = Field(..., description="Type of notification")
+    type: str = Field(..., description="Type of notification")  # Changed from notification_type to type
     title: str = Field(..., description="Notification title")
     message: str = Field(..., description="Notification message")
     
@@ -1253,7 +1253,7 @@ class NotificationResponse(BaseModel):
         
         return cls(
             id=notification.id,
-            notification_type=notification.notification_type,
+            type=notification.notification_type,  # Map notification_type to type
             title=notification.title,
             message=notification.message,
             series_id=notification.series_id,
@@ -1694,6 +1694,175 @@ class BulkDownloadResponse(BaseModel):
     failed_to_queue: int = Field(..., description="Number of downloads that failed to queue")
     job_ids: List[UUID] = Field(..., description="List of created job IDs")
     errors: List[str] = Field(default_factory=list, description="Error messages for failed requests")
+
+
+# Standard Error Response schemas
+class ErrorDetail(BaseModel):
+    """Schema for detailed error information."""
+    
+    code: str = Field(..., description="Error code identifier")
+    message: str = Field(..., description="Human-readable error message")
+    field: Optional[str] = Field(None, description="Field name for validation errors")
+    context: Optional[Dict[str, Any]] = Field(None, description="Additional error context")
+
+
+class ErrorResponse(BaseModel):
+    """Standard error response schema."""
+    
+    error: bool = Field(default=True, description="Always true for error responses")
+    message: str = Field(..., description="Human-readable error message")
+    status_code: int = Field(..., description="HTTP status code")
+    error_code: Optional[str] = Field(None, description="Application-specific error code")
+    details: Optional[List[ErrorDetail]] = Field(None, description="Detailed error information")
+    request_id: Optional[str] = Field(None, description="Request tracking ID")
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), 
+        description="Error timestamp"
+    )
+    
+    @classmethod
+    def create(
+        cls,
+        message: str,
+        status_code: int,
+        error_code: Optional[str] = None,
+        details: Optional[List[ErrorDetail]] = None,
+        request_id: Optional[str] = None,
+    ) -> "ErrorResponse":
+        """Create a standardized error response."""
+        return cls(
+            message=message,
+            status_code=status_code,
+            error_code=error_code,
+            details=details,
+            request_id=request_id,
+        )
+
+
+class ValidationErrorResponse(ErrorResponse):
+    """Schema for validation error responses."""
+    
+    error_code: str = Field(default="VALIDATION_ERROR", description="Validation error code")
+    
+    @classmethod
+    def from_pydantic_error(
+        cls, 
+        validation_error: Any, 
+        request_id: Optional[str] = None
+    ) -> "ValidationErrorResponse":
+        """Create validation error response from Pydantic validation error."""
+        details = []
+        if hasattr(validation_error, 'errors'):
+            for error in validation_error.errors():
+                field_name = ".".join(str(loc) for loc in error.get('loc', []))
+                details.append(ErrorDetail(
+                    code=error.get('type', 'validation_error'),
+                    message=error.get('msg', 'Validation failed'),
+                    field=field_name if field_name else None,
+                    context=error.get('ctx', {})
+                ))
+        
+        return cls(
+            message="Request validation failed",
+            status_code=422,
+            details=details,
+            request_id=request_id,
+        )
+
+
+class NotFoundErrorResponse(ErrorResponse):
+    """Schema for 404 Not Found error responses."""
+    
+    error_code: str = Field(default="RESOURCE_NOT_FOUND", description="Not found error code")
+    
+    @classmethod
+    def create_for_resource(
+        cls, 
+        resource_type: str, 
+        resource_id: Optional[str] = None,
+        request_id: Optional[str] = None
+    ) -> "NotFoundErrorResponse":
+        """Create not found error for specific resource."""
+        if resource_id:
+            message = f"{resource_type.title()} with ID '{resource_id}' not found"
+        else:
+            message = f"{resource_type.title()} not found"
+        
+        return cls(
+            message=message,
+            status_code=404,
+            request_id=request_id,
+        )
+
+
+class ConflictErrorResponse(ErrorResponse):
+    """Schema for 409 Conflict error responses."""
+    
+    error_code: str = Field(default="RESOURCE_CONFLICT", description="Conflict error code")
+
+
+class ForbiddenErrorResponse(ErrorResponse):
+    """Schema for 403 Forbidden error responses."""
+    
+    error_code: str = Field(default="ACCESS_FORBIDDEN", description="Forbidden error code")
+    
+    @classmethod 
+    def create_for_user_context(
+        cls,
+        message: str = "Access to this resource is forbidden",
+        request_id: Optional[str] = None
+    ) -> "ForbiddenErrorResponse":
+        """Create forbidden error for user context issues."""
+        return cls(
+            message=message,
+            status_code=403,
+            request_id=request_id,
+        )
+
+
+class UnauthorizedErrorResponse(ErrorResponse):
+    """Schema for 401 Unauthorized error responses."""
+    
+    error_code: str = Field(default="AUTHENTICATION_REQUIRED", description="Unauthorized error code")
+
+
+class RateLimitErrorResponse(ErrorResponse):
+    """Schema for 429 Rate Limit error responses."""
+    
+    error_code: str = Field(default="RATE_LIMIT_EXCEEDED", description="Rate limit error code")
+    retry_after: Optional[int] = Field(None, description="Retry after seconds")
+
+
+class ServiceUnavailableErrorResponse(ErrorResponse):
+    """Schema for 503 Service Unavailable error responses."""
+    
+    error_code: str = Field(default="SERVICE_UNAVAILABLE", description="Service unavailable error code")
+    retry_after: Optional[int] = Field(None, description="Retry after seconds")
+
+
+# User Context and Multi-User Support schemas (future implementation)
+class UserContextBase(BaseModel):
+    """Base schema for user context information."""
+    
+    # TODO: Implement user authentication system
+    # These fields are placeholders for future multi-user support
+    user_id: Optional[UUID] = Field(None, description="User ID (future implementation)")
+    permissions: List[str] = Field(default_factory=list, description="User permissions")
+    scoped_access: Dict[str, Any] = Field(
+        default_factory=dict, 
+        description="Scoped access rules (future implementation)"
+    )
+
+
+class WatchingContextRequest(BaseModel):
+    """Schema for watching operations with user context preparation."""
+    
+    # Current single-user fields
+    enabled: bool = Field(..., description="Whether watching should be enabled")
+    
+    # TODO: Future multi-user context
+    # user_context: Optional[UserContextBase] = Field(None, description="User context (future)")
+    # sharing_permissions: Optional[List[str]] = Field(None, description="Sharing permissions (future)")
 
 
 # MangaDx Chapter and @Home API schemas
