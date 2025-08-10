@@ -11,15 +11,16 @@ from datetime import datetime, timedelta
 from urllib.parse import urlparse
 import html
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, and_
 from pywebpush import webpush, WebPushException
 from pydantic import BaseModel, Field, validator, HttpUrl
 
-from kiremisu.database.connection import get_db
+from kiremisu.database.connection import get_db, get_db_session
 from kiremisu.database.models import PushSubscription, Notification, Series, Chapter
 from kiremisu.core.config import get_settings
+from kiremisu.core.auth import get_api_key, get_optional_api_key, check_rate_limit
 
 # Simple metrics stub
 def track_api_request(operation: str):
@@ -143,9 +144,24 @@ class PushNotificationRequest(BaseModel):
 
 
 @router.get("/vapid-public-key", response_model=VapidKeysResponse)
-async def get_vapid_public_key():
-    """Get the VAPID public key for push subscriptions."""
+async def get_vapid_public_key(
+    request: Request,
+    api_key: Optional[str] = Depends(get_optional_api_key)
+):
+    """Get the VAPID public key for push subscriptions.
+    
+    This endpoint can be accessed without authentication but has rate limiting.
+    """
     track_api_request("push_get_vapid_key")
+    
+    # Rate limiting for unauthenticated requests
+    if not api_key:
+        client_ip = request.client.host if request.client else "unknown"
+        if not check_rate_limit(client_ip, "vapid-key", max_requests=20, window_minutes=5):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Rate limit exceeded. Too many requests for VAPID key.",
+            )
 
     vapid_public_key = settings.vapid_public_key
     if not vapid_public_key:
@@ -160,10 +176,20 @@ async def get_vapid_public_key():
 @router.post("/subscribe", response_model=PushSubscriptionResponse)
 async def subscribe_to_push(
     subscription: PushSubscriptionCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key),
 ):
-    """Subscribe to push notifications."""
+    """Subscribe to push notifications. Requires authentication."""
     track_api_request("push_subscribe")
+    
+    # Rate limiting per client IP
+    client_ip = request.client.host if request.client else "unknown"
+    if not check_rate_limit(client_ip, "subscribe", max_requests=5, window_minutes=5):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Rate limit exceeded. Too many subscription attempts.",
+        )
 
     # Check if subscription already exists
     endpoint_str = str(subscription.endpoint)
@@ -240,8 +266,9 @@ async def subscribe_to_push(
 async def unsubscribe_from_push(
     subscription_id: UUID,
     db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key),
 ):
-    """Unsubscribe from push notifications."""
+    """Unsubscribe from push notifications. Requires authentication."""
     track_api_request("push_unsubscribe")
 
     result = await db.execute(
@@ -252,20 +279,64 @@ async def unsubscribe_from_push(
     if not subscription:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subscription not found")
 
-    await db.delete(subscription)
-    await db.commit()
+    try:
+        await db.delete(subscription)
+        await db.commit()
+        logger.info(f"Deleted push subscription: {subscription_id}")
+        return {"message": "Successfully unsubscribed"}
+    except Exception as e:
+        logger.error(f"Failed to delete subscription: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to unsubscribe"
+        )
 
-    logger.info(f"Deleted push subscription: {subscription_id}")
 
-    return {"message": "Successfully unsubscribed"}
+class UnsubscribeByEndpointRequest(BaseModel):
+    """Request to unsubscribe by endpoint."""
+    endpoint: str
+
+
+@router.post("/unsubscribe")
+async def unsubscribe_by_endpoint(
+    request_data: UnsubscribeByEndpointRequest,
+    db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """Unsubscribe from push notifications by endpoint. Requires authentication."""
+    track_api_request("push_unsubscribe_by_endpoint")
+
+    result = await db.execute(
+        select(PushSubscription).where(PushSubscription.endpoint == request_data.endpoint)
+    )
+    subscription = result.scalar_one_or_none()
+
+    if not subscription:
+        # Don't error if subscription not found - might already be cleaned up
+        return {"message": "Successfully unsubscribed"}
+
+    try:
+        await db.delete(subscription)
+        await db.commit()
+        logger.info(f"Deleted push subscription by endpoint: {subscription.id}")
+        return {"message": "Successfully unsubscribed"}
+    except Exception as e:
+        logger.error(f"Failed to delete subscription by endpoint: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to unsubscribe"
+        )
 
 
 @router.get("/subscriptions", response_model=List[PushSubscriptionResponse])
 async def list_subscriptions(
     active_only: bool = True,
     db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key),
 ):
-    """List all push subscriptions."""
+    """List all push subscriptions. Requires authentication."""
     track_api_request("push_list_subscriptions")
 
     query = select(PushSubscription)
@@ -293,8 +364,9 @@ async def test_push_notification(
     subscription_id: UUID,
     request: TestPushRequest,
     db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key),
 ):
-    """Send a test push notification to a specific subscription."""
+    """Send a test push notification to a specific subscription. Requires authentication."""
     track_api_request("push_test_notification")
 
     # Get subscription
@@ -335,8 +407,9 @@ async def send_manual_push(
     request: PushNotificationRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key),
 ):
-    """Send a manual push notification."""
+    """Send a manual push notification. Requires authentication."""
     track_api_request("push_send_manual")
 
     # Get target subscriptions
@@ -353,10 +426,11 @@ async def send_manual_push(
             status_code=status.HTTP_404_NOT_FOUND, detail="No active subscriptions found"
         )
 
-    # Queue sending notifications in background
+    # Queue sending notifications in background with fresh DB session
+    subscription_ids = [str(sub.id) for sub in subscriptions]
     background_tasks.add_task(
-        send_push_to_multiple,
-        subscriptions=subscriptions,
+        send_push_to_multiple_background,
+        subscription_ids=subscription_ids,
         title=request.title,
         body=request.body,
         notification_type=request.type,
@@ -503,6 +577,56 @@ async def send_push_to_multiple(
 
     logger.info(f"Push notifications sent: {successful} successful, {failed} failed")
     return {"successful": successful, "failed": failed}
+
+
+async def send_push_to_multiple_background(
+    subscription_ids: List[str],
+    title: str,
+    body: str,
+    notification_type: str = "system_alert",
+    icon: Optional[str] = None,
+    badge: Optional[str] = None,
+    tag: Optional[str] = None,
+    require_interaction: bool = False,
+    silent: bool = False,
+    data: Optional[Dict[str, Any]] = None,
+):
+    """Background task-safe version of send_push_to_multiple that creates its own DB session."""
+    async with get_db_session() as db:
+        try:
+            # Fetch subscriptions by IDs
+            from uuid import UUID
+            subscription_uuids = [UUID(sub_id) for sub_id in subscription_ids]
+            
+            result = await db.execute(
+                select(PushSubscription).where(
+                    and_(
+                        PushSubscription.id.in_(subscription_uuids),
+                        PushSubscription.is_active == True
+                    )
+                )
+            )
+            subscriptions = result.scalars().all()
+            
+            if subscriptions:
+                # Use the regular send_push_to_multiple with fresh session
+                await send_push_to_multiple(
+                    subscriptions=subscriptions,
+                    title=title,
+                    body=body,
+                    notification_type=notification_type,
+                    icon=icon,
+                    badge=badge,
+                    tag=tag,
+                    require_interaction=require_interaction,
+                    silent=silent,
+                    data=data,
+                )
+            else:
+                logger.warning("No active subscriptions found for background push task")
+                
+        except Exception as e:
+            logger.error(f"Error in background push notification task: {e}")
 
 
 async def send_chapter_notification(

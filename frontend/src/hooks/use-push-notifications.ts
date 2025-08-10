@@ -95,10 +95,15 @@ const fetchVapidPublicKey = async (): Promise<string | null> => {
 // Send subscription to backend
 const sendSubscriptionToBackend = async (subscriptionInfo: PushSubscriptionInfo): Promise<void> => {
   try {
+    // For now, use a simple authentication approach
+    // In a real app, this would come from user authentication state
+    const apiKey = process.env.NEXT_PUBLIC_API_KEY || 'your-api-key-here';
+    
     const response = await fetch('/api/push/subscribe', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         endpoint: subscriptionInfo.endpoint,
@@ -122,12 +127,15 @@ const sendSubscriptionToBackend = async (subscriptionInfo: PushSubscriptionInfo)
 // Remove subscription from backend
 const removeSubscriptionFromBackend = async (subscriptionInfo: PushSubscriptionInfo): Promise<void> => {
   try {
-    // First, we need to get the subscription ID from the backend
-    // In a real app, you'd store this ID when subscribing
+    // For now, use a simple authentication approach
+    // In a real app, this would come from user authentication state
+    const apiKey = process.env.NEXT_PUBLIC_API_KEY || 'your-api-key-here';
+    
     const response = await fetch('/api/push/unsubscribe', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         endpoint: subscriptionInfo.endpoint,
