@@ -1,16 +1,56 @@
 // Service Worker for KireMisu Push Notifications
 // Handles background push notifications for new manga chapters
 
+const SW_VERSION = '1.0.0';
+const CACHE_NAME = `kiremisu-cache-v${SW_VERSION}`;
+
 self.addEventListener('install', (event) => {
-  console.log('[Service Worker] Installing...');
-  // Skip waiting to activate immediately
-  self.skipWaiting();
+  console.log(`[Service Worker v${SW_VERSION}] Installing...`);
+  
+  // Precache essential assets
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(cache => {
+      return cache.addAll([
+        '/icon-192x192.png',
+        '/badge-72x72.png',
+        // Add other essential assets here
+      ]).catch(err => {
+        console.warn('[Service Worker] Failed to precache some assets:', err);
+      });
+    })
+  );
+  
+  // Don't skip waiting automatically - let the app control when to update
+  // This prevents race conditions with active notifications
 });
 
 self.addEventListener('activate', (event) => {
-  console.log('[Service Worker] Activating...');
-  // Take control of all clients immediately
-  event.waitUntil(clients.claim());
+  console.log(`[Service Worker v${SW_VERSION}] Activating...`);
+  
+  // Clean up old caches
+  event.waitUntil(
+    caches.keys().then(cacheNames => {
+      return Promise.all(
+        cacheNames
+          .filter(name => name.startsWith('kiremisu-cache-') && name !== CACHE_NAME)
+          .map(name => {
+            console.log(`[Service Worker] Deleting old cache: ${name}`);
+            return caches.delete(name);
+          })
+      );
+    }).then(() => {
+      // Take control of all clients after cleanup
+      return clients.claim();
+    })
+  );
+});
+
+// Message handler for controlled updates
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    console.log('[Service Worker] Received skip waiting message');
+    self.skipWaiting();
+  }
 });
 
 // Handle push notifications

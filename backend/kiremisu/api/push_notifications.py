@@ -5,13 +5,17 @@ from uuid import UUID
 import json
 import base64
 import logging
+import re
+import asyncio
 from datetime import datetime, timedelta
+from urllib.parse import urlparse
+import html
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, and_
 from pywebpush import webpush, WebPushException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator, HttpUrl
 
 from kiremisu.database.connection import get_db
 from kiremisu.database.models import PushSubscription, Notification, Series, Chapter
@@ -36,10 +40,58 @@ class VapidKeysResponse(BaseModel):
 class PushSubscriptionCreate(BaseModel):
     """Push subscription creation request."""
 
-    endpoint: str
+    endpoint: HttpUrl
     keys: Dict[str, str]
     expires_at: Optional[datetime] = None
-    user_agent: Optional[str] = None
+    user_agent: Optional[str] = Field(None, max_length=500)
+
+    @validator('endpoint')
+    def validate_endpoint(cls, v):
+        """Validate push notification endpoint URL."""
+        url = str(v)
+        # Check for valid push service domains
+        valid_domains = [
+            'fcm.googleapis.com',
+            'updates.push.services.mozilla.com',
+            'notify.windows.com',
+            'push.apple.com',
+            'web.push.apple.com',
+            'android.googleapis.com'
+        ]
+        
+        parsed = urlparse(url)
+        if not any(domain in parsed.netloc for domain in valid_domains):
+            # Allow localhost for testing
+            if 'localhost' not in parsed.netloc and '127.0.0.1' not in parsed.netloc:
+                raise ValueError(f"Invalid push service endpoint domain: {parsed.netloc}")
+        
+        return v
+    
+    @validator('keys')
+    def validate_keys(cls, v):
+        """Validate push subscription keys."""
+        required_keys = {'p256dh', 'auth'}
+        if not required_keys.issubset(v.keys()):
+            raise ValueError(f"Missing required keys. Required: {required_keys}")
+        
+        # Validate base64 format
+        for key, value in v.items():
+            if key in required_keys:
+                try:
+                    # Check if it's valid base64 URL-safe
+                    base64.urlsafe_b64decode(value + '==')  # Add padding
+                except Exception:
+                    raise ValueError(f"Invalid base64 format for key: {key}")
+        
+        return v
+    
+    @validator('user_agent')
+    def sanitize_user_agent(cls, v):
+        """Sanitize user agent string."""
+        if v:
+            # HTML escape to prevent XSS
+            return html.escape(v[:500])  # Limit length and escape
+        return v
 
     class Config:
         json_schema_extra = {
@@ -114,8 +166,9 @@ async def subscribe_to_push(
     track_api_request("push_subscribe")
 
     # Check if subscription already exists
+    endpoint_str = str(subscription.endpoint)
     existing = await db.execute(
-        select(PushSubscription).where(PushSubscription.endpoint == subscription.endpoint)
+        select(PushSubscription).where(PushSubscription.endpoint == endpoint_str)
     )
     existing_sub = existing.scalar_one_or_none()
 
@@ -126,7 +179,16 @@ async def subscribe_to_push(
         existing_sub.failure_count = 0
         existing_sub.user_agent = subscription.user_agent
         existing_sub.expires_at = subscription.expires_at
-        await db.commit()
+        
+        try:
+            await db.commit()
+        except Exception as e:
+            logger.error(f"Failed to update subscription: {e}")
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update subscription"
+            )
 
         logger.info(f"Updated existing push subscription: {existing_sub.id}")
 
@@ -141,7 +203,7 @@ async def subscribe_to_push(
 
     # Create new subscription
     new_subscription = PushSubscription(
-        endpoint=subscription.endpoint,
+        endpoint=endpoint_str,
         keys=subscription.keys,
         user_agent=subscription.user_agent,
         expires_at=subscription.expires_at,
@@ -150,8 +212,17 @@ async def subscribe_to_push(
     )
 
     db.add(new_subscription)
-    await db.commit()
-    await db.refresh(new_subscription)
+    
+    try:
+        await db.commit()
+        await db.refresh(new_subscription)
+    except Exception as e:
+        logger.error(f"Failed to create subscription: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create subscription"
+        )
 
     logger.info(f"Created new push subscription: {new_subscription.id}")
 
@@ -389,18 +460,18 @@ async def send_push_to_multiple(
     require_interaction: bool = False,
     silent: bool = False,
     data: Optional[Dict[str, Any]] = None,
+    batch_size: int = 10,  # Process in batches to avoid overwhelming the system
 ):
-    """Send push notifications to multiple subscriptions."""
-    successful = 0
-    failed = 0
-
-    for subscription in subscriptions:
+    """Send push notifications to multiple subscriptions in parallel."""
+    
+    async def send_single(subscription: PushSubscription) -> bool:
+        """Helper to send a single notification."""
         notification_data = data or {}
         notification_data["type"] = notification_type
         notification_data["requireInteraction"] = require_interaction
         notification_data["silent"] = silent
 
-        success = await send_push_notification(
+        return await send_push_notification(
             subscription=subscription,
             title=title,
             body=body,
@@ -409,11 +480,26 @@ async def send_push_to_multiple(
             tag=tag,
             data=notification_data,
         )
-
-        if success:
-            successful += 1
-        else:
-            failed += 1
+    
+    # Process subscriptions in batches to avoid too many concurrent connections
+    results = []
+    for i in range(0, len(subscriptions), batch_size):
+        batch = subscriptions[i:i + batch_size]
+        batch_results = await asyncio.gather(
+            *[send_single(sub) for sub in batch],
+            return_exceptions=True  # Don't fail the whole batch if one fails
+        )
+        
+        # Handle results, counting successes and failures
+        for result in batch_results:
+            if isinstance(result, Exception):
+                logger.error(f"Exception during push send: {result}")
+                results.append(False)
+            else:
+                results.append(result)
+    
+    successful = sum(1 for r in results if r is True)
+    failed = len(results) - successful
 
     logger.info(f"Push notifications sent: {successful} successful, {failed} failed")
     return {"successful": successful, "failed": failed}

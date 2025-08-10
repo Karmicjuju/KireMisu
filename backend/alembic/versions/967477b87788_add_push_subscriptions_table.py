@@ -46,10 +46,25 @@ def upgrade() -> None:
     op.create_index(
         "ix_push_subscriptions_endpoint", "push_subscriptions", ["endpoint"], unique=False
     )
+    # Add composite indexes for common query patterns
+    op.create_index(
+        "ix_push_subscriptions_active_failure",
+        "push_subscriptions",
+        ["is_active", "failure_count"],
+        unique=False
+    )
+    op.create_index(
+        "ix_push_subscriptions_active_expires",
+        "push_subscriptions",
+        ["is_active", "expires_at"],
+        unique=False
+    )
 
 
 def downgrade() -> None:
     # Drop indexes
+    op.drop_index("ix_push_subscriptions_active_expires", table_name="push_subscriptions")
+    op.drop_index("ix_push_subscriptions_active_failure", table_name="push_subscriptions")
     op.drop_index("ix_push_subscriptions_endpoint", table_name="push_subscriptions")
     op.drop_index("ix_push_subscriptions_active", table_name="push_subscriptions")
     # Drop table

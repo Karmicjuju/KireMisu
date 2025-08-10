@@ -76,9 +76,74 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   return btoa(binary);
 };
 
-// VAPID public key - this should match your backend configuration
-const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || 
-  'BEl62iUYgUivxIkv69yViEuiBIa40HI80NM9lE3b6PJdlOOCFjLkjVmCAZ6F6DKUr2b0oLhQhR-ByP3F9PAa6BQ';
+// Fetch VAPID public key from backend
+const fetchVapidPublicKey = async (): Promise<string | null> => {
+  try {
+    const response = await fetch('/api/push/vapid-public-key');
+    if (!response.ok) {
+      console.warn('Push notifications not configured on server');
+      return null;
+    }
+    const data = await response.json();
+    return data.public_key;
+  } catch (error) {
+    console.error('Failed to fetch VAPID public key:', error);
+    return null;
+  }
+};
+
+// Send subscription to backend
+const sendSubscriptionToBackend = async (subscriptionInfo: PushSubscriptionInfo): Promise<void> => {
+  try {
+    const response = await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        endpoint: subscriptionInfo.endpoint,
+        keys: subscriptionInfo.keys,
+        user_agent: navigator.userAgent,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to register subscription: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log('Subscription registered with backend:', data.id);
+  } catch (error) {
+    console.error('Failed to send subscription to backend:', error);
+    throw error;
+  }
+};
+
+// Remove subscription from backend
+const removeSubscriptionFromBackend = async (subscriptionInfo: PushSubscriptionInfo): Promise<void> => {
+  try {
+    // First, we need to get the subscription ID from the backend
+    // In a real app, you'd store this ID when subscribing
+    const response = await fetch('/api/push/unsubscribe', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        endpoint: subscriptionInfo.endpoint,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to remove subscription: ${response.statusText}`);
+    }
+
+    console.log('Subscription removed from backend');
+  } catch (error) {
+    console.error('Failed to remove subscription from backend:', error);
+    // Don't throw - we still want to unsubscribe locally even if backend fails
+  }
+};
 
 // Convert VAPID key from base64 to Uint8Array
 const urlBase64ToUint8Array = (base64String: string): Uint8Array => {
@@ -200,15 +265,28 @@ export function usePushNotifications(): UsePushNotificationsReturn {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
+      // Fetch VAPID public key from backend
+      const vapidKey = await fetchVapidPublicKey();
+      if (!vapidKey) {
+        throw new Error('Push notifications are not configured on the server');
+      }
+
       const registration = await navigator.serviceWorker.ready;
       
       // Check if already subscribed
       const existingSubscription = await registration.pushManager.getSubscription();
       if (existingSubscription) {
+        const subscriptionInfo = getSubscriptionInfo(existingSubscription);
+        
+        // Send existing subscription to backend
+        if (subscriptionInfo) {
+          await sendSubscriptionToBackend(subscriptionInfo);
+        }
+        
         setState(prev => ({
           ...prev,
           subscription: existingSubscription,
-          subscriptionInfo: getSubscriptionInfo(existingSubscription),
+          subscriptionInfo,
           isLoading: false,
         }));
         return existingSubscription;
@@ -217,10 +295,15 @@ export function usePushNotifications(): UsePushNotificationsReturn {
       // Create new subscription
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        applicationServerKey: urlBase64ToUint8Array(vapidKey),
       });
 
       const subscriptionInfo = getSubscriptionInfo(subscription);
+
+      // Send subscription to backend for storage
+      if (subscriptionInfo) {
+        await sendSubscriptionToBackend(subscriptionInfo);
+      }
 
       setState(prev => ({
         ...prev,
@@ -228,10 +311,6 @@ export function usePushNotifications(): UsePushNotificationsReturn {
         subscriptionInfo,
         isLoading: false,
       }));
-
-      // TODO: Send subscription to backend for storage
-      // This would typically involve calling an API endpoint to store the subscription
-      console.log('Push subscription created:', subscriptionInfo);
 
       // Refresh notifications to update any subscription-related state
       refreshNotifications();
@@ -257,6 +336,11 @@ export function usePushNotifications(): UsePushNotificationsReturn {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
+      // Remove subscription from backend first
+      if (state.subscriptionInfo) {
+        await removeSubscriptionFromBackend(state.subscriptionInfo);
+      }
+
       const result = await state.subscription.unsubscribe();
       
       if (result) {
@@ -266,9 +350,6 @@ export function usePushNotifications(): UsePushNotificationsReturn {
           subscriptionInfo: null,
           isLoading: false,
         }));
-
-        // TODO: Remove subscription from backend
-        console.log('Push subscription removed');
         
         // Refresh notifications to update any subscription-related state
         refreshNotifications();
