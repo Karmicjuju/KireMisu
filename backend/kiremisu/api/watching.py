@@ -22,9 +22,11 @@ logger = logging.getLogger(__name__)
 limiter = Limiter(key_func=get_remote_address)
 
 
-@router.get("/", response_model=List[WatchingResponse], responses={
-    500: {"model": ErrorResponse, "description": "Internal server error"}
-})
+@router.get(
+    "/",
+    response_model=List[WatchingResponse],
+    responses={500: {"model": ErrorResponse, "description": "Internal server error"}},
+)
 async def get_watching_list(
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0, description="Number of series to skip"),
@@ -33,7 +35,7 @@ async def get_watching_list(
     # user_context: Optional[UserContextBase] = Depends(get_current_user)
 ) -> List[WatchingResponse]:
     """Get list of all watched series.
-    
+
     TODO: Add user filtering when user authentication is implemented.
     Currently returns all watched series in the system.
     """
@@ -43,25 +45,27 @@ async def get_watching_list(
     except Exception as e:
         logger.error(f"Error getting watching list: {e}")
         error_response = create_standardized_error_response(
-            status_code=500,
-            message="Failed to get watching list",
-            error_code="WATCHING_LIST_ERROR"
+            status_code=500, message="Failed to get watching list", error_code="WATCHING_LIST_ERROR"
         )
         return JSONResponse(status_code=500, content=error_response)
 
 
-@router.get("/{series_id}", response_model=WatchingResponse, responses={
-    404: {"model": ErrorResponse, "description": "Series not found"},
-    500: {"model": ErrorResponse, "description": "Internal server error"}
-})
+@router.get(
+    "/{series_id}",
+    response_model=WatchingResponse,
+    responses={
+        404: {"model": ErrorResponse, "description": "Series not found"},
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+)
 async def get_watching_status(
-    series_id: UUID, 
-    db: AsyncSession = Depends(get_db)
+    series_id: UUID,
+    db: AsyncSession = Depends(get_db),
     # TODO: Add user context for ownership validation
     # user_context: Optional[UserContextBase] = Depends(get_current_user)
 ) -> WatchingResponse:
     """Get watching status for a specific series.
-    
+
     TODO: Add user context validation when authentication is implemented.
     """
     try:
@@ -82,26 +86,30 @@ async def get_watching_status(
         error_response = create_standardized_error_response(
             status_code=500,
             message="Failed to get watching status",
-            error_code="WATCHING_STATUS_ERROR"
+            error_code="WATCHING_STATUS_ERROR",
         )
         return JSONResponse(status_code=500, content=error_response)
 
 
-@router.post("/{series_id}", response_model=WatchingResponse, responses={
-    404: {"model": ErrorResponse, "description": "Series not found"},
-    429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
-    500: {"model": ErrorResponse, "description": "Internal server error"}
-})
+@router.post(
+    "/{series_id}",
+    response_model=WatchingResponse,
+    responses={
+        404: {"model": ErrorResponse, "description": "Series not found"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+)
 @limiter.limit("10/minute")
 async def watch_series(
-    request: Request, 
-    series_id: UUID, 
-    db: AsyncSession = Depends(get_db)
+    request: Request,
+    series_id: UUID,
+    db: AsyncSession = Depends(get_db),
     # TODO: Add user context for ownership validation and user-specific watching
     # user_context: Optional[UserContextBase] = Depends(get_current_user)
 ) -> WatchingResponse:
     """Start watching a series.
-    
+
     TODO: Implement user-specific watching when authentication is added.
     Currently enables watching for all users in single-user mode.
     """
@@ -114,29 +122,30 @@ async def watch_series(
     except Exception as e:
         logger.error(f"Error watching series {series_id}: {e}")
         error_response = create_standardized_error_response(
-            status_code=500,
-            message="Failed to watch series",
-            error_code="WATCH_TOGGLE_ERROR"
+            status_code=500, message="Failed to watch series", error_code="WATCH_TOGGLE_ERROR"
         )
         return JSONResponse(status_code=500, content=error_response)
 
 
-@router.delete("/{series_id}", responses={
-    200: {"description": "Series unwatched successfully"},
-    404: {"model": ErrorResponse, "description": "Series not found"},
-    429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
-    500: {"model": ErrorResponse, "description": "Internal server error"}
-})
+@router.delete(
+    "/{series_id}",
+    responses={
+        200: {"description": "Series unwatched successfully"},
+        404: {"model": ErrorResponse, "description": "Series not found"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+)
 @limiter.limit("10/minute")
 async def unwatch_series(
-    request: Request, 
-    series_id: UUID, 
-    db: AsyncSession = Depends(get_db)
+    request: Request,
+    series_id: UUID,
+    db: AsyncSession = Depends(get_db),
     # TODO: Add user context for ownership validation
     # user_context: Optional[UserContextBase] = Depends(get_current_user)
 ) -> dict:
     """Stop watching a series.
-    
+
     TODO: Implement user-specific unwatching when authentication is added.
     """
     try:
@@ -148,8 +157,6 @@ async def unwatch_series(
     except Exception as e:
         logger.error(f"Error unwatching series {series_id}: {e}")
         error_response = create_standardized_error_response(
-            status_code=500,
-            message="Failed to unwatch series",
-            error_code="UNWATCH_ERROR"
+            status_code=500, message="Failed to unwatch series", error_code="UNWATCH_ERROR"
         )
         return JSONResponse(status_code=500, content=error_response)

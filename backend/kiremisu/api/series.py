@@ -12,13 +12,18 @@ from sqlalchemy.orm import selectinload
 from kiremisu.database.connection import get_db
 from kiremisu.database.models import Series, Chapter, Tag, series_tags
 from kiremisu.database.schemas import (
-    SeriesResponse, 
-    ChapterResponse, 
+    SeriesResponse,
+    ChapterResponse,
     SeriesProgressResponse,
     WatchToggleRequest,
     WatchToggleResponse,
 )
-from kiremisu.database.utils import with_db_retry, log_slow_query, safe_like_pattern, validate_query_params
+from kiremisu.database.utils import (
+    with_db_retry,
+    log_slow_query,
+    safe_like_pattern,
+    validate_query_params,
+)
 from kiremisu.services.watching_service import WatchingService
 
 router = APIRouter(prefix="/api/series", tags=["series"])
@@ -39,15 +44,12 @@ async def get_series_list(
     """Get list of all series with optional tag filtering."""
     # Validate input parameters
     try:
-        clean_params = validate_query_params(
-            search=search,
-            tag_names=tag_names or []
-        )
+        clean_params = validate_query_params(search=search, tag_names=tag_names or [])
         search = clean_params.get("search")
         tag_names = clean_params.get("tag_names")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
+
     query = select(Series).options(selectinload(Series.user_tags))
 
     # Add search filter if provided
@@ -59,12 +61,12 @@ async def get_series_list(
     if tag_ids or tag_names:
         # Build a subquery for series that have ALL specified tags
         filters = []
-        
+
         if tag_ids:
             for tag_id in tag_ids:
                 subquery = select(series_tags.c.series_id).where(series_tags.c.tag_id == tag_id)
                 filters.append(Series.id.in_(subquery))
-        
+
         if tag_names:
             for tag_name in tag_names:
                 # Find tag by name and use its ID
@@ -73,7 +75,7 @@ async def get_series_list(
                     series_tags.c.tag_id.in_(tag_subquery)
                 )
                 filters.append(Series.id.in_(series_subquery))
-        
+
         # Apply all filters (AND logic)
         for filter_condition in filters:
             query = query.where(filter_condition)
@@ -91,9 +93,7 @@ async def get_series_list(
 async def get_series(series_id: UUID, db: AsyncSession = Depends(get_db)) -> SeriesResponse:
     """Get series details by ID."""
     result = await db.execute(
-        select(Series)
-        .options(selectinload(Series.user_tags))
-        .where(Series.id == series_id)
+        select(Series).options(selectinload(Series.user_tags)).where(Series.id == series_id)
     )
     series = result.scalar_one_or_none()
 
@@ -177,18 +177,16 @@ async def get_series_progress(
 
 @router.post("/{series_id}/watch", response_model=WatchToggleResponse)
 async def toggle_series_watch(
-    series_id: UUID,
-    request: WatchToggleRequest,
-    db: AsyncSession = Depends(get_db)
+    series_id: UUID, request: WatchToggleRequest, db: AsyncSession = Depends(get_db)
 ) -> WatchToggleResponse:
     """Toggle watching status for a series."""
     try:
         series = await WatchingService.toggle_watch(
             db=db, series_id=series_id, enabled=request.enabled
         )
-        
+
         return WatchToggleResponse.from_series(series)
-        
+
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

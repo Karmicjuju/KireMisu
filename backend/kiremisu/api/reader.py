@@ -302,22 +302,19 @@ async def update_reading_progress(
     try:
         from kiremisu.services.reading_progress import ReadingProgressService
         from kiremisu.database.schemas import ReadingProgressUpdateRequest
-        
+
         # Convert from ChapterProgressUpdate to ReadingProgressUpdateRequest
         progress_request = ReadingProgressUpdateRequest(
-            current_page=progress.last_read_page,
-            is_complete=progress.is_read
+            current_page=progress.last_read_page, is_complete=progress.is_read
         )
-        
+
         # Update progress using the enhanced service (this handles all the logic)
-        await ReadingProgressService.update_chapter_progress(
-            db, str(chapter_id), progress_request
-        )
-        
+        await ReadingProgressService.update_chapter_progress(db, str(chapter_id), progress_request)
+
         # Get updated chapter
         result = await db.execute(select(Chapter).where(Chapter.id == chapter_id))
         updated_chapter = result.scalar_one()
-        
+
     except ValueError as e:
         # Convert service errors to appropriate HTTP exceptions
         raise HTTPException(
@@ -373,7 +370,9 @@ async def get_series_chapters(series_id: UUID, db: AsyncSession = Depends(get_db
                 "is_read": chapter.is_read,
                 "last_read_page": chapter.last_read_page,
                 "read_at": chapter.read_at.isoformat() if chapter.read_at else None,
-                "started_reading_at": getattr(chapter, 'started_reading_at', None).isoformat() if getattr(chapter, 'started_reading_at', None) else None,
+                "started_reading_at": getattr(chapter, "started_reading_at", None).isoformat()
+                if getattr(chapter, "started_reading_at", None)
+                else None,
             }
             for chapter in chapters
         ],

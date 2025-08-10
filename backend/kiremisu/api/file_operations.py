@@ -25,7 +25,7 @@ async def create_file_operation(
     db: AsyncSession = Depends(get_db),
 ) -> FileOperationResponse:
     """Create a new file operation with initial validation.
-    
+
     This endpoint creates a file operation record and performs basic validation.
     The operation is not executed until explicitly confirmed.
     """
@@ -44,10 +44,10 @@ async def validate_file_operation(
     db: AsyncSession = Depends(get_db),
 ) -> ValidationResult:
     """Perform comprehensive validation of a file operation.
-    
+
     This endpoint validates the operation and returns detailed results including:
     - File system validation
-    - Database consistency checks  
+    - Database consistency checks
     - Risk assessment
     - Conflict detection
     """
@@ -68,13 +68,13 @@ async def execute_file_operation(
     db: AsyncSession = Depends(get_db),
 ) -> FileOperationResponse:
     """Execute a validated file operation after user confirmation.
-    
+
     This endpoint executes the file operation if the user has confirmed it.
     The operation includes backup creation and database updates.
     """
     if confirmation.operation_id != operation_id:
         raise HTTPException(status_code=400, detail="Operation ID mismatch")
-    
+
     if not confirmation.confirmed:
         raise HTTPException(status_code=400, detail="Operation not confirmed by user")
 
@@ -93,7 +93,7 @@ async def rollback_file_operation(
     db: AsyncSession = Depends(get_db),
 ) -> FileOperationResponse:
     """Rollback a completed or failed file operation.
-    
+
     This endpoint attempts to rollback the file operation using stored backups
     and reverting database changes.
     """
@@ -151,10 +151,12 @@ async def list_file_operations(
 @router.delete("/cleanup", response_model=dict)
 async def cleanup_old_operations(
     db: AsyncSession = Depends(get_db),
-    days_old: int = Query(30, ge=1, le=365, description="Clean up operations older than this many days"),
+    days_old: int = Query(
+        30, ge=1, le=365, description="Clean up operations older than this many days"
+    ),
 ) -> dict:
     """Clean up old completed operations and their backups.
-    
+
     This endpoint removes old operation records and associated backup files
     to free up disk space and keep the operation log manageable.
     """
@@ -181,7 +183,7 @@ async def rename_file_or_directory(
     db: AsyncSession = Depends(get_db),
 ) -> FileOperationResponse:
     """Convenience endpoint for renaming files or directories.
-    
+
     This endpoint creates a rename operation with default safety settings.
     """
     request = FileOperationRequest(
@@ -191,7 +193,7 @@ async def rename_file_or_directory(
         force=force,
         create_backup=create_backup,
     )
-    
+
     try:
         async with FileOperationService() as service:
             return await service.create_operation(db, request)
@@ -209,7 +211,7 @@ async def delete_file_or_directory(
     db: AsyncSession = Depends(get_db),
 ) -> FileOperationResponse:
     """Convenience endpoint for deleting files or directories.
-    
+
     This endpoint creates a delete operation with default safety settings.
     Always requires backup creation unless explicitly disabled.
     """
@@ -219,7 +221,7 @@ async def delete_file_or_directory(
         force=force,
         create_backup=create_backup,
     )
-    
+
     try:
         async with FileOperationService() as service:
             return await service.create_operation(db, request)
@@ -238,7 +240,7 @@ async def move_file_or_directory(
     db: AsyncSession = Depends(get_db),
 ) -> FileOperationResponse:
     """Convenience endpoint for moving files or directories.
-    
+
     This endpoint creates a move operation with default safety settings.
     """
     request = FileOperationRequest(
@@ -248,7 +250,7 @@ async def move_file_or_directory(
         force=force,
         create_backup=create_backup,
     )
-    
+
     try:
         async with FileOperationService() as service:
             return await service.create_operation(db, request)

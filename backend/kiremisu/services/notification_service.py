@@ -9,7 +9,7 @@ from sqlalchemy import select, update, and_, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from kiremisu.database.models import Notification, Series, Chapter
+from kiremisu.database.models import Notification, Series, Chapter, PushSubscription
 from kiremisu.core.metrics import metrics_collector
 
 logger = logging.getLogger(__name__)
@@ -34,35 +34,37 @@ class NotificationService:
         """
         # Start metrics tracking for notification creation
         async with metrics_collector.track_polling_operation(
-            "notification_creation",
-            series_id=series.id,
-            series_count=1
+            "notification_creation", series_id=series.id, series_count=1
         ) as tracker:
             notifications = []
-            
-            logger.info(f"Creating notifications for {len(new_chapters)} new chapters in series: {series.title_primary}")
+
+            logger.info(
+                f"Creating notifications for {len(new_chapters)} new chapters in series: {series.title_primary}"
+            )
 
             for chapter in new_chapters:
-                logger.debug(f"Creating notification for chapter {chapter.chapter_number} of series {series.id}")
-                
+                logger.debug(
+                    f"Creating notification for chapter {chapter.chapter_number} of series {series.id}"
+                )
+
                 # Format notification title and message
                 title = f"New chapter available: {series.title_primary}"
-                
+
                 chapter_title = f"Chapter {chapter.chapter_number}"
                 if chapter.volume_number:
                     chapter_title = f"Vol. {chapter.volume_number}, {chapter_title}"
                 if chapter.title:
                     chapter_title += f" - {chapter.title}"
-                
+
                 message = f"New chapter '{chapter_title}' is now available for reading."
 
                 # Create notification
                 notification = Notification(
                     notification_type="new_chapter",
-                title=title,
-                message=message,
-                series_id=series.id,
-                chapter_id=chapter.id,
+                    title=title,
+                    message=message,
+                    series_id=series.id,
+                    chapter_id=chapter.id,
                 )
 
                 db.add(notification)
@@ -74,12 +76,32 @@ class NotificationService:
 
             if notifications:
                 await db.commit()
-                logger.info(f"Created {len(notifications)} notifications for series: {series.title_primary}")
-                
+                logger.info(
+                    f"Created {len(notifications)} notifications for series: {series.title_primary}"
+                )
+
                 # Update metrics
                 tracker.notifications_created = len(notifications)
-                metrics_collector.increment_counter("notifications.sent.last_hour", len(notifications))
-                metrics_collector.increment_counter("notifications.total.created", len(notifications))
+                metrics_collector.increment_counter(
+                    "notifications.sent.last_hour", len(notifications)
+                )
+                metrics_collector.increment_counter(
+                    "notifications.total.created", len(notifications)
+                )
+
+                # Send push notifications for each new chapter
+                try:
+                    # Import here to avoid circular dependency
+                    from kiremisu.api.push_notifications import send_chapter_notification
+
+                    for notification, chapter in zip(notifications, new_chapters):
+                        await send_chapter_notification(db, series, chapter, notification)
+                        logger.info(
+                            f"Sent push notification for chapter {chapter.chapter_number} of {series.title_primary}"
+                        )
+                except Exception as e:
+                    logger.error(f"Failed to send push notifications: {e}")
+                    # Don't fail the entire operation if push notifications fail
             else:
                 logger.debug(f"No notifications created for series: {series.title_primary}")
 
@@ -102,10 +124,7 @@ class NotificationService:
 
     @staticmethod
     async def get_notifications(
-        db: AsyncSession, 
-        skip: int = 0, 
-        limit: int = 50, 
-        unread_only: bool = False
+        db: AsyncSession, skip: int = 0, limit: int = 50, unread_only: bool = False
     ) -> List[Notification]:
         """Get paginated list of notifications.
 
@@ -132,7 +151,9 @@ class NotificationService:
         return result.scalars().all()
 
     @staticmethod
-    async def mark_notification_read(db: AsyncSession, notification_id: UUID) -> Optional[Notification]:
+    async def mark_notification_read(
+        db: AsyncSession, notification_id: UUID
+    ) -> Optional[Notification]:
         """Mark a single notification as read.
 
         Args:
@@ -145,9 +166,7 @@ class NotificationService:
         logger.info(f"Marking notification {notification_id} as read")
 
         # Get the notification
-        result = await db.execute(
-            select(Notification).where(Notification.id == notification_id)
-        )
+        result = await db.execute(select(Notification).where(Notification.id == notification_id))
         notification = result.scalar_one_or_none()
 
         if not notification:
@@ -287,16 +306,14 @@ class NotificationService:
 
         # Build query conditions
         conditions = [Notification.created_at < cutoff_date]
-        
+
         if keep_unread:
             conditions.append(Notification.is_read == True)
 
         # Delete notifications
         from sqlalchemy import delete
 
-        result = await db.execute(
-            delete(Notification).where(and_(*conditions))
-        )
+        result = await db.execute(delete(Notification).where(and_(*conditions)))
 
         await db.commit()
 
@@ -328,10 +345,11 @@ class NotificationService:
         # Count by type
         type_counts = {}
         type_result = await db.execute(
-            select(Notification.notification_type, func.count(Notification.id))
-            .group_by(Notification.notification_type)
+            select(Notification.notification_type, func.count(Notification.id)).group_by(
+                Notification.notification_type
+            )
         )
-        
+
         for notification_type, count in type_result.all():
             type_counts[notification_type] = count
 

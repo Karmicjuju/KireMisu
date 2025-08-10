@@ -23,7 +23,7 @@ from .migrations import (
 __all__ = [
     # Connection management
     "get_db",
-    "get_db_session", 
+    "get_db_session",
     "close_db_connections",
     # Database utilities
     "check_db_health",
@@ -40,6 +40,6 @@ __all__ = [
     # Migration utilities
     "get_current_revision",
     "validate_migration_safety",
-    "run_migration_with_checks", 
+    "run_migration_with_checks",
     "get_migration_history",
 ]

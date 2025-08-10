@@ -33,6 +33,7 @@ dependencies = [
     "greenlet>=3.2.3",
     "python-dateutil>=2.9.0.post0",
     "slowapi>=0.1.9",
+    "pywebpush>=2.0.3",
 ]
 
 [project.optional-dependencies]

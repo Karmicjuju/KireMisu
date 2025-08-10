@@ -91,30 +91,31 @@ class TagBase(BaseModel):
         if v is None:
             return v
         v = v.strip()
-        
+
         # Strict validation: must be exactly #RRGGBB format
         if not v.startswith("#") or len(v) != 7:
             raise ValueError("Color must be in hex format #RRGGBB")
-        
+
         # Only allow alphanumeric hex characters after #
         hex_part = v[1:]
-        if not all(c in '0123456789ABCDEFabcdef' for c in hex_part):
+        if not all(c in "0123456789ABCDEFabcdef" for c in hex_part):
             raise ValueError("Color must contain valid hex digits only")
-        
+
         try:
             int(hex_part, 16)  # Validate hex digits
         except ValueError:
             raise ValueError("Color must contain valid hex digits")
-        
+
         # Additional security: prevent any special characters that could be used for injection
-        if any(char in v for char in [';', '(', ')', '{', '}', '/', '\\', '<', '>', '"', "'"]):
+        if any(char in v for char in [";", "(", ")", "{", "}", "/", "\\", "<", ">", '"', "'"]):
             raise ValueError("Color contains invalid characters")
-            
+
         return v.upper()
 
 
 class TagCreate(TagBase):
     """Schema for creating a tag."""
+
     pass
 
 
@@ -140,25 +141,25 @@ class TagUpdate(BaseModel):
         if v is None:
             return v
         v = v.strip()
-        
+
         # Strict validation: must be exactly #RRGGBB format
         if not v.startswith("#") or len(v) != 7:
             raise ValueError("Color must be in hex format #RRGGBB")
-        
+
         # Only allow alphanumeric hex characters after #
         hex_part = v[1:]
-        if not all(c in '0123456789ABCDEFabcdef' for c in hex_part):
+        if not all(c in "0123456789ABCDEFabcdef" for c in hex_part):
             raise ValueError("Color must contain valid hex digits only")
-        
+
         try:
             int(hex_part, 16)  # Validate hex digits
         except ValueError:
             raise ValueError("Color must contain valid hex digits")
-        
+
         # Additional security: prevent any special characters that could be used for injection
-        if any(char in v for char in [';', '(', ')', '{', '}', '/', '\\', '<', '>', '"', "'"]):
+        if any(char in v for char in [";", "(", ")", "{", "}", "/", "\\", "<", ">", '"', "'"]):
             raise ValueError("Color contains invalid characters")
-            
+
         return v.upper()
 
 
@@ -480,9 +481,15 @@ class SeriesResponse(BaseModel):
     user_tags: List[TagResponse] = Field(default_factory=list, description="User-assigned tags")
 
     # Watching configuration
-    watching_enabled: bool = Field(default=False, description="Whether watching is enabled for this series")
-    watching_config: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Watching configuration settings")
-    last_watched_check: Optional[datetime] = Field(None, description="Last time series was checked for updates")
+    watching_enabled: bool = Field(
+        default=False, description="Whether watching is enabled for this series"
+    )
+    watching_config: Optional[Dict[str, Any]] = Field(
+        default_factory=dict, description="Watching configuration settings"
+    )
+    last_watched_check: Optional[datetime] = Field(
+        None, description="Last time series was checked for updates"
+    )
 
     # Statistics
     total_chapters: int = Field(..., description="Total chapter count")
@@ -500,12 +507,12 @@ class SeriesResponse(BaseModel):
         # Handle user_tags relationship safely
         user_tags = []
         try:
-            if hasattr(series, 'user_tags') and series.user_tags:
+            if hasattr(series, "user_tags") and series.user_tags:
                 user_tags = [TagResponse.from_model(tag) for tag in series.user_tags]
         except Exception:
             # If user_tags relationship fails, continue with empty list
             user_tags = []
-        
+
         return cls(
             id=series.id,
             title_primary=series.title_primary,
@@ -587,7 +594,7 @@ class ChapterResponse(BaseModel):
             "is_read": chapter.is_read,
             "last_read_page": chapter.last_read_page,
             "read_at": chapter.read_at,
-            "started_reading_at": getattr(chapter, 'started_reading_at', None),
+            "started_reading_at": getattr(chapter, "started_reading_at", None),
             "created_at": chapter.created_at,
             "updated_at": chapter.updated_at,
         }
@@ -776,8 +783,7 @@ class AnnotationBase(BaseModel):
     content: str = Field(..., min_length=1, max_length=2000, description="Annotation content")
     page_number: Optional[int] = Field(None, ge=1, description="Page number (1-indexed)")
     annotation_type: str = Field(
-        default="note", 
-        description="Type of annotation (note, bookmark, highlight)"
+        default="note", description="Type of annotation (note, bookmark, highlight)"
     )
     position_x: Optional[float] = Field(
         None, ge=0, le=1, description="X position on page (0-1 normalized)"
@@ -846,7 +852,7 @@ class AnnotationResponse(AnnotationBase):
 
     # Optional chapter information (when loaded with relationship)
     chapter: Optional[ChapterResponse] = Field(None, description="Parent chapter information")
-    
+
     model_config = ConfigDict(from_attributes=True)
 
     @classmethod
@@ -879,14 +885,16 @@ class FileOperationRequest(BaseModel):
     operation_type: str = Field(..., description="Type of operation (rename, delete, move)")
     source_path: str = Field(..., description="Source file/directory path")
     target_path: Optional[str] = Field(None, description="Target path (for rename/move operations)")
-    
+
     # Safety options
     force: bool = Field(default=False, description="Force operation without confirmations")
     create_backup: bool = Field(default=True, description="Create backup before operation")
-    
+
     # Validation options
     skip_validation: bool = Field(default=False, description="Skip pre-operation validation")
-    validate_database_consistency: bool = Field(default=True, description="Validate database consistency")
+    validate_database_consistency: bool = Field(
+        default=True, description="Validate database consistency"
+    )
 
     @field_validator("operation_type")
     @classmethod
@@ -923,30 +931,32 @@ class FileOperationResponse(BaseModel):
     id: UUID = Field(..., description="Operation ID")
     operation_type: str = Field(..., description="Type of operation")
     status: str = Field(..., description="Operation status")
-    
+
     # File paths
     source_path: str = Field(..., description="Source path")
     target_path: Optional[str] = Field(None, description="Target path")
     backup_path: Optional[str] = Field(None, description="Backup path")
-    
+
     # Affected records
     affected_series_ids: List[str] = Field(default_factory=list, description="Affected series IDs")
-    affected_chapter_ids: List[str] = Field(default_factory=list, description="Affected chapter IDs")
-    
+    affected_chapter_ids: List[str] = Field(
+        default_factory=list, description="Affected chapter IDs"
+    )
+
     # Operation metadata
     operation_metadata: dict = Field(default_factory=dict, description="Operation metadata")
     validation_results: dict = Field(default_factory=dict, description="Validation results")
-    
+
     # Error handling
     error_message: Optional[str] = Field(None, description="Error message if operation failed")
     retry_count: int = Field(..., description="Number of retry attempts")
     max_retries: int = Field(..., description="Maximum retry attempts")
-    
+
     # Timing
     started_at: Optional[datetime] = Field(None, description="Operation start time")
     completed_at: Optional[datetime] = Field(None, description="Operation completion time")
     validated_at: Optional[datetime] = Field(None, description="Validation completion time")
-    
+
     # Timestamps
     created_at: datetime = Field(..., description="Operation creation time")
     updated_at: datetime = Field(..., description="Last update time")
@@ -987,7 +997,8 @@ class ChapterAnnotationsResponse(BaseModel):
 
         return cls(
             chapter_id=chapter.id,
-            chapter_title=f"Chapter {chapter.chapter_number}" + (f" - {chapter.title}" if chapter.title else ""),
+            chapter_title=f"Chapter {chapter.chapter_number}"
+            + (f" - {chapter.title}" if chapter.title else ""),
             total_pages=chapter.page_count,
             annotations=[AnnotationResponse.from_model(a) for a in annotations],
             annotations_by_page=annotations_by_page,
@@ -997,7 +1008,7 @@ class ChapterAnnotationsResponse(BaseModel):
 # MangaDx integration schemas
 class MangaDxSearchRequest(BaseModel):
     """Schema for MangaDx search requests."""
-    
+
     title: Optional[str] = Field(None, description="Manga title to search for")
     author: Optional[str] = Field(None, description="Author name to search for")
     artist: Optional[str] = Field(None, description="Artist name to search for")
@@ -1007,7 +1018,7 @@ class MangaDxSearchRequest(BaseModel):
     original_language: Optional[List[str]] = Field(None, description="Original language filter")
     limit: int = Field(default=20, ge=1, le=100, description="Number of results (1-100)")
     offset: int = Field(default=0, ge=0, description="Offset for pagination")
-    
+
     @field_validator("status")
     @classmethod
     def validate_status(cls, v):
@@ -1016,9 +1027,11 @@ class MangaDxSearchRequest(BaseModel):
             allowed_statuses = ["ongoing", "completed", "hiatus", "cancelled"]
             for status in v:
                 if status not in allowed_statuses:
-                    raise ValueError(f"Invalid status '{status}'. Must be one of: {allowed_statuses}")
+                    raise ValueError(
+                        f"Invalid status '{status}'. Must be one of: {allowed_statuses}"
+                    )
         return v
-    
+
     @field_validator("content_rating")
     @classmethod
     def validate_content_rating(cls, v):
@@ -1027,13 +1040,15 @@ class MangaDxSearchRequest(BaseModel):
             allowed_ratings = ["safe", "suggestive", "erotica", "pornographic"]
             for rating in v:
                 if rating not in allowed_ratings:
-                    raise ValueError(f"Invalid content rating '{rating}'. Must be one of: {allowed_ratings}")
+                    raise ValueError(
+                        f"Invalid content rating '{rating}'. Must be one of: {allowed_ratings}"
+                    )
         return v
 
 
 class MangaDxMangaInfo(BaseModel):
     """Schema for MangaDx manga information in search results."""
-    
+
     id: str = Field(..., description="MangaDx manga UUID")
     title: str = Field(..., description="Primary manga title")
     alternative_titles: List[str] = Field(default_factory=list, description="Alternative titles")
@@ -1049,7 +1064,7 @@ class MangaDxMangaInfo(BaseModel):
     last_volume: Optional[str] = Field(None, description="Last volume number")
     last_chapter: Optional[str] = Field(None, description="Last chapter number")
     cover_art_url: Optional[str] = Field(None, description="Cover art image URL")
-    
+
     # MangaDx metadata
     mangadx_created_at: Optional[datetime] = Field(None, description="MangaDx creation timestamp")
     mangadx_updated_at: Optional[datetime] = Field(None, description="MangaDx update timestamp")
@@ -1057,7 +1072,7 @@ class MangaDxMangaInfo(BaseModel):
 
 class MangaDxSearchResponse(BaseModel):
     """Schema for MangaDx search response."""
-    
+
     results: List[MangaDxMangaInfo] = Field(default_factory=list, description="Search results")
     total: int = Field(..., description="Total number of results")
     limit: int = Field(..., description="Results per page")
@@ -1067,44 +1082,42 @@ class MangaDxSearchResponse(BaseModel):
 
 class MangaDxImportRequest(BaseModel):
     """Schema for MangaDx metadata import requests."""
-    
+
     mangadx_id: str = Field(..., description="MangaDx manga UUID to import")
     target_series_id: Optional[UUID] = Field(
-        None, 
-        description="Optional existing series ID to enrich with metadata"
+        None, description="Optional existing series ID to enrich with metadata"
     )
     import_cover_art: bool = Field(default=True, description="Whether to download cover art")
     import_chapters: bool = Field(default=False, description="Whether to import chapter metadata")
     overwrite_existing: bool = Field(
-        default=False, 
-        description="Whether to overwrite existing metadata fields"
+        default=False, description="Whether to overwrite existing metadata fields"
     )
     custom_title: Optional[str] = Field(
-        None, 
-        description="Custom title override (if different from MangaDx)"
+        None, description="Custom title override (if different from MangaDx)"
     )
 
 
 class MangaDxImportResult(BaseModel):
     """Schema for MangaDx import operation result."""
-    
+
     success: bool = Field(..., description="Whether import was successful")
     series_id: Optional[UUID] = Field(None, description="ID of created/updated series")
     mangadx_id: str = Field(..., description="MangaDx manga UUID that was imported")
     operation: str = Field(..., description="Operation performed (created/updated/enriched)")
-    
+
     # Import statistics
     metadata_fields_updated: List[str] = Field(
-        default_factory=list, 
-        description="List of metadata fields that were updated"
+        default_factory=list, description="List of metadata fields that were updated"
     )
-    cover_art_downloaded: bool = Field(default=False, description="Whether cover art was downloaded")
+    cover_art_downloaded: bool = Field(
+        default=False, description="Whether cover art was downloaded"
+    )
     chapters_imported: int = Field(default=0, description="Number of chapters imported")
-    
+
     # Error information
     warnings: List[str] = Field(default_factory=list, description="Non-fatal warnings")
     errors: List[str] = Field(default_factory=list, description="Error messages if failed")
-    
+
     # Timing information
     import_duration_ms: Optional[int] = Field(None, description="Import duration in milliseconds")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -1112,7 +1125,7 @@ class MangaDxImportResult(BaseModel):
 
 class MangaDxImportResponse(BaseModel):
     """Schema for MangaDx import API response."""
-    
+
     status: str = Field(..., description="Import status (success/partial/failed)")
     message: str = Field(..., description="Human-readable status message")
     result: MangaDxImportResult = Field(..., description="Detailed import result")
@@ -1120,23 +1133,21 @@ class MangaDxImportResponse(BaseModel):
 
 class MangaDxBulkImportRequest(BaseModel):
     """Schema for bulk MangaDx import requests."""
-    
+
     import_requests: List[MangaDxImportRequest] = Field(
-        ..., 
-        min_length=1, 
-        max_length=50,
-        description="List of import requests (max 50)"
+        ..., min_length=1, max_length=50, description="List of import requests (max 50)"
     )
-    priority: int = Field(default=5, ge=1, le=10, description="Job priority for background processing")
+    priority: int = Field(
+        default=5, ge=1, le=10, description="Job priority for background processing"
+    )
     notify_on_completion: bool = Field(
-        default=True, 
-        description="Whether to create notification job on completion"
+        default=True, description="Whether to create notification job on completion"
     )
 
 
 class MangaDxBulkImportResponse(BaseModel):
     """Schema for bulk MangaDx import response."""
-    
+
     status: str = Field(..., description="Request status (scheduled/failed)")
     message: str = Field(..., description="Human-readable status message")
     job_id: Optional[UUID] = Field(None, description="Background job ID")
@@ -1145,53 +1156,44 @@ class MangaDxBulkImportResponse(BaseModel):
 
 class MangaDxEnrichmentRequest(BaseModel):
     """Schema for enriching existing series with MangaDx metadata."""
-    
+
     series_id: UUID = Field(..., description="Local series ID to enrich")
     search_query: Optional[str] = Field(
-        None, 
-        description="Override search query (uses series title if not provided)"
+        None, description="Override search query (uses series title if not provided)"
     )
     auto_select_best_match: bool = Field(
-        default=False, 
-        description="Automatically select best match if confidence is high"
+        default=False, description="Automatically select best match if confidence is high"
     )
     confidence_threshold: float = Field(
-        default=0.8, 
-        ge=0.0, 
-        le=1.0, 
-        description="Minimum confidence for auto-selection (0.0-1.0)"
+        default=0.8, ge=0.0, le=1.0, description="Minimum confidence for auto-selection (0.0-1.0)"
     )
     import_cover_art: bool = Field(default=True, description="Whether to download cover art")
     overwrite_existing: bool = Field(
-        default=False, 
-        description="Whether to overwrite existing metadata fields"
+        default=False, description="Whether to overwrite existing metadata fields"
     )
 
 
 class MangaDxEnrichmentCandidate(BaseModel):
     """Schema for MangaDx enrichment candidate."""
-    
+
     mangadx_info: MangaDxMangaInfo = Field(..., description="MangaDx manga information")
     confidence_score: float = Field(..., ge=0.0, le=1.0, description="Match confidence (0.0-1.0)")
     match_reasons: List[str] = Field(
-        default_factory=list, 
-        description="Reasons for this match (title, author, etc.)"
+        default_factory=list, description="Reasons for this match (title, author, etc.)"
     )
     is_recommended: bool = Field(..., description="Whether this is the recommended match")
 
 
 class MangaDxEnrichmentResponse(BaseModel):
     """Schema for MangaDx enrichment response."""
-    
+
     series_id: UUID = Field(..., description="Local series ID")
     series_title: str = Field(..., description="Local series title")
     candidates: List[MangaDxEnrichmentCandidate] = Field(
-        default_factory=list, 
-        description="Potential MangaDx matches"
+        default_factory=list, description="Potential MangaDx matches"
     )
     auto_selected: Optional[MangaDxEnrichmentCandidate] = Field(
-        None, 
-        description="Auto-selected candidate if confidence threshold met"
+        None, description="Auto-selected candidate if confidence threshold met"
     )
     search_query_used: str = Field(..., description="Search query that was used")
     total_candidates: int = Field(..., description="Total number of candidates found")
@@ -1199,7 +1201,7 @@ class MangaDxEnrichmentResponse(BaseModel):
 
 class MangaDxHealthResponse(BaseModel):
     """Schema for MangaDx API health check response."""
-    
+
     api_accessible: bool = Field(..., description="Whether MangaDx API is accessible")
     response_time_ms: Optional[int] = Field(None, description="API response time in milliseconds")
     last_check: datetime = Field(..., description="Last health check timestamp")
@@ -1211,21 +1213,23 @@ class NotificationResponse(BaseModel):
     """Schema for notification API responses."""
 
     id: UUID = Field(..., description="Notification unique identifier")
-    type: str = Field(..., description="Type of notification")  # Changed from notification_type to type
+    type: str = Field(
+        ..., description="Type of notification"
+    )  # Changed from notification_type to type
     title: str = Field(..., description="Notification title")
     message: str = Field(..., description="Notification message")
-    
+
     # Optional relationships
     series_id: Optional[UUID] = Field(None, description="Associated series ID")
     chapter_id: Optional[UUID] = Field(None, description="Associated chapter ID")
-    
+
     # Read status
     is_read: bool = Field(..., description="Whether notification has been read")
     read_at: Optional[datetime] = Field(None, description="When notification was read")
-    
+
     # Timestamps
     created_at: datetime = Field(..., description="Notification creation timestamp")
-    
+
     # Optional related data for convenience
     series_title: Optional[str] = Field(None, description="Series title if associated")
     chapter_title: Optional[str] = Field(None, description="Chapter title if associated")
@@ -1237,20 +1241,20 @@ class NotificationResponse(BaseModel):
         """Create NotificationResponse from Notification model."""
         series_title = None
         chapter_title = None
-        
+
         # Extract series title if available
-        if hasattr(notification, 'series') and notification.series:
+        if hasattr(notification, "series") and notification.series:
             series_title = notification.series.title_primary
-        
-        # Extract chapter title if available  
-        if hasattr(notification, 'chapter') and notification.chapter:
+
+        # Extract chapter title if available
+        if hasattr(notification, "chapter") and notification.chapter:
             chapter_num = f"Chapter {notification.chapter.chapter_number}"
             if notification.chapter.volume_number:
                 chapter_num = f"Vol. {notification.chapter.volume_number}, {chapter_num}"
             if notification.chapter.title:
                 chapter_num += f" - {notification.chapter.title}"
             chapter_title = chapter_num
-        
+
         return cls(
             id=notification.id,
             type=notification.notification_type,  # Map notification_type to type
@@ -1271,7 +1275,9 @@ class NotificationListResponse(BaseModel):
 
     notifications: List[NotificationResponse] = Field(..., description="List of notifications")
     total: int = Field(..., description="Total number of notifications in response")
-    unread_only: bool = Field(default=False, description="Whether only unread notifications were requested")
+    unread_only: bool = Field(
+        default=False, description="Whether only unread notifications were requested"
+    )
 
 
 class NotificationStatsResponse(BaseModel):
@@ -1361,8 +1367,8 @@ class WatchingStatsResponse(BaseModel):
     watched_series: int = Field(..., description="Number of series being watched")
     eligible_series: int = Field(..., description="Number of series eligible for watching")
     pending_update_checks: int = Field(..., description="Number of pending update check jobs")
-    
-    
+
+
 class WatchedSeriesListResponse(BaseModel):
     """Schema for watched series list response."""
 
@@ -1370,7 +1376,6 @@ class WatchedSeriesListResponse(BaseModel):
     total: int = Field(..., description="Total number of watched series")
     page: int = Field(..., description="Current page number")
     pages: int = Field(..., description="Total number of pages")
-
 
     @classmethod
     def from_model(cls, operation):
@@ -1401,21 +1406,29 @@ class ValidationResult(BaseModel):
     """Schema for validation results."""
 
     is_valid: bool = Field(..., description="Whether the operation is valid")
-    warnings: List[str] = Field(default_factory=list, description="Non-critical validation warnings")
+    warnings: List[str] = Field(
+        default_factory=list, description="Non-critical validation warnings"
+    )
     errors: List[str] = Field(default_factory=list, description="Critical validation errors")
     conflicts: List[dict] = Field(default_factory=list, description="Detected conflicts")
-    
+
     # Affected data summary
     affected_series_count: int = Field(default=0, description="Number of affected series")
     affected_chapter_count: int = Field(default=0, description="Number of affected chapters")
-    
+
     # Risk assessment
     risk_level: str = Field(default="low", description="Risk level (low, medium, high)")
-    requires_confirmation: bool = Field(default=False, description="Whether user confirmation is required")
-    
+    requires_confirmation: bool = Field(
+        default=False, description="Whether user confirmation is required"
+    )
+
     # Performance impact
-    estimated_duration_seconds: Optional[float] = Field(None, description="Estimated operation duration")
-    estimated_disk_usage_mb: Optional[float] = Field(None, description="Estimated disk usage for backups")
+    estimated_duration_seconds: Optional[float] = Field(
+        None, description="Estimated operation duration"
+    )
+    estimated_disk_usage_mb: Optional[float] = Field(
+        None, description="Estimated disk usage for backups"
+    )
 
     @field_validator("risk_level")
     @classmethod
@@ -1447,25 +1460,33 @@ class FileOperationListResponse(BaseModel):
 # Download Job schemas
 class DownloadJobProgressInfo(BaseModel):
     """Schema for download job progress information."""
-    
+
     total_chapters: int = Field(..., description="Total number of chapters to download")
     downloaded_chapters: int = Field(..., description="Number of chapters completed")
-    current_chapter: Optional[Dict[str, Any]] = Field(None, description="Current chapter being downloaded")
-    current_chapter_progress: float = Field(default=0.0, ge=0.0, le=1.0, description="Current chapter progress (0.0-1.0)")
+    current_chapter: Optional[Dict[str, Any]] = Field(
+        None, description="Current chapter being downloaded"
+    )
+    current_chapter_progress: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="Current chapter progress (0.0-1.0)"
+    )
     error_count: int = Field(default=0, description="Number of chapters that failed to download")
     errors: List[Dict[str, Any]] = Field(default_factory=list, description="List of error details")
     started_at: Optional[str] = Field(None, description="Download start timestamp (ISO format)")
-    estimated_completion: Optional[str] = Field(None, description="Estimated completion timestamp (ISO format)")
-    
+    estimated_completion: Optional[str] = Field(
+        None, description="Estimated completion timestamp (ISO format)"
+    )
+
     @property
     def progress_percentage(self) -> float:
         """Calculate overall progress percentage."""
         if self.total_chapters == 0:
             return 0.0
         base_progress = self.downloaded_chapters / self.total_chapters
-        current_contribution = self.current_chapter_progress / self.total_chapters if self.current_chapter else 0.0
+        current_contribution = (
+            self.current_chapter_progress / self.total_chapters if self.current_chapter else 0.0
+        )
         return min(100.0, (base_progress + current_contribution) * 100.0)
-    
+
     @property
     def is_complete(self) -> bool:
         """Check if download is complete."""
@@ -1474,25 +1495,31 @@ class DownloadJobProgressInfo(BaseModel):
 
 class DownloadJobRequest(BaseModel):
     """Schema for download job requests."""
-    
+
     download_type: Literal["single", "batch", "series"] = Field(..., description="Type of download")
     manga_id: str = Field(..., description="External manga ID (MangaDx UUID)")
-    
+
     # Chapter selection
-    chapter_ids: Optional[List[str]] = Field(None, description="Specific chapter IDs to download (for single/batch)")
+    chapter_ids: Optional[List[str]] = Field(
+        None, description="Specific chapter IDs to download (for single/batch)"
+    )
     volume_number: Optional[str] = Field(None, description="Volume number (for volume downloads)")
-    
+
     # Local association
     series_id: Optional[UUID] = Field(None, description="Local series ID to associate with")
-    
+
     # Download options
     destination_path: Optional[str] = Field(None, description="Custom destination path")
-    priority: int = Field(default=3, ge=1, le=10, description="Job priority (1-10, higher = more urgent)")
-    
+    priority: int = Field(
+        default=3, ge=1, le=10, description="Job priority (1-10, higher = more urgent)"
+    )
+
     # Notification options
-    notify_on_completion: bool = Field(default=True, description="Send notification when download completes")
-    
-    @model_validator(mode='after')
+    notify_on_completion: bool = Field(
+        default=True, description="Send notification when download completes"
+    )
+
+    @model_validator(mode="after")
     def validate_download_type(self):
         """Validate download type requirements."""
         if self.download_type == "single" and not self.chapter_ids:
@@ -1504,42 +1531,48 @@ class DownloadJobRequest(BaseModel):
 
 class DownloadJobResponse(BaseModel):
     """Schema for download job responses."""
-    
+
     id: UUID = Field(..., description="Job unique identifier")
     job_type: str = Field(default="download", description="Job type")
-    status: Literal["pending", "running", "completed", "failed"] = Field(..., description="Job status")
-    
+    status: Literal["pending", "running", "completed", "failed"] = Field(
+        ..., description="Job status"
+    )
+
     # Download metadata
     download_type: str = Field(..., description="Type of download")
     manga_id: str = Field(..., description="External manga ID")
     series_id: Optional[UUID] = Field(None, description="Associated local series ID")
-    batch_type: Optional[str] = Field(None, description="Batch type (single, multiple, volume, series)")
+    batch_type: Optional[str] = Field(
+        None, description="Batch type (single, multiple, volume, series)"
+    )
     volume_number: Optional[str] = Field(None, description="Volume number for volume downloads")
     destination_path: Optional[str] = Field(None, description="Download destination path")
-    
+
     # Manga metadata for better UI display
     manga_title: Optional[str] = Field(None, description="Human-readable manga title")
     manga_author: Optional[str] = Field(None, description="Manga author name")
     manga_cover_url: Optional[str] = Field(None, description="Manga cover image URL")
-    
+
     # Progress tracking
-    progress: Optional[DownloadJobProgressInfo] = Field(None, description="Download progress information")
-    
+    progress: Optional[DownloadJobProgressInfo] = Field(
+        None, description="Download progress information"
+    )
+
     # Job metadata
     priority: int = Field(..., description="Job priority")
     retry_count: int = Field(..., description="Number of retry attempts")
     max_retries: int = Field(..., description="Maximum retry attempts")
-    
+
     # Error handling
     error_message: Optional[str] = Field(None, description="Error message if job failed")
-    
+
     # Timing
     scheduled_at: datetime = Field(..., description="Job scheduled time")
     started_at: Optional[datetime] = Field(None, description="Job start time")
     completed_at: Optional[datetime] = Field(None, description="Job completion time")
     created_at: datetime = Field(..., description="Job creation time")
     updated_at: datetime = Field(..., description="Last update time")
-    
+
     # Computed properties
     @property
     def duration_seconds(self) -> Optional[float]:
@@ -1548,38 +1581,40 @@ class DownloadJobResponse(BaseModel):
             return None
         end_time = self.completed_at or datetime.now(timezone.utc).replace(tzinfo=None)
         return (end_time - self.started_at).total_seconds()
-    
+
     @property
     def estimated_remaining_seconds(self) -> Optional[float]:
         """Estimate remaining time based on current progress."""
         if not self.progress or not self.started_at or self.progress.total_chapters == 0:
             return None
-        
+
         if self.progress.is_complete:
             return 0.0
-        
-        elapsed = (datetime.now(timezone.utc).replace(tzinfo=None) - self.started_at).total_seconds()
+
+        elapsed = (
+            datetime.now(timezone.utc).replace(tzinfo=None) - self.started_at
+        ).total_seconds()
         progress_ratio = self.progress.progress_percentage / 100.0
-        
+
         if progress_ratio <= 0:
             return None
-        
+
         total_estimated = elapsed / progress_ratio
         return max(0.0, total_estimated - elapsed)
-    
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     @classmethod
     def from_job_model(cls, job: "JobQueue") -> "DownloadJobResponse":
         """Create DownloadJobResponse from JobQueue model."""
         payload = job.payload or {}
-        
+
         # Extract progress information
         progress_data = payload.get("progress", {})
         progress = None
         if progress_data:
             progress = DownloadJobProgressInfo(**progress_data)
-        
+
         return cls(
             id=job.id,
             job_type=job.job_type,
@@ -1608,32 +1643,34 @@ class DownloadJobResponse(BaseModel):
 
 class DownloadJobListResponse(BaseModel):
     """Schema for listing download jobs."""
-    
+
     jobs: List[DownloadJobResponse] = Field(..., description="List of download jobs")
     total: int = Field(..., description="Total number of jobs")
     active_downloads: int = Field(..., description="Number of currently active downloads")
     pending_downloads: int = Field(..., description="Number of pending downloads")
     failed_downloads: int = Field(..., description="Number of failed downloads")
     completed_downloads: int = Field(..., description="Number of completed downloads")
-    
+
     # Filters applied
     status_filter: Optional[str] = Field(None, description="Applied status filter")
     download_type_filter: Optional[str] = Field(None, description="Applied download type filter")
-    
+
     # Pagination info
     pagination: Optional[PaginationMeta] = Field(None, description="Pagination metadata")
 
 
 class DownloadJobActionRequest(BaseModel):
     """Schema for download job actions (cancel, retry, etc.)."""
-    
-    action: Literal["cancel", "retry", "pause", "resume"] = Field(..., description="Action to perform")
+
+    action: Literal["cancel", "retry", "pause", "resume"] = Field(
+        ..., description="Action to perform"
+    )
     reason: Optional[str] = Field(None, description="Optional reason for the action")
 
 
 class DownloadJobActionResponse(BaseModel):
     """Schema for download job action responses."""
-    
+
     job_id: UUID = Field(..., description="Job ID that action was performed on")
     action: str = Field(..., description="Action that was performed")
     success: bool = Field(..., description="Whether action was successful")
@@ -1643,49 +1680,56 @@ class DownloadJobActionResponse(BaseModel):
 
 class DownloadStatsResponse(BaseModel):
     """Schema for download system statistics."""
-    
+
     # Current queue status
     total_jobs: int = Field(..., description="Total number of download jobs")
     active_jobs: int = Field(..., description="Currently running jobs")
     pending_jobs: int = Field(..., description="Pending jobs in queue")
     failed_jobs: int = Field(..., description="Failed jobs")
     completed_jobs: int = Field(..., description="Successfully completed jobs")
-    
+
     # Recent activity (last 24 hours)
     jobs_created_today: int = Field(..., description="Jobs created in last 24 hours")
     jobs_completed_today: int = Field(..., description="Jobs completed in last 24 hours")
     chapters_downloaded_today: int = Field(..., description="Chapters downloaded in last 24 hours")
-    
+
     # System health
-    average_job_duration_minutes: Optional[float] = Field(None, description="Average job duration in minutes")
+    average_job_duration_minutes: Optional[float] = Field(
+        None, description="Average job duration in minutes"
+    )
     success_rate_percentage: float = Field(..., description="Overall success rate percentage")
-    current_download_speed_mbps: Optional[float] = Field(None, description="Current download speed in Mbps")
-    
+    current_download_speed_mbps: Optional[float] = Field(
+        None, description="Current download speed in Mbps"
+    )
+
     # Storage usage
-    total_downloaded_size_gb: Optional[float] = Field(None, description="Total size of downloaded content in GB")
+    total_downloaded_size_gb: Optional[float] = Field(
+        None, description="Total size of downloaded content in GB"
+    )
     available_storage_gb: Optional[float] = Field(None, description="Available storage space in GB")
-    
+
     # Last updated
     stats_generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class BulkDownloadRequest(BaseModel):
     """Schema for bulk download requests."""
-    
+
     downloads: List[DownloadJobRequest] = Field(
-        ..., 
-        min_length=1, 
-        max_length=50, 
-        description="List of download requests (max 50)"
+        ..., min_length=1, max_length=50, description="List of download requests (max 50)"
     )
-    global_priority: Optional[int] = Field(None, ge=1, le=10, description="Global priority override")
+    global_priority: Optional[int] = Field(
+        None, ge=1, le=10, description="Global priority override"
+    )
     batch_name: Optional[str] = Field(None, description="Optional name for the batch")
-    stagger_delay_seconds: int = Field(default=5, ge=0, le=300, description="Delay between job starts (0-300s)")
+    stagger_delay_seconds: int = Field(
+        default=5, ge=0, le=300, description="Delay between job starts (0-300s)"
+    )
 
 
 class BulkDownloadResponse(BaseModel):
     """Schema for bulk download responses."""
-    
+
     batch_id: UUID = Field(..., description="Unique batch identifier")
     status: str = Field(..., description="Batch status (scheduled/partial/failed)")
     message: str = Field(..., description="Human-readable status message")
@@ -1693,13 +1737,15 @@ class BulkDownloadResponse(BaseModel):
     successfully_queued: int = Field(..., description="Number of downloads successfully queued")
     failed_to_queue: int = Field(..., description="Number of downloads that failed to queue")
     job_ids: List[UUID] = Field(..., description="List of created job IDs")
-    errors: List[str] = Field(default_factory=list, description="Error messages for failed requests")
+    errors: List[str] = Field(
+        default_factory=list, description="Error messages for failed requests"
+    )
 
 
 # Standard Error Response schemas
 class ErrorDetail(BaseModel):
     """Schema for detailed error information."""
-    
+
     code: str = Field(..., description="Error code identifier")
     message: str = Field(..., description="Human-readable error message")
     field: Optional[str] = Field(None, description="Field name for validation errors")
@@ -1708,7 +1754,7 @@ class ErrorDetail(BaseModel):
 
 class ErrorResponse(BaseModel):
     """Standard error response schema."""
-    
+
     error: bool = Field(default=True, description="Always true for error responses")
     message: str = Field(..., description="Human-readable error message")
     status_code: int = Field(..., description="HTTP status code")
@@ -1716,10 +1762,9 @@ class ErrorResponse(BaseModel):
     details: Optional[List[ErrorDetail]] = Field(None, description="Detailed error information")
     request_id: Optional[str] = Field(None, description="Request tracking ID")
     timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), 
-        description="Error timestamp"
+        default_factory=lambda: datetime.now(timezone.utc), description="Error timestamp"
     )
-    
+
     @classmethod
     def create(
         cls,
@@ -1741,27 +1786,27 @@ class ErrorResponse(BaseModel):
 
 class ValidationErrorResponse(ErrorResponse):
     """Schema for validation error responses."""
-    
+
     error_code: str = Field(default="VALIDATION_ERROR", description="Validation error code")
-    
+
     @classmethod
     def from_pydantic_error(
-        cls, 
-        validation_error: Any, 
-        request_id: Optional[str] = None
+        cls, validation_error: Any, request_id: Optional[str] = None
     ) -> "ValidationErrorResponse":
         """Create validation error response from Pydantic validation error."""
         details = []
-        if hasattr(validation_error, 'errors'):
+        if hasattr(validation_error, "errors"):
             for error in validation_error.errors():
-                field_name = ".".join(str(loc) for loc in error.get('loc', []))
-                details.append(ErrorDetail(
-                    code=error.get('type', 'validation_error'),
-                    message=error.get('msg', 'Validation failed'),
-                    field=field_name if field_name else None,
-                    context=error.get('ctx', {})
-                ))
-        
+                field_name = ".".join(str(loc) for loc in error.get("loc", []))
+                details.append(
+                    ErrorDetail(
+                        code=error.get("type", "validation_error"),
+                        message=error.get("msg", "Validation failed"),
+                        field=field_name if field_name else None,
+                        context=error.get("ctx", {}),
+                    )
+                )
+
         return cls(
             message="Request validation failed",
             status_code=422,
@@ -1772,22 +1817,19 @@ class ValidationErrorResponse(ErrorResponse):
 
 class NotFoundErrorResponse(ErrorResponse):
     """Schema for 404 Not Found error responses."""
-    
+
     error_code: str = Field(default="RESOURCE_NOT_FOUND", description="Not found error code")
-    
+
     @classmethod
     def create_for_resource(
-        cls, 
-        resource_type: str, 
-        resource_id: Optional[str] = None,
-        request_id: Optional[str] = None
+        cls, resource_type: str, resource_id: Optional[str] = None, request_id: Optional[str] = None
     ) -> "NotFoundErrorResponse":
         """Create not found error for specific resource."""
         if resource_id:
             message = f"{resource_type.title()} with ID '{resource_id}' not found"
         else:
             message = f"{resource_type.title()} not found"
-        
+
         return cls(
             message=message,
             status_code=404,
@@ -1797,20 +1839,18 @@ class NotFoundErrorResponse(ErrorResponse):
 
 class ConflictErrorResponse(ErrorResponse):
     """Schema for 409 Conflict error responses."""
-    
+
     error_code: str = Field(default="RESOURCE_CONFLICT", description="Conflict error code")
 
 
 class ForbiddenErrorResponse(ErrorResponse):
     """Schema for 403 Forbidden error responses."""
-    
+
     error_code: str = Field(default="ACCESS_FORBIDDEN", description="Forbidden error code")
-    
-    @classmethod 
+
+    @classmethod
     def create_for_user_context(
-        cls,
-        message: str = "Access to this resource is forbidden",
-        request_id: Optional[str] = None
+        cls, message: str = "Access to this resource is forbidden", request_id: Optional[str] = None
     ) -> "ForbiddenErrorResponse":
         """Create forbidden error for user context issues."""
         return cls(
@@ -1822,44 +1862,47 @@ class ForbiddenErrorResponse(ErrorResponse):
 
 class UnauthorizedErrorResponse(ErrorResponse):
     """Schema for 401 Unauthorized error responses."""
-    
-    error_code: str = Field(default="AUTHENTICATION_REQUIRED", description="Unauthorized error code")
+
+    error_code: str = Field(
+        default="AUTHENTICATION_REQUIRED", description="Unauthorized error code"
+    )
 
 
 class RateLimitErrorResponse(ErrorResponse):
     """Schema for 429 Rate Limit error responses."""
-    
+
     error_code: str = Field(default="RATE_LIMIT_EXCEEDED", description="Rate limit error code")
     retry_after: Optional[int] = Field(None, description="Retry after seconds")
 
 
 class ServiceUnavailableErrorResponse(ErrorResponse):
     """Schema for 503 Service Unavailable error responses."""
-    
-    error_code: str = Field(default="SERVICE_UNAVAILABLE", description="Service unavailable error code")
+
+    error_code: str = Field(
+        default="SERVICE_UNAVAILABLE", description="Service unavailable error code"
+    )
     retry_after: Optional[int] = Field(None, description="Retry after seconds")
 
 
 # User Context and Multi-User Support schemas (future implementation)
 class UserContextBase(BaseModel):
     """Base schema for user context information."""
-    
+
     # TODO: Implement user authentication system
     # These fields are placeholders for future multi-user support
     user_id: Optional[UUID] = Field(None, description="User ID (future implementation)")
     permissions: List[str] = Field(default_factory=list, description="User permissions")
     scoped_access: Dict[str, Any] = Field(
-        default_factory=dict, 
-        description="Scoped access rules (future implementation)"
+        default_factory=dict, description="Scoped access rules (future implementation)"
     )
 
 
 class WatchingContextRequest(BaseModel):
     """Schema for watching operations with user context preparation."""
-    
+
     # Current single-user fields
     enabled: bool = Field(..., description="Whether watching should be enabled")
-    
+
     # TODO: Future multi-user context
     # user_context: Optional[UserContextBase] = Field(None, description="User context (future)")
     # sharing_permissions: Optional[List[str]] = Field(None, description="Sharing permissions (future)")
@@ -1868,14 +1911,20 @@ class WatchingContextRequest(BaseModel):
 # MangaDx Chapter and @Home API schemas
 class MangaDxChapterAttributes(BaseModel):
     """Schema for MangaDx chapter attributes."""
-    
+
     title: Optional[str] = Field(None, description="Chapter title")
     volume: Optional[str] = Field(None, description="Volume number")
-    chapter: Optional[str] = Field(None, description="Chapter number") 
+    chapter: Optional[str] = Field(None, description="Chapter number")
     pages: int = Field(default=0, description="Number of pages")
-    translated_language: str = Field(..., alias="translatedLanguage", description="Chapter language code")
-    external_url: Optional[str] = Field(None, alias="externalUrl", description="External URL if hosted elsewhere")
-    is_unavailable: bool = Field(default=False, alias="isUnavailable", description="Whether chapter is unavailable")
+    translated_language: str = Field(
+        ..., alias="translatedLanguage", description="Chapter language code"
+    )
+    external_url: Optional[str] = Field(
+        None, alias="externalUrl", description="External URL if hosted elsewhere"
+    )
+    is_unavailable: bool = Field(
+        default=False, alias="isUnavailable", description="Whether chapter is unavailable"
+    )
     publish_at: datetime = Field(..., alias="publishAt", description="Publication timestamp")
     readable_at: datetime = Field(..., alias="readableAt", description="Readable timestamp")
     created_at: datetime = Field(..., alias="createdAt", description="Creation timestamp")
@@ -1885,12 +1934,14 @@ class MangaDxChapterAttributes(BaseModel):
 
 class MangaDxChapterResponse(BaseModel):
     """Schema for MangaDx individual chapter response."""
-    
+
     id: str = Field(..., description="MangaDx chapter UUID")
     type: str = Field(default="chapter", description="Resource type")
     attributes: MangaDxChapterAttributes = Field(..., description="Chapter attributes")
-    relationships: List[Dict[str, Any]] = Field(default_factory=list, description="Chapter relationships")
-    
+    relationships: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Chapter relationships"
+    )
+
     def get_chapter_number(self) -> Optional[float]:
         """Extract chapter number as float."""
         chapter_str = self.attributes.chapter
@@ -1900,7 +1951,7 @@ class MangaDxChapterResponse(BaseModel):
             return float(chapter_str)
         except (ValueError, TypeError):
             return None
-    
+
     def get_volume_number(self) -> Optional[int]:
         """Extract volume number as integer."""
         volume_str = self.attributes.volume
@@ -1914,14 +1965,14 @@ class MangaDxChapterResponse(BaseModel):
 
 class MangaDxChapterListResponse(BaseModel):
     """Schema for MangaDx chapter listing response."""
-    
+
     result: str = Field(default="ok", description="Request result status")
     response: str = Field(default="collection", description="Response type")
     data: List[MangaDxChapterResponse] = Field(default_factory=list, description="List of chapters")
     limit: int = Field(..., description="Results per page limit")
     offset: int = Field(..., description="Current page offset")
     total: int = Field(..., description="Total number of chapters available")
-    
+
     @property
     def has_more(self) -> bool:
         """Check if more chapters are available."""
@@ -1930,11 +1981,13 @@ class MangaDxChapterListResponse(BaseModel):
 
 class MangaDxAtHomeChapterData(BaseModel):
     """Schema for MangaDx @Home chapter data."""
-    
+
     hash: str = Field(..., description="Chapter hash for URL construction")
     data: List[str] = Field(..., description="Full quality page filenames")
-    data_saver: List[str] = Field(..., alias="dataSaver", description="Compressed quality page filenames")
-    
+    data_saver: List[str] = Field(
+        ..., alias="dataSaver", description="Compressed quality page filenames"
+    )
+
     def get_page_filenames(self, quality: str = "data") -> List[str]:
         """Get page filenames for specified quality."""
         if quality == "data-saver":
@@ -1944,16 +1997,16 @@ class MangaDxAtHomeChapterData(BaseModel):
 
 class MangaDxAtHomeResponse(BaseModel):
     """Schema for MangaDx @Home server response."""
-    
-    result: str = Field(default="ok", description="Request result status") 
+
+    result: str = Field(default="ok", description="Request result status")
     base_url: str = Field(..., alias="baseUrl", description="Base URL for page downloads")
     chapter: MangaDxAtHomeChapterData = Field(..., description="Chapter data and page info")
-    
+
     def construct_page_url(self, page_filename: str, quality: str = "data") -> str:
         """Construct full page URL."""
         quality_path = "data-saver" if quality == "data-saver" else "data"
         return f"{self.base_url}/{quality_path}/{self.chapter.hash}/{page_filename}"
-    
+
     def get_all_page_urls(self, quality: str = "data") -> List[str]:
         """Get all page URLs for the chapter."""
         page_filenames = self.chapter.get_page_filenames(quality)
@@ -1962,14 +2015,14 @@ class MangaDxAtHomeResponse(BaseModel):
 
 class MangaDxDownloadQuality(str, Enum):
     """Enum for MangaDx download quality options."""
-    
+
     FULL = "data"
     COMPRESSED = "data-saver"
 
 
 class MangaDxDownloadedChapter(BaseModel):
     """Schema for downloaded chapter information."""
-    
+
     chapter_id: str = Field(..., description="MangaDx chapter UUID")
     title: Optional[str] = Field(None, description="Chapter title")
     chapter_number: Optional[float] = Field(None, description="Chapter number")
@@ -1979,4 +2032,6 @@ class MangaDxDownloadedChapter(BaseModel):
     page_count: int = Field(..., description="Number of pages downloaded")
     download_quality: str = Field(..., description="Download quality used")
     download_duration_seconds: Optional[float] = Field(None, description="Time taken to download")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Download timestamp")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="Download timestamp"
+    )

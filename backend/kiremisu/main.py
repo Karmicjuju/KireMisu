@@ -27,6 +27,7 @@ from kiremisu.api.notifications import router as notifications_router
 from kiremisu.api.watching import router as watching_router
 from kiremisu.api.websocket import router as websocket_router
 from kiremisu.api.metrics import router as metrics_router
+from kiremisu.api.push_notifications import router as push_router
 from kiremisu.core.config import settings
 from kiremisu.core.error_handler import global_exception_handler
 from kiremisu.core.rate_limiter import RateLimiter, RateLimitMiddleware
@@ -143,6 +144,7 @@ app.include_router(notifications_router)
 app.include_router(watching_router)
 app.include_router(websocket_router)
 app.include_router(metrics_router)
+app.include_router(push_router)
 
 
 @app.get("/")

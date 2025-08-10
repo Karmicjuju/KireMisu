@@ -8,9 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { NotificationItem } from './notification-item';
+import { PushNotificationOptIn } from './push-notification-opt-in';
 import { useNotificationActions } from '@/hooks/use-notification-actions';
 import { cn } from '@/lib/utils';
-import { CheckCheck, X } from 'lucide-react';
+import { CheckCheck, X, Settings } from 'lucide-react';
 import type { NotificationResponse } from '@/lib/api';
 
 export interface NotificationDropdownProps {
@@ -20,6 +21,7 @@ export interface NotificationDropdownProps {
   isLoading: boolean;
   className?: string;
   triggerRef?: React.RefObject<HTMLElement>;
+  showPushSettings?: boolean;
 }
 
 export function NotificationDropdown({
@@ -28,11 +30,13 @@ export function NotificationDropdown({
   notifications,
   isLoading,
   className,
-  triggerRef
+  triggerRef,
+  showPushSettings = true
 }: NotificationDropdownProps) {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
   const [position, setPosition] = useState({ top: 0, right: 0 });
+  const [showSettings, setShowSettings] = useState(false);
   const { markAsRead, markAllAsRead } = useNotificationActions();
 
   // Track mounting for portal
@@ -185,18 +189,60 @@ export function NotificationDropdown({
         </div>
 
         {/* Footer */}
-        {recentNotifications.length > 0 && (
+        {(recentNotifications.length > 0 || showPushSettings) && (
           <>
             <Separator />
-            <div className="p-3 text-center">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs text-foreground/80 hover:text-foreground hover:bg-accent"
-                onClick={onClose}
-              >
-                View all notifications
-              </Button>
+            <div className="p-3 space-y-3">
+              {/* Settings Toggle */}
+              {showPushSettings && (
+                <div className="flex items-center justify-between">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowSettings(!showSettings)}
+                    className="text-xs text-foreground/80 hover:text-foreground hover:bg-accent"
+                  >
+                    <Settings className="h-3 w-3 mr-1" />
+                    Push Settings
+                  </Button>
+                  {recentNotifications.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs text-foreground/80 hover:text-foreground hover:bg-accent"
+                      onClick={onClose}
+                    >
+                      View all notifications
+                    </Button>
+                  )}
+                </div>
+              )}
+              
+              {/* View all button if no push settings */}
+              {!showPushSettings && recentNotifications.length > 0 && (
+                <div className="text-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-foreground/80 hover:text-foreground hover:bg-accent"
+                    onClick={onClose}
+                  >
+                    View all notifications
+                  </Button>
+                </div>
+              )}
+
+              {/* Push Notification Settings */}
+              {showPushSettings && showSettings && (
+                <>
+                  <Separator />
+                  <PushNotificationOptIn
+                    compact={true}
+                    showTestButton={false}
+                    className="px-0"
+                  />
+                </>
+              )}
             </div>
           </>
         )}

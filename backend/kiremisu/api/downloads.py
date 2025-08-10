@@ -64,7 +64,7 @@ async def create_download_job(
 ):
     """
     Create a new download job.
-    
+
     Creates a download job based on the request type:
     - single: Download specific chapters
     - batch: Download multiple specific chapters
@@ -77,17 +77,17 @@ async def create_download_job(
                 extra={
                     "download_type": request.download_type,
                     "manga_id": request.manga_id,
-                    "series_id": request.series_id
-                }
+                    "series_id": request.series_id,
+                },
             )
-            
+
             if request.download_type == "single":
                 if not request.chapter_ids or len(request.chapter_ids) != 1:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Single download requires exactly one chapter_id"
+                        detail="Single download requires exactly one chapter_id",
                     )
-                
+
                 job_id = await download_service.enqueue_single_chapter_download(
                     db=db,
                     manga_id=request.manga_id,
@@ -96,14 +96,14 @@ async def create_download_job(
                     priority=request.priority,
                     destination_path=request.destination_path,
                 )
-                
+
             elif request.download_type == "batch":
                 if not request.chapter_ids or len(request.chapter_ids) < 1:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Batch download requires at least one chapter_id"
+                        detail="Batch download requires at least one chapter_id",
                     )
-                
+
                 job_id = await download_service.enqueue_batch_download(
                     db=db,
                     manga_id=request.manga_id,
@@ -114,7 +114,7 @@ async def create_download_job(
                     priority=request.priority,
                     destination_path=request.destination_path,
                 )
-                
+
             elif request.download_type == "series":
                 job_id = await download_service.enqueue_series_download(
                     db=db,
@@ -123,41 +123,41 @@ async def create_download_job(
                     priority=request.priority,
                     destination_path=request.destination_path,
                 )
-                
+
             else:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid download_type: {request.download_type}"
+                    detail=f"Invalid download_type: {request.download_type}",
                 )
-            
+
             # Get the created job to return
             result = await db.execute(select(JobQueue).where(JobQueue.id == job_id))
             job = result.scalar_one_or_none()
-            
+
             if not job:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to retrieve created job"
+                    detail="Failed to retrieve created job",
                 )
-            
+
             logger.info(
                 f"Successfully created download job {job_id}",
-                extra={"job_id": str(job_id), "download_type": request.download_type}
+                extra={"job_id": str(job_id), "download_type": request.download_type},
             )
-            
+
             return DownloadJobResponse.from_job_model(job)
-            
+
         except HTTPException:
             raise
         except Exception as e:
             logger.error(
                 f"Failed to create download job: {e}",
                 exc_info=True,
-                extra={"download_type": request.download_type, "manga_id": request.manga_id}
+                extra={"download_type": request.download_type, "manga_id": request.manga_id},
             )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to create download job: {str(e)}"
+                detail=f"Failed to create download job: {str(e)}",
             )
 
 
@@ -169,7 +169,7 @@ async def download_system_health():
         pool_status = "unknown"
         active_connections = 0
         pool_size = 0
-        
+
         try:
             # Get connection pool statistics
             pool = engine.pool
@@ -179,7 +179,7 @@ async def download_system_health():
         except Exception as e:
             logger.warning(f"Could not get pool stats: {e}")
             pool_status = "unknown"
-        
+
         # Test basic database connectivity
         db_status = "unknown"
         try:
@@ -189,27 +189,27 @@ async def download_system_health():
         except Exception as e:
             logger.error(f"Database connectivity test failed: {e}")
             db_status = "unhealthy"
-        
+
         # Get basic download stats
         async with get_db_session() as db:
             total_jobs_result = await db.execute(
-                select(func.count(JobQueue.id))
-                .where(JobQueue.job_type == "download")
+                select(func.count(JobQueue.id)).where(JobQueue.job_type == "download")
             )
             total_jobs = total_jobs_result.scalar() or 0
-            
+
             active_jobs_result = await db.execute(
-                select(func.count(JobQueue.id))
-                .where(and_(JobQueue.job_type == "download", JobQueue.status == "running"))
+                select(func.count(JobQueue.id)).where(
+                    and_(JobQueue.job_type == "download", JobQueue.status == "running")
+                )
             )
             active_jobs = active_jobs_result.scalar() or 0
-        
+
         overall_status = "healthy"
         if db_status != "healthy":
             overall_status = "unhealthy"
         elif pool_status == "degraded":
             overall_status = "degraded"
-        
+
         health_data = {
             "status": overall_status,
             "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
@@ -218,24 +218,19 @@ async def download_system_health():
                 "connection_pool": {
                     "status": pool_status,
                     "size": pool_size,
-                    "active_connections": active_connections
-                }
+                    "active_connections": active_connections,
+                },
             },
-            "downloads": {
-                "total_jobs": total_jobs,
-                "active_jobs": active_jobs
-            },
-            "system": {
-                "concurrent_limit": CONCURRENT_DOWNLOAD_LIMIT
-            }
+            "downloads": {"total_jobs": total_jobs, "active_jobs": active_jobs},
+            "system": {"concurrent_limit": CONCURRENT_DOWNLOAD_LIMIT},
         }
-        
+
         # Return appropriate HTTP status based on health
         if overall_status == "unhealthy":
             return HTTPException(status_code=503, detail=health_data)
-        
+
         return health_data
-        
+
     except Exception as e:
         logger.error(f"Health check failed: {e}", exc_info=True)
         return HTTPException(
@@ -243,8 +238,8 @@ async def download_system_health():
             detail={
                 "status": "unhealthy",
                 "error": "Health check failed",
-                "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-            }
+                "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+            },
         )
 
 
@@ -252,22 +247,25 @@ async def download_system_health():
 async def list_download_jobs(
     http_request: Request,
     status_filter: Optional[str] = Query(None, description="Filter by job status"),
-    download_type_filter: Optional[str] = Query(None, description="Filter by download type"), 
+    download_type_filter: Optional[str] = Query(None, description="Filter by download type"),
     pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_db),
 ):
     """
     List download jobs with filtering and pagination.
-    
+
     Returns paginated list of download jobs with status counts.
     """
     async with get_download_service_context() as download_service:
         try:
             logger.info(
                 f"Listing download jobs with filters: status={status_filter}, type={download_type_filter}",
-                extra={"status_filter": status_filter, "download_type_filter": download_type_filter}
+                extra={
+                    "status_filter": status_filter,
+                    "download_type_filter": download_type_filter,
+                },
             )
-            
+
             # Get jobs with filtering
             jobs, total_count = await download_service.get_download_jobs(
                 db=db,
@@ -275,23 +273,24 @@ async def list_download_jobs(
                 limit=pagination.limit,
                 offset=pagination.offset,
             )
-            
+
             # Get status counts for summary
-            stats_query = select(
-                JobQueue.status,
-                func.count(JobQueue.id).label("count")
-            ).where(JobQueue.job_type == "download").group_by(JobQueue.status)
-            
+            stats_query = (
+                select(JobQueue.status, func.count(JobQueue.id).label("count"))
+                .where(JobQueue.job_type == "download")
+                .group_by(JobQueue.status)
+            )
+
             stats_result = await db.execute(stats_query)
             status_counts = dict(stats_result.fetchall())
-            
+
             # Create pagination metadata
             pagination_meta = PaginationMeta.create(
                 page=pagination.page,
                 per_page=pagination.per_page,
                 total_items=total_count,
             )
-            
+
             return DownloadJobListResponse(
                 jobs=[DownloadJobResponse.from_job_model(job) for job in jobs],
                 total=total_count,
@@ -303,16 +302,19 @@ async def list_download_jobs(
                 download_type_filter=download_type_filter,
                 pagination=pagination_meta,
             )
-            
+
         except Exception as e:
             logger.error(
-                f"Failed to list download jobs: {e}", 
+                f"Failed to list download jobs: {e}",
                 exc_info=True,
-                extra={"status_filter": status_filter, "download_type_filter": download_type_filter}
+                extra={
+                    "status_filter": status_filter,
+                    "download_type_filter": download_type_filter,
+                },
             )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to list download jobs: {str(e)}"
+                detail=f"Failed to list download jobs: {str(e)}",
             )
 
 
@@ -323,35 +325,29 @@ async def get_download_job(
 ):
     """
     Get detailed information about a specific download job.
-    
+
     Returns job details including current progress and status.
     """
     try:
         result = await db.execute(
-            select(JobQueue).where(
-                and_(
-                    JobQueue.id == job_id,
-                    JobQueue.job_type == "download"
-                )
-            )
+            select(JobQueue).where(and_(JobQueue.id == job_id, JobQueue.job_type == "download"))
         )
         job = result.scalar_one_or_none()
-        
+
         if not job:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Download job {job_id} not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"Download job {job_id} not found"
             )
-        
+
         return DownloadJobResponse.from_job_model(job)
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to get download job {job_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get download job: {str(e)}"
+            detail=f"Failed to get download job: {str(e)}",
         )
 
 
@@ -364,7 +360,7 @@ async def perform_download_job_action(
 ):
     """
     Perform an action on a download job.
-    
+
     Supported actions:
     - cancel: Cancel a pending or running job
     - retry: Retry a failed job
@@ -375,13 +371,13 @@ async def perform_download_job_action(
         try:
             logger.info(
                 f"Performing action '{action_request.action}' on download job {job_id}",
-                extra={"job_id": str(job_id), "action": action_request.action}
+                extra={"job_id": str(job_id), "action": action_request.action},
             )
-            
+
             success = False
             message = ""
             new_status = None
-            
+
             if action_request.action == "cancel":
                 success = await download_service.cancel_download_job(db, job_id)
                 if success:
@@ -389,7 +385,7 @@ async def perform_download_job_action(
                     new_status = "failed"
                 else:
                     message = "Failed to cancel download job - job not found or not cancellable"
-                    
+
             elif action_request.action == "retry":
                 success = await download_service.retry_download_job(db, job_id)
                 if success:
@@ -397,24 +393,24 @@ async def perform_download_job_action(
                     new_status = "pending"
                 else:
                     message = "Failed to retry download job - job not found or not failed"
-                    
+
             elif action_request.action in ["pause", "resume"]:
                 # Placeholder for future implementation
                 raise HTTPException(
                     status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                    detail=f"Action '{action_request.action}' is not yet implemented"
+                    detail=f"Action '{action_request.action}' is not yet implemented",
                 )
             else:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Unknown action: {action_request.action}"
+                    detail=f"Unknown action: {action_request.action}",
                 )
-            
+
             logger.info(
                 f"Action '{action_request.action}' on job {job_id} completed: {success}",
-                extra={"job_id": str(job_id), "action": action_request.action, "success": success}
+                extra={"job_id": str(job_id), "action": action_request.action, "success": success},
             )
-            
+
             return DownloadJobActionResponse(
                 job_id=job_id,
                 action=action_request.action,
@@ -422,18 +418,18 @@ async def perform_download_job_action(
                 message=message,
                 new_status=new_status,
             )
-            
+
         except HTTPException:
             raise
         except Exception as e:
             logger.error(
                 f"Failed to perform action on download job {job_id}: {e}",
                 exc_info=True,
-                extra={"job_id": str(job_id), "action": action_request.action}
+                extra={"job_id": str(job_id), "action": action_request.action},
             )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to perform action: {str(e)}"
+                detail=f"Failed to perform action: {str(e)}",
             )
 
 
@@ -445,7 +441,7 @@ async def create_bulk_downloads(
 ):
     """
     Create multiple download jobs in bulk.
-    
+
     Creates multiple download jobs with optional staggered scheduling.
     Returns summary of successful and failed job creations.
     """
@@ -454,9 +450,9 @@ async def create_bulk_downloads(
             batch_id = UUID.generate()
             logger.info(
                 f"Creating bulk download batch {batch_id} with {len(request.downloads)} jobs",
-                extra={"batch_id": str(batch_id), "job_count": len(request.downloads)}
+                extra={"batch_id": str(batch_id), "job_count": len(request.downloads)},
             )
-            
+
             # Define async function for creating individual download jobs
             async def create_single_download(i: int, download_request):
                 """Create a single download job with semaphore protection."""
@@ -465,7 +461,7 @@ async def create_bulk_downloads(
                         # Apply global priority if specified
                         if request.global_priority:
                             download_request.priority = request.global_priority
-                        
+
                         # Create individual download job
                         if download_request.download_type == "single":
                             job_id = await download_service.enqueue_single_chapter_download(
@@ -496,44 +492,46 @@ async def create_bulk_downloads(
                                 destination_path=download_request.destination_path,
                             )
                         else:
-                            raise ValueError(f"Invalid download_type: {download_request.download_type}")
-                        
+                            raise ValueError(
+                                f"Invalid download_type: {download_request.download_type}"
+                            )
+
                         # Apply stagger delay if specified
                         if request.stagger_delay_seconds > 0:
                             await asyncio.sleep(request.stagger_delay_seconds)
-                        
+
                         return (i, job_id, None)  # Success: (index, job_id, error)
-                        
+
                     except Exception as e:
-                        error_msg = f"Failed to create job {i+1}: {str(e)}"
+                        error_msg = f"Failed to create job {i + 1}: {str(e)}"
                         logger.error(
                             error_msg,
-                            extra={"job_index": i, "download_type": download_request.download_type}
+                            extra={"job_index": i, "download_type": download_request.download_type},
                         )
                         return (i, None, error_msg)  # Error: (index, job_id, error)
-            
+
             # Execute all download creations concurrently with semaphore limiting
             tasks = [
                 create_single_download(i, download_request)
                 for i, download_request in enumerate(request.downloads)
             ]
-            
+
             results = await asyncio.gather(*tasks, return_exceptions=False)
-            
+
             # Process results
             job_ids = []
             errors = []
-            
+
             for index, job_id, error in results:
                 if error:
                     errors.append(error)
                 else:
                     job_ids.append(job_id)
-            
+
             successfully_queued = len(job_ids)
             failed_to_queue = len(errors)
             total_requested = len(request.downloads)
-            
+
             # Determine status
             if successfully_queued == total_requested:
                 status_msg = "scheduled"
@@ -544,17 +542,17 @@ async def create_bulk_downloads(
             else:
                 status_msg = "failed"
                 message = "All download job creations failed"
-            
+
             logger.info(
                 f"Bulk download batch {batch_id} completed: {status_msg}",
                 extra={
                     "batch_id": str(batch_id),
                     "total_requested": total_requested,
                     "successfully_queued": successfully_queued,
-                    "failed_to_queue": failed_to_queue
-                }
+                    "failed_to_queue": failed_to_queue,
+                },
             )
-            
+
             return BulkDownloadResponse(
                 batch_id=batch_id,
                 status=status_msg,
@@ -565,16 +563,16 @@ async def create_bulk_downloads(
                 job_ids=job_ids,
                 errors=errors,
             )
-            
+
         except Exception as e:
             logger.error(
                 f"Failed to create bulk downloads: {e}",
                 exc_info=True,
-                extra={"batch_id": str(batch_id), "job_count": len(request.downloads)}
+                extra={"batch_id": str(batch_id), "job_count": len(request.downloads)},
             )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to create bulk downloads: {str(e)}"
+                detail=f"Failed to create bulk downloads: {str(e)}",
             )
 
 
@@ -584,75 +582,71 @@ async def get_download_stats(
 ):
     """
     Get download system statistics and health metrics.
-    
+
     Returns comprehensive statistics about download job performance,
     queue status, and system health.
     """
     try:
         logger.info("Generating download statistics", extra={"endpoint": "stats_overview"})
-        
+
         # Get overall job counts
-        total_query = select(
-            JobQueue.status,
-            func.count(JobQueue.id).label("count")
-        ).where(JobQueue.job_type == "download").group_by(JobQueue.status)
-        
+        total_query = (
+            select(JobQueue.status, func.count(JobQueue.id).label("count"))
+            .where(JobQueue.job_type == "download")
+            .group_by(JobQueue.status)
+        )
+
         total_result = await db.execute(total_query)
         status_counts = dict(total_result.fetchall())
-        
+
         # Get today's activity (last 24 hours)
         yesterday = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=24)
-        
+
         today_created_result = await db.execute(
-            select(func.count(JobQueue.id))
-            .where(
-                and_(
-                    JobQueue.job_type == "download",
-                    JobQueue.created_at >= yesterday
-                )
+            select(func.count(JobQueue.id)).where(
+                and_(JobQueue.job_type == "download", JobQueue.created_at >= yesterday)
             )
         )
         jobs_created_today = today_created_result.scalar() or 0
-        
+
         today_completed_result = await db.execute(
-            select(func.count(JobQueue.id))
-            .where(
+            select(func.count(JobQueue.id)).where(
                 and_(
                     JobQueue.job_type == "download",
                     JobQueue.status == "completed",
-                    JobQueue.completed_at >= yesterday
+                    JobQueue.completed_at >= yesterday,
                 )
             )
         )
         jobs_completed_today = today_completed_result.scalar() or 0
-        
+
         # Calculate success rate
         total_jobs = sum(status_counts.values())
         successful_jobs = status_counts.get("completed", 0)
         success_rate = (successful_jobs / total_jobs * 100) if total_jobs > 0 else 0.0
-        
+
         # Calculate average job duration
         avg_duration_result = await db.execute(
             select(
-                func.avg(
-                    func.extract("epoch", JobQueue.completed_at - JobQueue.started_at)
-                ).label("avg_duration")
+                func.avg(func.extract("epoch", JobQueue.completed_at - JobQueue.started_at)).label(
+                    "avg_duration"
+                )
             ).where(
                 and_(
                     JobQueue.job_type == "download",
                     JobQueue.status == "completed",
                     JobQueue.started_at.isnot(None),
-                    JobQueue.completed_at.isnot(None)
+                    JobQueue.completed_at.isnot(None),
                 )
             )
         )
         avg_duration_seconds = avg_duration_result.scalar()
         avg_duration_minutes = avg_duration_seconds / 60 if avg_duration_seconds else None
-        
+
         # Estimate chapters downloaded today from job payloads
         # This is a simplified estimation - in production, you'd track this more precisely
         chapters_downloaded_today = jobs_completed_today * 2  # Assume average 2 chapters per job
-        
+
         return DownloadStatsResponse(
             total_jobs=total_jobs,
             active_jobs=status_counts.get("running", 0),
@@ -668,12 +662,12 @@ async def get_download_stats(
             total_downloaded_size_gb=None,  # Would require file system analysis
             available_storage_gb=None,  # Would require disk space check
         )
-        
+
     except Exception as e:
         logger.error(f"Failed to generate download stats: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate download stats: {str(e)}"
+            detail=f"Failed to generate download stats: {str(e)}",
         )
 
 
@@ -685,47 +679,41 @@ async def delete_download_job(
 ):
     """
     Delete a download job from the queue.
-    
+
     Only pending and failed jobs can be deleted by default.
     Use force=true to delete running jobs (will cancel them first).
     """
     try:
         # Check if job exists
         result = await db.execute(
-            select(JobQueue).where(
-                and_(
-                    JobQueue.id == job_id,
-                    JobQueue.job_type == "download"
-                )
-            )
+            select(JobQueue).where(and_(JobQueue.id == job_id, JobQueue.job_type == "download"))
         )
         job = result.scalar_one_or_none()
-        
+
         if not job:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Download job {job_id} not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"Download job {job_id} not found"
             )
-        
+
         # Check if job can be deleted
         if job.status == "running" and not force:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Cannot delete running job without force=true parameter"
+                detail="Cannot delete running job without force=true parameter",
             )
-        
+
         # Delete the job
         await db.delete(job)
         await db.commit()
-        
+
         logger.info(f"Deleted download job {job_id}")
         return {"message": f"Download job {job_id} deleted successfully"}
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to delete download job {job_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete download job: {str(e)}"
+            detail=f"Failed to delete download job: {str(e)}",
         )

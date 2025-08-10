@@ -54,6 +54,16 @@ class Settings(BaseSettings):
     job_poll_interval_seconds: int = Field(default=5, description="Job polling interval")
     max_concurrent_jobs: int = Field(default=2, description="Maximum concurrent background jobs")
 
+    # Push notifications (Web Push / VAPID)
+    vapid_public_key: str = Field(default="", description="VAPID public key for push notifications")
+    vapid_private_key: str = Field(
+        default="", description="VAPID private key for push notifications"
+    )
+    vapid_claims: dict = Field(
+        default_factory=lambda: {"sub": "mailto:admin@kiremisu.local"},
+        description="VAPID claims for push notifications",
+    )
+
     class Config:
         # Look for .env file in project root
         env_file = "../.env"
@@ -62,3 +72,8 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def get_settings() -> Settings:
+    """Get application settings instance."""
+    return settings

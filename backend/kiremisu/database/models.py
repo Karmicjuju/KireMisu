@@ -33,9 +33,21 @@ class Base(DeclarativeBase):
 series_tags = Table(
     "series_tags",
     Base.metadata,
-    Column("series_id", UUID(as_uuid=True), ForeignKey("series.id", ondelete="CASCADE"), primary_key=True),
-    Column("tag_id", UUID(as_uuid=True), ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True),
-    Column("created_at", DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False),
+    Column(
+        "series_id",
+        UUID(as_uuid=True),
+        ForeignKey("series.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "tag_id", UUID(as_uuid=True), ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True
+    ),
+    Column(
+        "created_at",
+        DateTime,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        nullable=False,
+    ),
     # Composite index for efficient querying
     Index("ix_series_tags_series_id", "series_id"),
     Index("ix_series_tags_tag_id", "tag_id"),
@@ -48,8 +60,7 @@ class Tag(Base):
     __tablename__ = "tags"
     __table_args__ = (
         CheckConstraint(
-            "color IS NULL OR (color ~ '^#[0-9A-Fa-f]{6}$')",
-            name="ck_tag_color_format"
+            "color IS NULL OR (color ~ '^#[0-9A-Fa-f]{6}$')", name="ck_tag_color_format"
         ),
     )
 
@@ -57,10 +68,10 @@ class Tag(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     color: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)  # Hex color code #RRGGBB
-    
+
     # Usage statistics
     usage_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, index=True)
-    
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
@@ -332,7 +343,10 @@ class JobQueue(Base):
 
     # Scheduling
     scheduled_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        index=True,
     )
 
     # Timestamps
@@ -360,7 +374,8 @@ class JobQueue(Base):
             "status IN ('pending', 'running', 'completed', 'failed')", name="ck_job_queue_status"
         ),
         CheckConstraint(
-            "job_type IN ('library_scan', 'download', 'chapter_update_check')", name="ck_job_queue_job_type"
+            "job_type IN ('library_scan', 'download', 'chapter_update_check')",
+            name="ck_job_queue_job_type",
         ),
         CheckConstraint("priority >= 1 AND priority <= 10", name="ck_job_queue_priority_range"),
         CheckConstraint("retry_count >= 0", name="ck_job_queue_retry_count"),
@@ -387,8 +402,12 @@ class FileOperation(Base):
     backup_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Affected database records
-    affected_series_ids: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
-    affected_chapter_ids: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
+    affected_series_ids: Mapped[list[str]] = mapped_column(
+        ARRAY(String), nullable=False, default=list
+    )
+    affected_chapter_ids: Mapped[list[str]] = mapped_column(
+        ARRAY(String), nullable=False, default=list
+    )
 
     # Operation metadata
     operation_metadata: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
@@ -440,7 +459,9 @@ class Notification(Base):
     __tablename__ = "notifications"
 
     id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    notification_type: Mapped[str] = mapped_column(String(50), nullable=False, default="new_chapter")
+    notification_type: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="new_chapter"
+    )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
 
@@ -458,7 +479,10 @@ class Notification(Base):
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        index=True,
     )
 
     # Relationships
@@ -475,4 +499,56 @@ class Notification(Base):
             "notification_type IN ('new_chapter', 'chapter_available', 'download_complete', 'download_failed', 'series_complete', 'library_update', 'system_alert', 'series_update')",
             name="ck_notification_type",
         ),
+    )
+
+
+class PushSubscription(Base):
+    """Push notification subscriptions for web push."""
+
+    __tablename__ = "push_subscriptions"
+    __table_args__ = (
+        # Index for active subscriptions
+        Index("ix_push_subscriptions_active", "is_active"),
+        # Index for endpoint lookup
+        Index("ix_push_subscriptions_endpoint", "endpoint"),
+        # Unique constraint on endpoint
+        CheckConstraint(
+            "endpoint IS NOT NULL AND endpoint != ''",
+            name="ck_push_subscription_endpoint_not_empty",
+        ),
+    )
+
+    # Primary key
+    id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid4, nullable=False
+    )
+
+    # Push subscription endpoint URL
+    endpoint: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+
+    # Encryption keys for push messages
+    keys: Mapped[dict] = mapped_column(JSONB, nullable=False)
+
+    # User agent of the subscribing browser
+    user_agent: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Subscription status
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # Failure tracking
+    failure_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # Subscription expiration
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False
+    )
+    last_used: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        nullable=False,
     )

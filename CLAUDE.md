@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 # KireMisu Development Context
-_Last updated: 2025-08-05_
+_Last updated: 2025-08-10_
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -134,3 +134,52 @@ docker-compose -f docker-compose.dev.yml up -d
 2. **Always test via Docker endpoints** (localhost:3000, localhost:8000)
 3. **Always verify container logs** if issues occur
 4. **Always restart services** after rebuilds
+
+# Recently Completed Sessions
+
+## NT-1: Web Push Notifications System (2025-08-10)
+**Status**: ✅ Complete - Ready for PR
+**GitHub Issue**: #14 - NT-1: Web-push notifications
+
+### Implementation Summary
+Successfully implemented a comprehensive web push notifications system that integrates with the existing W-1 watching system:
+
+**Backend Components**:
+- Push subscription management API (`/api/push/*`)  
+- VAPID key configuration and handling
+- Push notification sending infrastructure with WebPush protocol
+- Database model and migration for push subscriptions
+- Integration with existing notification service for automatic chapter alerts
+- Manual push test script for development/debugging
+
+**Frontend Components**:
+- Service worker for handling push notifications (`/public/service-worker.js`)
+- React hook for push notification management (`use-push-notifications.ts`)
+- User opt-in UI component with browser compatibility detection
+- Integration with existing notification dropdown
+- PWA manifest for app-like experience
+
+**Key Features**:
+- Browser support detection with graceful degradation
+- Test notification functionality for user verification  
+- Automatic new chapter push notifications
+- Subscription management (subscribe/unsubscribe)
+- Error handling for expired subscriptions
+- Background sync for offline notification queuing
+
+**Testing & Quality**:
+- Comprehensive unit tests for API endpoints
+- Integration tests with notification system
+- Frontend E2E tests for user workflows
+- Database tests for subscription model
+- Code formatting and linting completed
+
+**Configuration Required**:
+Users must set VAPID keys in environment:
+```
+VAPID_PUBLIC_KEY=<generated_public_key>
+VAPID_PRIVATE_KEY=<generated_private_key>
+VAPID_CLAIMS={"sub": "mailto:admin@kiremisu.local"}
+```
+
+**Next Steps**: Create PR, test in production environment, add PWA icons

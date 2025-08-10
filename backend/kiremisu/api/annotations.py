@@ -253,7 +253,9 @@ async def get_page_annotations(
     return [AnnotationResponse.from_model(a) for a in annotations]
 
 
-@router.post("/chapters/{chapter_id}/pages/{page_number}", response_model=AnnotationResponse, status_code=201)
+@router.post(
+    "/chapters/{chapter_id}/pages/{page_number}", response_model=AnnotationResponse, status_code=201
+)
 async def create_page_annotation(
     chapter_id: UUID,
     page_number: int,
@@ -272,8 +274,12 @@ async def create_page_annotation(
 @router.delete("/chapters/{chapter_id}", status_code=204)
 async def delete_chapter_annotations(
     chapter_id: UUID,
-    annotation_type: Optional[str] = Query(None, description="Delete only specific annotation type"),
-    page_number: Optional[int] = Query(None, description="Delete only annotations on specific page"),
+    annotation_type: Optional[str] = Query(
+        None, description="Delete only specific annotation type"
+    ),
+    page_number: Optional[int] = Query(
+        None, description="Delete only annotations on specific page"
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete all annotations for a chapter (with optional filtering)."""
