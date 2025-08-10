@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { GlassCard } from '@/components/ui/glass-card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +19,7 @@ export interface NotificationDropdownProps {
   notifications: NotificationResponse[];
   isLoading: boolean;
   className?: string;
+  triggerRef?: React.RefObject<HTMLElement>;
 }
 
 export function NotificationDropdown({
@@ -25,16 +27,38 @@ export function NotificationDropdown({
   onClose,
   notifications,
   isLoading,
-  className
+  className,
+  triggerRef
 }: NotificationDropdownProps) {
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+  const [position, setPosition] = useState({ top: 0, right: 0 });
   const { markAsRead, markAllAsRead } = useNotificationActions();
+
+  // Track mounting for portal
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Calculate position based on trigger element
+  useEffect(() => {
+    if (triggerRef?.current && isOpen) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setPosition({
+        top: rect.bottom + 8, // 8px gap below the trigger
+        right: window.innerWidth - rect.right, // Distance from right edge
+      });
+    }
+  }, [triggerRef, isOpen]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        onClose();
+        // Also check if click is on the trigger
+        if (triggerRef?.current && !triggerRef.current.contains(event.target as Node)) {
+          onClose();
+        }
       }
     }
 
@@ -42,7 +66,7 @@ export function NotificationDropdown({
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, triggerRef]);
 
   // Handle escape key
   useEffect(() => {
@@ -58,7 +82,7 @@ export function NotificationDropdown({
     }
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const unreadNotifications = notifications.filter(n => !n.is_read);
   const recentNotifications = notifications.slice(0, 10); // Show most recent 10
@@ -81,21 +105,25 @@ export function NotificationDropdown({
     }
   };
 
-  return (
+  const dropdownContent = (
     <div
       ref={dropdownRef}
       className={cn(
-        "absolute right-0 top-12 z-50 w-96 max-w-[90vw] animate-in slide-in-from-top-2",
+        "fixed z-[99999] w-96 max-w-[90vw] animate-in slide-in-from-top-2",
         className
       )}
+      style={{
+        top: `${position.top}px`,
+        right: `${position.right}px`,
+      }}
     >
-      <GlassCard className="overflow-hidden shadow-xl border-border">
+      <GlassCard variant="strong" className="overflow-hidden shadow-2xl border-border bg-card/95 backdrop-blur-xl relative z-10">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
           <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-sm">Notifications</h3>
+            <h3 className="font-semibold text-sm text-foreground">Notifications</h3>
             {unreadNotifications.length > 0 && (
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="default" className="text-xs bg-primary text-primary-foreground">
                 {unreadNotifications.length} new
               </Badge>
             )}
@@ -106,7 +134,7 @@ export function NotificationDropdown({
                 variant="ghost"
                 size="sm"
                 onClick={handleMarkAllAsRead}
-                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                className="h-7 px-2 text-xs text-foreground/80 hover:text-foreground hover:bg-accent"
               >
                 <CheckCheck className="h-3 w-3 mr-1" />
                 Mark all read
@@ -116,7 +144,7 @@ export function NotificationDropdown({
               variant="ghost"
               size="sm"
               onClick={onClose}
-              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+              className="h-7 w-7 p-0 text-foreground/80 hover:text-foreground hover:bg-accent"
             >
               <X className="h-3 w-3" />
             </Button>
@@ -128,13 +156,13 @@ export function NotificationDropdown({
           {isLoading ? (
             <div className="p-6 text-center">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">Loading notifications...</p>
+              <p className="text-sm text-foreground/80">Loading notifications...</p>
             </div>
           ) : recentNotifications.length === 0 ? (
             <div className="p-6 text-center">
-              <p className="text-sm text-muted-foreground mb-2">No notifications yet</p>
-              <p className="text-xs text-muted-foreground">
-                We'll notify you about new chapters, updates, and more!
+              <p className="text-sm text-foreground mb-2">No notifications yet</p>
+              <p className="text-xs text-foreground/70">
+                We&apos;ll notify you about new chapters, updates, and more!
               </p>
             </div>
           ) : (
@@ -147,8 +175,7 @@ export function NotificationDropdown({
                     onClick={() => handleNotificationClick(notification)}
                     onMarkAsRead={() => markAsRead(notification.id)}
                     className={cn(
-                      "transition-colors hover:bg-accent/50",
-                      !notification.is_read && "bg-primary/5"
+                      "transition-colors hover:bg-accent/30"
                     )}
                   />
                 ))}
@@ -165,7 +192,7 @@ export function NotificationDropdown({
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-xs text-muted-foreground hover:text-foreground"
+                className="text-xs text-foreground/80 hover:text-foreground hover:bg-accent"
                 onClick={onClose}
               >
                 View all notifications
@@ -176,4 +203,7 @@ export function NotificationDropdown({
       </GlassCard>
     </div>
   );
+
+  // Render dropdown using portal to bypass z-index stacking issues
+  return createPortal(dropdownContent, document.body);
 }

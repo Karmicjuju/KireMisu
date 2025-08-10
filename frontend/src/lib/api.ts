@@ -517,26 +517,6 @@ export const annotationsApi = {
     );
     return response.data;
   },
-};
-
-export const tagsApi = {
-  async getTags(options?: {
-    skip?: number;
-    limit?: number;
-    search?: string;
-    sort_by?: 'name' | 'usage' | 'created';
-  }): Promise<TagListResponse> {
-    const params = new URLSearchParams();
-    if (options?.skip) params.append('skip', options.skip.toString());
-    if (options?.limit) params.append('limit', options.limit.toString());
-    if (options?.search) params.append('search', options.search);
-    if (options?.sort_by) params.append('sort_by', options.sort_by);
-
-    const response = await api.get<TagListResponse>(
-      `/api/tags${params.toString() ? `?${params.toString()}` : ''}`
-    );
-    return response.data;
-  },
 
   async getChapterAnnotations(
     chapterId: string,
@@ -562,7 +542,7 @@ export const tagsApi = {
   ): Promise<AnnotationResponse[]> {
     const params = new URLSearchParams();
     if (annotationType) params.append('annotation_type', annotationType);
-
+    
     const response = await api.get<AnnotationResponse[]>(
       `/api/annotations/chapters/${chapterId}/pages/${pageNumber}${
         params.toString() ? `?${params.toString()}` : ''
@@ -597,6 +577,26 @@ export const tagsApi = {
     await api.delete(
       `/api/annotations/chapters/${chapterId}${params.toString() ? `?${params.toString()}` : ''}`
     );
+  },
+};
+
+export const tagsApi = {
+  async getTags(options?: {
+    skip?: number;
+    limit?: number;
+    search?: string;
+    sort_by?: 'name' | 'usage' | 'created';
+  }): Promise<TagListResponse> {
+    const params = new URLSearchParams();
+    if (options?.skip) params.append('skip', options.skip.toString());
+    if (options?.limit) params.append('limit', options.limit.toString());
+    if (options?.search) params.append('search', options.search);
+    if (options?.sort_by) params.append('sort_by', options.sort_by);
+
+    const response = await api.get<TagListResponse>(
+      `/api/tags${params.toString() ? `?${params.toString()}` : ''}`
+    );
+    return response.data;
   },
 };
 
@@ -1030,10 +1030,24 @@ export const watchingApi = {
   },
 
   async toggleWatch(seriesId: string, enabled: boolean): Promise<WatchingResponse> {
-    const response = await api.post<WatchingResponse>(`/api/series/${seriesId}/watch`, {
+    const response = await api.post<{
+      series_id: string;
+      series_title: string;
+      watching_enabled: boolean;
+      last_watched_check?: string | null;
+      message: string;
+    }>(`/api/series/${seriesId}/watch`, {
       enabled
     });
-    return response.data;
+    
+    // Convert the response to WatchingResponse format
+    return {
+      series_id: response.data.series_id,
+      series_title: response.data.series_title,
+      watching_enabled: response.data.watching_enabled,
+      last_watched_check: response.data.last_watched_check,
+      message: response.data.message
+    };
   },
 
   async watchSeries(seriesId: string): Promise<WatchingResponse> {

@@ -21,10 +21,11 @@ export function useNotifications(limit?: number): UseNotificationsReturn {
     limit ? `/api/notifications?limit=${limit}` : '/api/notifications',
     () => notificationsApi.getNotifications({ limit }),
     {
-      refreshInterval: 30000, // Refresh every 30 seconds
-      errorRetryCount: 2,
-      revalidateOnFocus: true,
-      dedupingInterval: 10000, // Dedupe requests within 10 seconds
+      refreshInterval: 60000, // Refresh every 60 seconds (reduced from 30)
+      errorRetryCount: 1, // Reduced retry attempts
+      revalidateOnFocus: false, // Don't revalidate on focus (was causing constant activity)
+      dedupingInterval: 30000, // Increased deduping interval to 30 seconds
+      revalidateOnReconnect: false, // Don't revalidate on network reconnect
     }
   );
 

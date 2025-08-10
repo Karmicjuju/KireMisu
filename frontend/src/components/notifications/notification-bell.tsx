@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,12 +15,14 @@ export interface NotificationBellProps {
 export function NotificationBell({ className }: NotificationBellProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { data: notifications, isLoading } = useNotifications();
+  const triggerRef = useRef<HTMLButtonElement>(null);
   
   const unreadCount = notifications?.filter(n => !n.is_read).length || 0;
 
   return (
     <div className="relative">
       <Button
+        ref={triggerRef}
         variant="ghost"
         size="sm"
         onClick={() => setIsOpen(!isOpen)}
@@ -41,14 +43,13 @@ export function NotificationBell({ className }: NotificationBellProps) {
         )}
       </Button>
 
-      {isOpen && (
-        <NotificationDropdown
-          isOpen={isOpen}
-          onClose={() => setIsOpen(false)}
-          notifications={notifications || []}
-          isLoading={isLoading}
-        />
-      )}
+      <NotificationDropdown
+        isOpen={isOpen}
+        onClose={() => setIsOpen(false)}
+        notifications={notifications || []}
+        isLoading={isLoading}
+        triggerRef={triggerRef}
+      />
     </div>
   );
 }

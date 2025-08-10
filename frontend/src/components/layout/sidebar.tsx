@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   BookOpen,
+  Bell,
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/glass-card';
 import { NavigationItem } from './navigation-item';
@@ -19,6 +20,7 @@ import { cn } from '@/lib/utils';
 const navigationItems = [
   { href: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/library', icon: Library, label: 'Library' },
+  { href: '/library/watching', icon: Bell, label: 'Watching' },
   { href: '/downloads', icon: Download, label: 'Downloads' },
   { href: '/settings', icon: Settings, label: 'Settings' },
 ];

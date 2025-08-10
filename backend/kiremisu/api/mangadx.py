@@ -309,7 +309,7 @@ async def get_manga_details(
             if relationship.get("type") == "cover_art":
                 cover_filename = relationship.get("attributes", {}).get("fileName")
                 if cover_filename:
-                    cover_art_url = client.get_cover_art_url(manga.id, cover_filename, size="512")
+                    cover_art_url = await client.get_cover_art_url(manga.id, cover_filename, size="512")
                 break
         
         return MangaDxMangaInfo(

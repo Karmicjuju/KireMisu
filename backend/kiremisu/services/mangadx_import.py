@@ -70,7 +70,7 @@ class MangaDxImportService:
         
         logger.info(f"Initialized MangaDx import service with cover storage: {cover_storage_path}")
     
-    def _convert_mangadx_to_manga_info(self, mangadx_response: MangaDxMangaResponse) -> MangaDxMangaInfo:
+    async def _convert_mangadx_to_manga_info(self, mangadx_response: MangaDxMangaResponse) -> MangaDxMangaInfo:
         """
         Convert MangaDx API response to standardized MangaDxMangaInfo.
         
@@ -106,7 +106,7 @@ class MangaDxImportService:
             if relationship.get("type") == "cover_art":
                 cover_filename = relationship.get("attributes", {}).get("fileName")
                 if cover_filename:
-                    cover_art_url = self.mangadx_client.get_cover_art_url(
+                    cover_art_url = await self.mangadx_client.get_cover_art_url(
                         mangadx_response.id, cover_filename, size="512"
                     )
                 break
@@ -326,7 +326,7 @@ class MangaDxImportService:
             # Convert and calculate confidence for each result
             candidates = []
             for mangadx_manga in search_response.data:
-                mangadx_info = self._convert_mangadx_to_manga_info(mangadx_manga)
+                mangadx_info = await self._convert_mangadx_to_manga_info(mangadx_manga)
                 confidence, reasons = self._calculate_match_confidence(local_series, mangadx_info)
                 
                 # Only include candidates above minimum threshold
@@ -387,7 +387,7 @@ class MangaDxImportService:
             # Get MangaDx manga details
             logger.info(f"Importing MangaDx metadata for manga: {import_request.mangadx_id}")
             mangadx_manga = await self.mangadx_client.get_manga(import_request.mangadx_id)
-            mangadx_info = self._convert_mangadx_to_manga_info(mangadx_manga)
+            mangadx_info = await self._convert_mangadx_to_manga_info(mangadx_manga)
             
             # Determine operation mode
             operation = "created"

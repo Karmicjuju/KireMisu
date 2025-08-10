@@ -90,8 +90,8 @@ export function NotificationItem({
   const content = (
     <div
       className={cn(
-        "flex items-start gap-3 p-3 cursor-pointer transition-colors",
-        !notification.is_read && "bg-primary/5",
+        "flex items-start gap-3 p-3 cursor-pointer transition-colors hover:bg-accent/50",
+        !notification.is_read && "bg-primary/10 border-l-2 border-l-primary",
         className
       )}
       onClick={handleClick}
@@ -112,7 +112,7 @@ export function NotificationItem({
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-start justify-between gap-2">
           <p className={cn(
-            "text-sm line-clamp-2",
+            "text-sm line-clamp-2 text-foreground",
             !notification.is_read && "font-medium"
           )}>
             {notification.title}
@@ -131,12 +131,12 @@ export function NotificationItem({
         </div>
 
         {notification.message && (
-          <p className="text-xs text-muted-foreground line-clamp-2">
+          <p className="text-xs text-foreground/80 line-clamp-2">
             {notification.message}
           </p>
         )}
 
-        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center justify-between gap-2 text-xs text-foreground/70">
           <div className="flex items-center gap-1">
             <Clock className="h-3 w-3" />
             <span>{timeAgo}</span>

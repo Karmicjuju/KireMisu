@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -25,10 +25,21 @@ export function WatchToggle({
 }: WatchToggleProps) {
   const { toggleWatch, isLoading } = useWatching();
   const { toast } = useToast();
+  
+  // Use local state to track the watching status
+  const [localWatchingState, setLocalWatchingState] = useState(isWatching);
+
+  // Update local state when prop changes (from SWR cache updates)
+  useEffect(() => {
+    setLocalWatchingState(isWatching);
+  }, [isWatching]);
 
   const handleToggle = async () => {
     try {
-      const newWatchingState = await toggleWatch(seriesId, isWatching);
+      const newWatchingState = await toggleWatch(seriesId, localWatchingState);
+      
+      // Update local state immediately for responsive UI
+      setLocalWatchingState(newWatchingState);
       
       toast({
         title: newWatchingState ? 'Now watching' : 'No longer watching',
@@ -50,21 +61,21 @@ export function WatchToggle({
   if (variant === 'badge') {
     return (
       <Badge
-        variant={isWatching ? 'default' : 'outline'}
+        variant={localWatchingState ? 'default' : 'outline'}
         className={cn(
           "cursor-pointer transition-colors hover:bg-accent",
           isLoading && "opacity-50 cursor-not-allowed",
           className
         )}
         onClick={!isLoading ? handleToggle : undefined}
-        aria-label={isWatching ? 'Stop watching' : 'Start watching'}
+        aria-label={localWatchingState ? 'Stop watching' : 'Start watching'}
       >
-        {isWatching ? (
+        {localWatchingState ? (
           <BellRing className="h-2.5 w-2.5 mr-1" />
         ) : (
           <Bell className="h-2.5 w-2.5 mr-1" />
         )}
-        {isWatching ? 'Watching' : 'Watch'}
+        {localWatchingState ? 'Watching' : 'Watch'}
       </Badge>
     );
   }
@@ -78,12 +89,12 @@ export function WatchToggle({
         disabled={isLoading}
         className={cn(
           "text-muted-foreground hover:text-foreground",
-          isWatching && "text-primary hover:text-primary/80",
+          localWatchingState && "text-primary hover:text-primary/80",
           className
         )}
-        aria-label={isWatching ? 'Stop watching' : 'Start watching'}
+        aria-label={localWatchingState ? 'Stop watching' : 'Start watching'}
       >
-        {isWatching ? (
+        {localWatchingState ? (
           <BellRing className="h-3 w-3" />
         ) : (
           <Bell className="h-3 w-3" />
@@ -95,7 +106,7 @@ export function WatchToggle({
   // Default button variant
   return (
     <Button
-      variant={isWatching ? 'default' : 'outline'}
+      variant={localWatchingState ? 'default' : 'outline'}
       size={size}
       onClick={handleToggle}
       disabled={isLoading}
@@ -104,14 +115,14 @@ export function WatchToggle({
         isLoading && "opacity-50",
         className
       )}
-      aria-label={isWatching ? 'Stop watching' : 'Start watching'}
+      aria-label={localWatchingState ? 'Stop watching' : 'Start watching'}
     >
-      {isWatching ? (
+      {localWatchingState ? (
         <BellRing className="h-3 w-3 mr-1" />
       ) : (
         <Bell className="h-3 w-3 mr-1" />
       )}
-      {isWatching ? 'Watching' : 'Watch'}
+      {localWatchingState ? 'Watching' : 'Watch'}
     </Button>
   );
 }

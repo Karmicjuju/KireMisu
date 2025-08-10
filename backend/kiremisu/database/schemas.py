@@ -479,6 +479,11 @@ class SeriesResponse(BaseModel):
     custom_tags: List[str] = Field(default_factory=list, description="Custom user tags")
     user_tags: List[TagResponse] = Field(default_factory=list, description="User-assigned tags")
 
+    # Watching configuration
+    watching_enabled: bool = Field(default=False, description="Whether watching is enabled for this series")
+    watching_config: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Watching configuration settings")
+    last_watched_check: Optional[datetime] = Field(None, description="Last time series was checked for updates")
+
     # Statistics
     total_chapters: int = Field(..., description="Total chapter count")
     read_chapters: int = Field(..., description="Number of read chapters")
@@ -520,6 +525,9 @@ class SeriesResponse(BaseModel):
             user_metadata=series.user_metadata,
             custom_tags=series.custom_tags,
             user_tags=user_tags,
+            watching_enabled=series.watching_enabled,
+            watching_config=series.watching_config,
+            last_watched_check=series.last_watched_check,
             total_chapters=series.total_chapters,
             read_chapters=series.read_chapters,
             created_at=series.created_at,
@@ -1323,6 +1331,27 @@ class WatchToggleResponse(BaseModel):
             watching_enabled=series.watching_enabled,
             last_watched_check=series.last_watched_check,
             message=f"Watching {status} for '{series.title_primary}'",
+        )
+
+
+class WatchingResponse(BaseModel):
+    """Schema for watching series response (used in watching list)."""
+
+    series_id: UUID = Field(..., description="Series ID")
+    series_title: str = Field(..., description="Series title")
+    watching_enabled: bool = Field(..., description="Watching status")
+    last_watched_check: Optional[datetime] = Field(None, description="Last check timestamp")
+    message: Optional[str] = Field(None, description="Optional status message")
+
+    @classmethod
+    def from_series(cls, series):
+        """Create response from Series model."""
+        return cls(
+            series_id=series.id,
+            series_title=series.title_primary,
+            watching_enabled=series.watching_enabled,
+            last_watched_check=series.last_watched_check,
+            message=f"Watching {series.title_primary}" if series.watching_enabled else None,
         )
 
 

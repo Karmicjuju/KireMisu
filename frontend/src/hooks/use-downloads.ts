@@ -77,6 +77,7 @@ export function useDownloads(options: UseDownloadsOptions = {}): UseDownloadsRet
   const [loading, setLoading] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isVisible, setIsVisible] = useState(true);
   const { toast } = useToast();
 
   // Get polling settings from localStorage
@@ -95,6 +96,16 @@ export function useDownloads(options: UseDownloadsOptions = {}): UseDownloadsRet
   const mountedRef = useRef(true);
   const abortControllerRef = useRef<AbortController | null>(null);
   const lastUserActionRef = useRef<number>(0);
+
+  // Track document visibility to pause polling when not needed
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsVisible(!document.hidden);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
 
   // Memoize the fetch function to prevent unnecessary re-renders
   const fetchDownloads = useCallback(async () => {
@@ -164,7 +175,7 @@ export function useDownloads(options: UseDownloadsOptions = {}): UseDownloadsRet
 
   // Use adaptive polling for optimized performance with user-configured settings
   const adaptivePolling = useAdaptivePolling({
-    enabled,
+    enabled: enabled && isVisible, // Only poll when page is visible
     hasActiveWork,
     fetchFunction: fetchDownloads,
     strategy: {
