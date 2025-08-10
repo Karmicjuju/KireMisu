@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useNotifications } from './use-notifications';
+import { useAuth } from '../contexts/auth-context';
 
 export type NotificationPermission = 'default' | 'granted' | 'denied';
 
 export interface PushSubscriptionInfo {
+  id?: string; // Subscription ID from backend
   endpoint: string;
   keys: {
     p256dh: string;
@@ -93,18 +95,14 @@ const fetchVapidPublicKey = async (): Promise<string | null> => {
 };
 
 // Send subscription to backend
-const sendSubscriptionToBackend = async (subscriptionInfo: PushSubscriptionInfo): Promise<void> => {
+const sendSubscriptionToBackend = async (
+  subscriptionInfo: PushSubscriptionInfo,
+  getAuthHeaders: () => Record<string, string>
+): Promise<string> => {
   try {
-    // For now, use a simple authentication approach
-    // In a real app, this would come from user authentication state
-    const apiKey = process.env.NEXT_PUBLIC_API_KEY || 'your-api-key-here';
-    
     const response = await fetch('/api/push/subscribe', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         endpoint: subscriptionInfo.endpoint,
         keys: subscriptionInfo.keys,
@@ -113,11 +111,15 @@ const sendSubscriptionToBackend = async (subscriptionInfo: PushSubscriptionInfo)
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required. Please log in.');
+      }
       throw new Error(`Failed to register subscription: ${response.statusText}`);
     }
 
     const data = await response.json();
     console.log('Subscription registered with backend:', data.id);
+    return data.id;
   } catch (error) {
     console.error('Failed to send subscription to backend:', error);
     throw error;
@@ -125,24 +127,31 @@ const sendSubscriptionToBackend = async (subscriptionInfo: PushSubscriptionInfo)
 };
 
 // Remove subscription from backend
-const removeSubscriptionFromBackend = async (subscriptionInfo: PushSubscriptionInfo): Promise<void> => {
+const removeSubscriptionFromBackend = async (
+  subscriptionInfo: PushSubscriptionInfo,
+  getAuthHeaders: () => Record<string, string>
+): Promise<void> => {
   try {
-    // For now, use a simple authentication approach
-    // In a real app, this would come from user authentication state
-    const apiKey = process.env.NEXT_PUBLIC_API_KEY || 'your-api-key-here';
+    // Use subscription ID if available, otherwise fall back to endpoint
+    const endpoint = subscriptionInfo.id 
+      ? `/api/push/unsubscribe/${subscriptionInfo.id}`
+      : '/api/push/unsubscribe';
+      
+    const body = subscriptionInfo.id 
+      ? undefined 
+      : JSON.stringify({ endpoint: subscriptionInfo.endpoint });
     
-    const response = await fetch('/api/push/unsubscribe', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        endpoint: subscriptionInfo.endpoint,
-      }),
+    const response = await fetch(endpoint, {
+      method: subscriptionInfo.id ? 'DELETE' : 'POST',
+      headers: getAuthHeaders(),
+      body,
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        console.warn('Authentication failed during unsubscribe, continuing with local unsubscribe');
+        return;
+      }
       throw new Error(`Failed to remove subscription: ${response.statusText}`);
     }
 
@@ -179,8 +188,41 @@ export function usePushNotifications(): UsePushNotificationsReturn {
     error: null,
   });
 
+  // Get auth context
+  const { isAuthenticated, getAuthHeaders, getApiKey } = useAuth();
+  
   // Refresh notifications when subscription changes
   const { mutate: refreshNotifications } = useNotifications();
+
+  // Storage key for subscription info
+  const SUBSCRIPTION_STORAGE_KEY = 'kiremisu_push_subscription';
+
+  // Helper functions for subscription storage
+  const storeSubscriptionInfo = (info: PushSubscriptionInfo) => {
+    try {
+      localStorage.setItem(SUBSCRIPTION_STORAGE_KEY, JSON.stringify(info));
+    } catch (error) {
+      console.error('Failed to store subscription info:', error);
+    }
+  };
+
+  const getStoredSubscriptionInfo = (): PushSubscriptionInfo | null => {
+    try {
+      const stored = localStorage.getItem(SUBSCRIPTION_STORAGE_KEY);
+      return stored ? JSON.parse(stored) : null;
+    } catch (error) {
+      console.error('Failed to retrieve stored subscription info:', error);
+      return null;
+    }
+  };
+
+  const removeStoredSubscriptionInfo = () => {
+    try {
+      localStorage.removeItem(SUBSCRIPTION_STORAGE_KEY);
+    } catch (error) {
+      console.error('Failed to remove stored subscription info:', error);
+    }
+  };
 
   // Initialize the hook
   useEffect(() => {
@@ -205,12 +247,21 @@ export function usePushNotifications(): UsePushNotificationsReturn {
         const registration = await navigator.serviceWorker.ready;
         const subscription = await registration.pushManager.getSubscription();
         
+        // Get subscription info, prioritizing stored info with ID
+        let subscriptionInfo = getSubscriptionInfo(subscription);
+        const storedInfo = getStoredSubscriptionInfo();
+        
+        // If we have stored subscription info with an ID, use it
+        if (subscriptionInfo && storedInfo?.id && storedInfo.endpoint === subscriptionInfo.endpoint) {
+          subscriptionInfo.id = storedInfo.id;
+        }
+        
         setState(prev => ({
           ...prev,
           isSupported: true,
           permission,
           subscription,
-          subscriptionInfo: getSubscriptionInfo(subscription),
+          subscriptionInfo,
           isLoading: false,
           error: null,
         }));
@@ -263,6 +314,10 @@ export function usePushNotifications(): UsePushNotificationsReturn {
       throw new Error('Push notifications are not supported');
     }
 
+    if (!isAuthenticated) {
+      throw new Error('Authentication required. Please log in to enable push notifications.');
+    }
+
     if (state.permission !== 'granted') {
       const permission = await requestPermission();
       if (permission !== 'granted') {
@@ -284,11 +339,23 @@ export function usePushNotifications(): UsePushNotificationsReturn {
       // Check if already subscribed
       const existingSubscription = await registration.pushManager.getSubscription();
       if (existingSubscription) {
-        const subscriptionInfo = getSubscriptionInfo(existingSubscription);
+        let subscriptionInfo = getSubscriptionInfo(existingSubscription);
         
-        // Send existing subscription to backend
         if (subscriptionInfo) {
-          await sendSubscriptionToBackend(subscriptionInfo);
+          // Check if we have stored subscription ID
+          const storedInfo = getStoredSubscriptionInfo();
+          if (storedInfo?.id && storedInfo.endpoint === subscriptionInfo.endpoint) {
+            subscriptionInfo.id = storedInfo.id;
+          } else {
+            // Send existing subscription to backend to get/update ID
+            try {
+              const subscriptionId = await sendSubscriptionToBackend(subscriptionInfo, getAuthHeaders);
+              subscriptionInfo.id = subscriptionId;
+              storeSubscriptionInfo(subscriptionInfo);
+            } catch (error) {
+              console.warn('Failed to register existing subscription with backend:', error);
+            }
+          }
         }
         
         setState(prev => ({
@@ -306,11 +373,18 @@ export function usePushNotifications(): UsePushNotificationsReturn {
         applicationServerKey: urlBase64ToUint8Array(vapidKey),
       });
 
-      const subscriptionInfo = getSubscriptionInfo(subscription);
+      let subscriptionInfo = getSubscriptionInfo(subscription);
 
-      // Send subscription to backend for storage
+      // Send subscription to backend for storage and get ID
       if (subscriptionInfo) {
-        await sendSubscriptionToBackend(subscriptionInfo);
+        try {
+          const subscriptionId = await sendSubscriptionToBackend(subscriptionInfo, getAuthHeaders);
+          subscriptionInfo.id = subscriptionId;
+          storeSubscriptionInfo(subscriptionInfo);
+        } catch (error) {
+          console.warn('Failed to register new subscription with backend:', error);
+          // Continue with local subscription even if backend fails
+        }
       }
 
       setState(prev => ({
@@ -333,7 +407,7 @@ export function usePushNotifications(): UsePushNotificationsReturn {
       }));
       throw new Error(errorMessage);
     }
-  }, [state.isSupported, state.permission, requestPermission, refreshNotifications]);
+  }, [state.isSupported, state.permission, isAuthenticated, requestPermission, refreshNotifications, getAuthHeaders]);
 
   // Unsubscribe from push notifications
   const unsubscribe = useCallback(async (): Promise<boolean> => {
@@ -346,12 +420,15 @@ export function usePushNotifications(): UsePushNotificationsReturn {
     try {
       // Remove subscription from backend first
       if (state.subscriptionInfo) {
-        await removeSubscriptionFromBackend(state.subscriptionInfo);
+        await removeSubscriptionFromBackend(state.subscriptionInfo, getAuthHeaders);
       }
 
       const result = await state.subscription.unsubscribe();
       
       if (result) {
+        // Remove stored subscription info
+        removeStoredSubscriptionInfo();
+        
         setState(prev => ({
           ...prev,
           subscription: null,
@@ -379,7 +456,7 @@ export function usePushNotifications(): UsePushNotificationsReturn {
       }));
       throw new Error(errorMessage);
     }
-  }, [state.subscription, refreshNotifications]);
+  }, [state.subscription, state.subscriptionInfo, refreshNotifications, getAuthHeaders]);
 
   // Send a test notification (local notification, not push)
   const sendTestNotification = useCallback((title: string, body?: string): void => {

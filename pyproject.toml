@@ -34,6 +34,7 @@ dependencies = [
     "python-dateutil>=2.9.0.post0",
     "slowapi>=0.1.9",
     "pywebpush>=2.0.3",
+    "pyjwt>=2.10.1",
 ]
 
 [project.optional-dependencies]
