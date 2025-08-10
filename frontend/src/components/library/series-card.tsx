@@ -11,9 +11,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { TagChipList } from '@/components/tags';
+import { WatchToggle } from './watch-toggle';
 import { cn } from '@/lib/utils';
 import { SeriesResponse } from '@/lib/api';
-import { Book, BookOpen, Play, Check, Clock } from 'lucide-react';
+import { Book, BookOpen, Play, Check, Clock, BellRing } from 'lucide-react';
 
 export interface SeriesCardProps {
   series: SeriesResponse;
@@ -38,6 +39,14 @@ export function SeriesCard({ series, className, viewMode = 'grid' }: SeriesCardP
           {/* Compact Cover */}
           <div className="relative flex h-16 w-12 items-center justify-center bg-gradient-to-br from-muted to-muted/80 rounded-sm flex-shrink-0">
             <Book className="h-6 w-6 text-muted-foreground/60" />
+            {/* Watching indicator */}
+            {series.watching_enabled && (
+              <div className="absolute -top-1 -right-1">
+                <div className="bg-primary text-primary-foreground rounded-full p-1">
+                  <BellRing className="h-2.5 w-2.5" />
+                </div>
+              </div>
+            )}
             {/* Progress indicator */}
             {hasProgress && (
               <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted rounded-b-sm overflow-hidden">
@@ -106,6 +115,12 @@ export function SeriesCard({ series, className, viewMode = 'grid' }: SeriesCardP
 
           {/* Actions */}
           <div className="flex items-center gap-2 flex-shrink-0">
+            <WatchToggle 
+              seriesId={series.id}
+              isWatching={series.watching_enabled}
+              variant="button"
+              size="sm"
+            />
             <Button asChild size="sm" variant="outline">
               <Link href={`/library/series/${series.id}`}>View</Link>
             </Button>
@@ -132,8 +147,17 @@ export function SeriesCard({ series, className, viewMode = 'grid' }: SeriesCardP
           <Book className="h-12 w-12" />
         </div>
 
-        {/* Reading status overlay */}
-        <div className="absolute right-2 top-2">
+        {/* Status overlays */}
+        <div className="absolute right-2 top-2 space-y-1">
+          {/* Watching indicator */}
+          {series.watching_enabled && (
+            <div className="flex justify-end">
+              <div className="bg-primary text-primary-foreground rounded-full p-1">
+                <BellRing className="h-2.5 w-2.5" />
+              </div>
+            </div>
+          )}
+          {/* Reading status */}
           {isCompleted && (
             <Badge variant="secondary" className="text-xs" data-testid="completion-badge">
               <Check className="mr-1 h-2.5 w-2.5" />
@@ -200,18 +224,27 @@ export function SeriesCard({ series, className, viewMode = 'grid' }: SeriesCardP
         )}
 
         {/* Compact actions */}
-        <div className="flex gap-1.5 pt-1">
-          <Button asChild size="sm" className="flex-1 text-xs h-7">
-            <Link href={`/library/series/${series.id}`}>View</Link>
-          </Button>
-          {series.total_chapters > 0 && (
-            <Button asChild size="sm" variant="outline" className="text-xs h-7">
-              <Link href={`/library/series/${series.id}/continue`}>
-                <Play className="mr-1 h-2.5 w-2.5" />
-                {hasProgress ? 'Continue' : 'Start'}
-              </Link>
+        <div className="space-y-1.5 pt-1">
+          <WatchToggle 
+            seriesId={series.id}
+            isWatching={series.watching_enabled}
+            variant="button"
+            size="sm"
+            className="w-full text-xs h-7"
+          />
+          <div className="flex gap-1.5">
+            <Button asChild size="sm" className="flex-1 text-xs h-7">
+              <Link href={`/library/series/${series.id}`}>View</Link>
             </Button>
-          )}
+            {series.total_chapters > 0 && (
+              <Button asChild size="sm" variant="outline" className="text-xs h-7">
+                <Link href={`/library/series/${series.id}/continue`}>
+                  <Play className="mr-1 h-2.5 w-2.5" />
+                  {hasProgress ? 'Continue' : 'Start'}
+                </Link>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </GlassCard>

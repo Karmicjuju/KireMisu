@@ -359,6 +359,9 @@ class JobQueue(Base):
         CheckConstraint(
             "status IN ('pending', 'running', 'completed', 'failed')", name="ck_job_queue_status"
         ),
+        CheckConstraint(
+            "job_type IN ('library_scan', 'download', 'chapter_update_check')", name="ck_job_queue_job_type"
+        ),
         CheckConstraint("priority >= 1 AND priority <= 10", name="ck_job_queue_priority_range"),
         CheckConstraint("retry_count >= 0", name="ck_job_queue_retry_count"),
         CheckConstraint("max_retries >= 0", name="ck_job_queue_max_retries"),
@@ -428,4 +431,48 @@ class FileOperation(Base):
         ),
         CheckConstraint("retry_count >= 0", name="ck_file_operations_retry_count"),
         CheckConstraint("max_retries >= 0", name="ck_file_operations_max_retries"),
+    )
+
+
+class Notification(Base):
+    """User notification model for system events and updates."""
+
+    __tablename__ = "notifications"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    notification_type: Mapped[str] = mapped_column(String(50), nullable=False, default="new_chapter")
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Optional relationships to series and chapter
+    series_id: Mapped[Optional[UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("series.id", ondelete="SET NULL"), nullable=True
+    )
+    chapter_id: Mapped[Optional[UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("chapters.id", ondelete="SET NULL"), nullable=True
+    )
+
+    # Read status tracking
+    is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True
+    )
+
+    # Relationships
+    series: Mapped[Optional["Series"]] = relationship("Series", foreign_keys=[series_id])
+    chapter: Mapped[Optional["Chapter"]] = relationship("Chapter", foreign_keys=[chapter_id])
+
+    __table_args__ = (
+        # Compound index for efficient unread notification queries
+        Index("ix_notifications_unread_created", "is_read", "created_at"),
+        # Index for querying notifications by series
+        Index("ix_notifications_series", "series_id", "created_at"),
+        # Check constraint for notification type
+        CheckConstraint(
+            "notification_type IN ('new_chapter', 'chapter_available', 'download_complete', 'download_failed', 'series_complete', 'library_update', 'system_alert', 'series_update')",
+            name="ck_notification_type",
+        ),
     )

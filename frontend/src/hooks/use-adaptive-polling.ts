@@ -48,14 +48,14 @@ interface PollingState {
 }
 
 /**
- * Default polling strategy - updated for 1-minute intervals
+ * Default polling strategy - more conservative intervals
  */
 const DEFAULT_STRATEGY: PollingStrategy = {
-  initialInterval: 60000, // 1 minute
-  maxInterval: 300000,    // 5 minutes
+  initialInterval: 120000, // 2 minutes
+  maxInterval: 600000,     // 10 minutes
   backoffMultiplier: 1.5,
-  activeInterval: 30000,  // 30 seconds when active
-  idleThreshold: 120000,  // 2 minutes of no activity = idle
+  activeInterval: 60000,   // 1 minute when active (less aggressive)
+  idleThreshold: 300000,   // 5 minutes of no activity = idle
 };
 
 /**

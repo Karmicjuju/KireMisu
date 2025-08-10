@@ -20,9 +20,9 @@ export interface PollingSettings {
 }
 
 const DEFAULT_SETTINGS: PollingSettings = {
-  initialInterval: 60,
-  activeInterval: 30,
-  maxInterval: 300,
+  initialInterval: 120,    // 2 minutes - less aggressive
+  activeInterval: 60,      // 1 minute when active - less frequent
+  maxInterval: 600,        // 10 minutes - longer idle intervals
   maxConsecutiveErrors: 3,
 };
 

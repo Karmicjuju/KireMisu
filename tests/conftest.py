@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 from sqlalchemy.pool import NullPool
 from sqlalchemy import text
 
-from kiremisu.database.models import Base, Series, Chapter, Annotation
+from kiremisu.database.models import Base, Series, Chapter, Annotation, Notification
 from kiremisu.database.connection import get_db
 from kiremisu.main import app
 from uuid import uuid4
@@ -69,6 +69,7 @@ async def db_session(engine) -> AsyncGenerator[AsyncSession, None]:
         await session.execute(text("TRUNCATE TABLE job_queue CASCADE"))
         await session.execute(text("TRUNCATE TABLE annotations CASCADE"))
         await session.execute(text("TRUNCATE TABLE user_lists CASCADE"))
+        await session.execute(text("TRUNCATE TABLE notifications CASCADE"))
         await session.commit()
 
         yield session
@@ -80,6 +81,7 @@ async def db_session(engine) -> AsyncGenerator[AsyncSession, None]:
         await session.execute(text("TRUNCATE TABLE job_queue CASCADE"))
         await session.execute(text("TRUNCATE TABLE annotations CASCADE"))
         await session.execute(text("TRUNCATE TABLE user_lists CASCADE"))
+        await session.execute(text("TRUNCATE TABLE notifications CASCADE"))
         await session.commit()
 
 
@@ -233,3 +235,47 @@ async def sample_annotations(db_session: AsyncSession, sample_series_with_chapte
         await db_session.refresh(annotation)
 
     return annotations
+
+
+@pytest.fixture
+async def sample_series(db_session: AsyncSession):
+    """Create a single test series."""
+    series = Series(
+        id=uuid4(),
+        title_primary="Test Series",
+        file_path="/test/manga/test-series",
+        watching_enabled=False,
+    )
+    db_session.add(series)
+    await db_session.commit()
+    await db_session.refresh(series)
+    
+    return series
+
+
+@pytest.fixture
+async def sample_notifications(
+    db_session: AsyncSession, sample_series: Series
+) -> list[Notification]:
+    """Create sample notifications for testing."""
+    from datetime import datetime, timezone
+    
+    notifications = []
+    
+    for i in range(5):
+        notification = Notification(
+            notification_type="new_chapter",
+            title=f"New chapter available: {sample_series.title_primary}",
+            message=f"Chapter {i+1} is now available for reading.",
+            series_id=sample_series.id,
+            is_read=i % 2 == 0,  # Alternate read/unread
+        )
+        
+        if notification.is_read:
+            notification.read_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        
+        db_session.add(notification)
+        notifications.append(notification)
+    
+    await db_session.commit()
+    return notifications

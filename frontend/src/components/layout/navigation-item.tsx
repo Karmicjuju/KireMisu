@@ -20,7 +20,11 @@ export function NavigationItem({
   collapsed = false,
 }: NavigationItemProps) {
   const pathname = usePathname();
-  const isActive = pathname === href || pathname.startsWith(href + '/');
+  // Fix navigation state: exact match or child routes, but exclude sibling routes
+  const isActive = pathname === href || 
+    (pathname.startsWith(href + '/') && 
+     // Don't match /library when on /library/watching 
+     !(href === '/library' && pathname.startsWith('/library/watching')));
   const setCurrentPage = useNavigationStore((state) => state.setCurrentPage);
 
   return (

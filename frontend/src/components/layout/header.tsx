@@ -1,11 +1,12 @@
 'use client';
 
-import { Search, Moon, Sun, Bell } from 'lucide-react';
+import { Search, Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useTheme } from 'next-themes';
 import { GlassCard } from '@/components/ui/glass-card';
 import { DownloadHeader } from '@/components/downloads';
+import { NotificationBell } from '@/components/notifications';
 
 export function Header() {
   const { theme, setTheme } = useTheme();
@@ -29,13 +30,7 @@ export function Header() {
         <DownloadHeader />
 
         {/* Notifications */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-        >
-          <Bell className="h-4 w-4" />
-        </Button>
+        <NotificationBell />
 
         {/* Theme Toggle */}
         <Button

@@ -1,5 +1,6 @@
 """API endpoints for manga series."""
 
+import logging
 from typing import List, Optional
 from uuid import UUID
 
@@ -10,10 +11,18 @@ from sqlalchemy.orm import selectinload
 
 from kiremisu.database.connection import get_db
 from kiremisu.database.models import Series, Chapter, Tag, series_tags
-from kiremisu.database.schemas import SeriesResponse, ChapterResponse, SeriesProgressResponse
+from kiremisu.database.schemas import (
+    SeriesResponse, 
+    ChapterResponse, 
+    SeriesProgressResponse,
+    WatchToggleRequest,
+    WatchToggleResponse,
+)
 from kiremisu.database.utils import with_db_retry, log_slow_query, safe_like_pattern, validate_query_params
+from kiremisu.services.watching_service import WatchingService
 
 router = APIRouter(prefix="/api/series", tags=["series"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/", response_model=List[SeriesResponse])
@@ -164,3 +173,24 @@ async def get_series_progress(
         recent_chapters=[ChapterResponse.from_model(chapter) for chapter in recent_chapters],
         last_read_at=last_read_at,
     )
+
+
+@router.post("/{series_id}/watch", response_model=WatchToggleResponse)
+async def toggle_series_watch(
+    series_id: UUID,
+    request: WatchToggleRequest,
+    db: AsyncSession = Depends(get_db)
+) -> WatchToggleResponse:
+    """Toggle watching status for a series."""
+    try:
+        series = await WatchingService.toggle_watch(
+            db=db, series_id=series_id, enabled=request.enabled
+        )
+        
+        return WatchToggleResponse.from_series(series)
+        
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error toggling watch status for series {series_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update watch status")
