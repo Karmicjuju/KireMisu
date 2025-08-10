@@ -10,6 +10,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
 from kiremisu.database.connection import get_db
+from kiremisu.core.auth import get_current_user
 from kiremisu.database.models import Series, Chapter, Tag, series_tags
 from kiremisu.database.schemas import (
     SeriesResponse,
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 @log_slow_query("get_series_list", 2.0)
 async def get_series_list(
     db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
     skip: int = Query(0, ge=0, description="Number of series to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of series to return"),
     search: Optional[str] = Query(None, description="Search term for series title"),
@@ -90,7 +92,11 @@ async def get_series_list(
 
 
 @router.get("/{series_id}", response_model=SeriesResponse)
-async def get_series(series_id: UUID, db: AsyncSession = Depends(get_db)) -> SeriesResponse:
+async def get_series(
+    series_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+) -> SeriesResponse:
     """Get series details by ID."""
     result = await db.execute(
         select(Series).options(selectinload(Series.user_tags)).where(Series.id == series_id)
@@ -107,6 +113,7 @@ async def get_series(series_id: UUID, db: AsyncSession = Depends(get_db)) -> Ser
 async def get_series_chapters(
     series_id: UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
     skip: int = Query(0, ge=0, description="Number of chapters to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of chapters to return"),
 ) -> List[ChapterResponse]:
@@ -133,7 +140,9 @@ async def get_series_chapters(
 
 @router.get("/{series_id}/progress", response_model=SeriesProgressResponse)
 async def get_series_progress(
-    series_id: UUID, db: AsyncSession = Depends(get_db)
+    series_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ) -> SeriesProgressResponse:
     """Get detailed progress information for a series."""
     # Get series
@@ -177,7 +186,10 @@ async def get_series_progress(
 
 @router.post("/{series_id}/watch", response_model=WatchToggleResponse)
 async def toggle_series_watch(
-    series_id: UUID, request: WatchToggleRequest, db: AsyncSession = Depends(get_db)
+    series_id: UUID,
+    request: WatchToggleRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ) -> WatchToggleResponse:
     """Toggle watching status for a series."""
     try:

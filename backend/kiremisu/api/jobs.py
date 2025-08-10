@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.database.connection import get_db
+from kiremisu.core.auth import get_current_user
 from kiremisu.database.schemas import (
     JobResponse,
     JobListResponse,
@@ -55,6 +56,7 @@ def set_worker_runner(worker_runner: JobWorkerRunner):
 async def get_job_status(
     db: AsyncSession = Depends(get_db),
     worker_runner: Optional[JobWorkerRunner] = Depends(get_worker_runner),
+    current_user: dict = Depends(get_current_user)
 ) -> JobStatsResponse:
     """Get job queue status and statistics."""
     # Get queue statistics
@@ -75,6 +77,7 @@ async def get_recent_jobs(
     job_type: Optional[str] = Query(None, description="Filter by job type"),
     limit: int = Query(50, ge=1, le=100, description="Maximum number of jobs to return"),
     db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ) -> JobListResponse:
     """Get recent jobs with optional filtering."""
     jobs = await JobScheduler.get_recent_jobs(db, job_type=job_type, limit=limit)
@@ -87,7 +90,11 @@ async def get_recent_jobs(
 
 
 @router.get("/{job_id}", response_model=JobResponse)
-async def get_job(job_id: UUID, db: AsyncSession = Depends(get_db)) -> JobResponse:
+async def get_job(
+    job_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+) -> JobResponse:
     """Get details of a specific job."""
     job = await JobScheduler.get_job_status(db, job_id)
 
@@ -101,7 +108,9 @@ async def get_job(job_id: UUID, db: AsyncSession = Depends(get_db)) -> JobRespon
 
 @router.post("/schedule", response_model=JobScheduleResponse)
 async def schedule_jobs(
-    schedule_request: JobScheduleRequest, db: AsyncSession = Depends(get_db)
+    schedule_request: JobScheduleRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ) -> JobScheduleResponse:
     """Schedule jobs based on the request type."""
     try:
@@ -195,6 +204,7 @@ async def cleanup_old_jobs(
         30, ge=1, le=365, description="Remove jobs completed more than this many days ago"
     ),
     db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ) -> Dict[str, int]:
     """Clean up old completed jobs."""
     try:
@@ -218,6 +228,7 @@ async def cleanup_old_jobs(
 @router.get("/worker/status", response_model=WorkerStatusResponse)
 async def get_worker_status(
     worker_runner: Optional[JobWorkerRunner] = Depends(get_worker_runner),
+    current_user: dict = Depends(get_current_user)
 ) -> WorkerStatusResponse:
     """Get current worker status."""
     if not worker_runner:

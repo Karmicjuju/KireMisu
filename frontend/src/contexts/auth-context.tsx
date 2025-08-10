@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { configureApiAuth } from '@/lib/api';
 
 export interface User {
   id: string;
@@ -41,6 +42,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     initializeAuth();
   }, []);
+
+  // Configure API client with auth token whenever user state changes
+  useEffect(() => {
+    configureApiAuth(getApiKey);
+  }, [user]);
 
   const initializeAuth = async () => {
     try {

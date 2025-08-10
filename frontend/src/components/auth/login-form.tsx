@@ -2,6 +2,9 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/auth-context';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 interface LoginFormProps {
   onSuccess?: () => void;
@@ -45,188 +48,137 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
   };
 
   return (
-    <div style={{
-      maxWidth: '400px',
-      margin: '0 auto',
-      padding: '2rem',
-      border: '1px solid #e5e7eb',
-      borderRadius: '0.5rem',
-      backgroundColor: 'white',
-      boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)'
-    }}>
-      <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1f2937' }}>
-          Sign in to KireMisu
-        </h2>
-        <p style={{ color: '#6b7280', marginTop: '0.5rem' }}>
-          Enter your credentials to access your manga library
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-muted/30 to-background p-6">
+      <div className="w-full max-w-md space-y-8">
+        {/* Header */}
+        <div className="text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+            <div className="h-8 w-8 rounded-full bg-primary shadow-lg shadow-primary/25" />
+          </div>
+          <h2 className="mt-6 text-3xl font-bold tracking-tight text-foreground">
+            Welcome to KireMisu
+          </h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Sign in to access your manga library
+          </p>
+        </div>
+
+        {/* Login Form */}
+        <div className="rounded-lg border bg-card p-8 shadow-lg shadow-black/5">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <label 
+                htmlFor="username" 
+                className="text-sm font-medium text-card-foreground"
+              >
+                Username
+              </label>
+              <Input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter your username"
+                disabled={isLoading}
+                className="transition-all focus:ring-primary/20"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label 
+                htmlFor="password" 
+                className="text-sm font-medium text-card-foreground"
+              >
+                Password
+              </label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                disabled={isLoading}
+                className="transition-all focus:ring-primary/20"
+              />
+            </div>
+
+            {error && (
+              <div className="rounded-md bg-destructive/15 border border-destructive/20 p-3">
+                <p className="text-sm text-destructive">{error}</p>
+              </div>
+            )}
+
+            <Button 
+              type="submit" 
+              className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-medium transition-all shadow-md hover:shadow-lg disabled:opacity-50"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Signing in...
+                </div>
+              ) : (
+                'Sign in'
+              )}
+            </Button>
+          </form>
+
+          {/* Demo Users Section */}
+          <div className="mt-6 pt-6 border-t border-border">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowDemoUsers(!showDemoUsers)}
+              className="w-full text-muted-foreground hover:text-foreground"
+            >
+              {showDemoUsers ? '↑ Hide' : '↓ Show'} demo accounts
+            </Button>
+
+            {showDemoUsers && (
+              <div className="mt-4 space-y-2">
+                <p className="text-xs text-muted-foreground text-center mb-3">
+                  Demo accounts for development and testing
+                </p>
+                
+                <div className="grid gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDemoLogin('demo', 'demo123')}
+                    disabled={isLoading}
+                    className="justify-start text-left h-auto p-3"
+                  >
+                    <div>
+                      <div className="font-medium">demo / demo123</div>
+                      <div className="text-xs text-muted-foreground">Regular user account</div>
+                    </div>
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDemoLogin('admin', 'admin123')}
+                    disabled={isLoading}
+                    className="justify-start text-left h-auto p-3"
+                  >
+                    <div>
+                      <div className="font-medium">admin / admin123</div>
+                      <div className="text-xs text-muted-foreground">Administrator account</div>
+                    </div>
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <p className="text-center text-xs text-muted-foreground">
+          Self-hosted manga reader and library management system
         </p>
       </div>
-
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: '1rem' }}>
-          <label 
-            htmlFor="username" 
-            style={{ 
-              display: 'block', 
-              fontSize: '0.875rem', 
-              fontWeight: '500', 
-              color: '#374151',
-              marginBottom: '0.5rem'
-            }}
-          >
-            Username
-          </label>
-          <input
-            id="username"
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-            disabled={isLoading}
-            style={{
-              width: '100%',
-              padding: '0.5rem',
-              border: '1px solid #d1d5db',
-              borderRadius: '0.375rem',
-              fontSize: '0.875rem',
-              backgroundColor: isLoading ? '#f9fafb' : 'white',
-              color: '#1f2937'
-            }}
-            placeholder="Enter your username"
-          />
-        </div>
-
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label 
-            htmlFor="password" 
-            style={{ 
-              display: 'block', 
-              fontSize: '0.875rem', 
-              fontWeight: '500', 
-              color: '#374151',
-              marginBottom: '0.5rem'
-            }}
-          >
-            Password
-          </label>
-          <input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            disabled={isLoading}
-            style={{
-              width: '100%',
-              padding: '0.5rem',
-              border: '1px solid #d1d5db',
-              borderRadius: '0.375rem',
-              fontSize: '0.875rem',
-              backgroundColor: isLoading ? '#f9fafb' : 'white',
-              color: '#1f2937'
-            }}
-            placeholder="Enter your password"
-          />
-        </div>
-
-        {error && (
-          <div style={{
-            padding: '0.75rem',
-            marginBottom: '1rem',
-            backgroundColor: '#fef2f2',
-            border: '1px solid #fca5a5',
-            borderRadius: '0.375rem',
-            color: '#dc2626',
-            fontSize: '0.875rem'
-          }}>
-            {error}
-          </div>
-        )}
-
-        <button
-          type="submit"
-          disabled={isLoading}
-          style={{
-            width: '100%',
-            padding: '0.75rem',
-            backgroundColor: isLoading ? '#9ca3af' : '#4f46e5',
-            color: 'white',
-            border: 'none',
-            borderRadius: '0.375rem',
-            fontSize: '0.875rem',
-            fontWeight: '500',
-            cursor: isLoading ? 'not-allowed' : 'pointer',
-            transition: 'background-color 0.2s'
-          }}
-        >
-          {isLoading ? 'Signing in...' : 'Sign in'}
-        </button>
-      </form>
-
-      <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-        <button
-          type="button"
-          onClick={() => setShowDemoUsers(!showDemoUsers)}
-          style={{
-            color: '#4f46e5',
-            fontSize: '0.875rem',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            textDecoration: 'underline'
-          }}
-        >
-          {showDemoUsers ? 'Hide' : 'Show'} demo accounts
-        </button>
-      </div>
-
-      {showDemoUsers && (
-        <div style={{
-          marginTop: '1rem',
-          padding: '1rem',
-          backgroundColor: '#f3f4f6',
-          borderRadius: '0.375rem'
-        }}>
-          <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '1rem' }}>
-            Demo accounts for development:
-          </p>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <button
-              onClick={() => handleDemoLogin('demo', 'demo123')}
-              disabled={isLoading}
-              style={{
-                padding: '0.5rem',
-                backgroundColor: 'white',
-                border: '1px solid #d1d5db',
-                borderRadius: '0.25rem',
-                cursor: isLoading ? 'not-allowed' : 'pointer',
-                fontSize: '0.75rem',
-                textAlign: 'left'
-              }}
-            >
-              <strong>demo</strong> / demo123 - Regular user account
-            </button>
-            
-            <button
-              onClick={() => handleDemoLogin('admin', 'admin123')}
-              disabled={isLoading}
-              style={{
-                padding: '0.5rem',
-                backgroundColor: 'white',
-                border: '1px solid #d1d5db',
-                borderRadius: '0.25rem',
-                cursor: isLoading ? 'not-allowed' : 'pointer',
-                fontSize: '0.75rem',
-                textAlign: 'left'
-              }}
-            >
-              <strong>admin</strong> / admin123 - Admin account
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case
 
 from kiremisu.database.connection import get_db
+from kiremisu.core.auth import get_current_user
 from kiremisu.database.models import Series, Chapter
 from kiremisu.database.schemas import DashboardStatsResponse, ChapterResponse
 
@@ -15,7 +16,10 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 
 @router.get("/stats", response_model=DashboardStatsResponse)
-async def get_dashboard_stats(db: AsyncSession = Depends(get_db)) -> DashboardStatsResponse:
+async def get_dashboard_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+) -> DashboardStatsResponse:
     """Get comprehensive dashboard statistics."""
 
     # Get total series count

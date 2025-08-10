@@ -87,18 +87,41 @@ class UserManager:
                 return {k: v for k, v in user_data.items() if k not in ['password_hash', 'salt']}
         return None
 
-# Initialize demo users
-def initialize_demo_users():
-    """Initialize demo users for development."""
-    try:
-        UserManager.create_user("demo", "demo123", "demo@kiremisu.local")
-        UserManager.create_user("admin", "admin123", "admin@kiremisu.local")
-    except ValueError:
-        # Users already exist
-        pass
+# Initialize default users from environment
+def initialize_default_users():
+    """Initialize default users from environment variables."""
+    import os
+    
+    # Create default admin user from environment
+    default_username = os.getenv("DEFAULT_ADMIN_USERNAME", "admin")
+    default_password = os.getenv("DEFAULT_ADMIN_PASSWORD")
+    default_email = os.getenv("DEFAULT_ADMIN_EMAIL", f"{default_username}@kiremisu.local")
+    
+    if default_password:
+        try:
+            UserManager.create_user(default_username, default_password, default_email)
+            logger.info(f"Created default admin user: {default_username}")
+        except ValueError as e:
+            if "already exists" in str(e):
+                logger.debug(f"Default admin user already exists: {default_username}")
+            else:
+                logger.error(f"Failed to create default admin user: {e}")
+    else:
+        logger.warning("No DEFAULT_ADMIN_PASSWORD environment variable set - no default admin user created")
+    
+    # Create additional demo users for development (only if not in production)
+    if os.getenv("ENVIRONMENT", "development").lower() != "production":
+        try:
+            # Only create demo users if they don't already exist and we're not in production
+            if default_username != "demo":  # Don't create demo if admin is already demo
+                UserManager.create_user("demo", "demo123", "demo@kiremisu.local")
+                logger.info("Created demo user for development")
+        except ValueError as e:
+            if "already exists" not in str(e):
+                logger.error(f"Failed to create demo user: {e}")
 
-# Initialize demo users on module load
-initialize_demo_users()
+# Initialize default users on module load
+initialize_default_users()
 
 def create_jwt_token(user_data: Dict[str, Any]) -> str:
     """Create a JWT token for the user."""
