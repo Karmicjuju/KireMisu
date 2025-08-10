@@ -215,6 +215,7 @@ async def broadcast_test(db: AsyncSession):
         body="This is a broadcast test notification",
         notification_type="system_alert",
         data={"broadcast": True},
+        db=db,  # Pass database session for subscription updates
     )
 
     print(f"✅ Broadcast complete: {results}")

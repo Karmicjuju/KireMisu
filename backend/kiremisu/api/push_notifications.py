@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field, validator, HttpUrl
 from kiremisu.database.connection import get_db, get_db_session
 from kiremisu.database.models import PushSubscription, Notification, Series, Chapter
 from kiremisu.core.config import get_settings
-from kiremisu.core.auth import get_api_key, get_optional_api_key, check_rate_limit
+from kiremisu.core.auth import get_current_user
 
 # Simple metrics stub
 def track_api_request(operation: str):
@@ -146,7 +146,7 @@ class PushNotificationRequest(BaseModel):
 @router.get("/vapid-public-key", response_model=VapidKeysResponse)
 async def get_vapid_public_key(
     request: Request,
-    api_key: Optional[str] = Depends(get_optional_api_key)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get the VAPID public key for push subscriptions.
     
@@ -154,14 +154,7 @@ async def get_vapid_public_key(
     """
     track_api_request("push_get_vapid_key")
     
-    # Rate limiting for unauthenticated requests
-    if not api_key:
-        client_ip = request.client.host if request.client else "unknown"
-        if not check_rate_limit(client_ip, "vapid-key", max_requests=20, window_minutes=5):
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Rate limit exceeded. Too many requests for VAPID key.",
-            )
+    # All requests now require JWT authentication
 
     vapid_public_key = settings.vapid_public_key
     if not vapid_public_key:
@@ -178,18 +171,12 @@ async def subscribe_to_push(
     subscription: PushSubscriptionCreate,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    current_user: dict = Depends(get_current_user),
 ):
     """Subscribe to push notifications. Requires authentication."""
     track_api_request("push_subscribe")
     
-    # Rate limiting per client IP
-    client_ip = request.client.host if request.client else "unknown"
-    if not check_rate_limit(client_ip, "subscribe", max_requests=5, window_minutes=5):
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Rate limit exceeded. Too many subscription attempts.",
-        )
+    # JWT authentication provides user-based rate limiting
 
     # Check if subscription already exists
     endpoint_str = str(subscription.endpoint)
@@ -266,7 +253,7 @@ async def subscribe_to_push(
 async def unsubscribe_from_push(
     subscription_id: UUID,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    current_user: dict = Depends(get_current_user),
 ):
     """Unsubscribe from push notifications. Requires authentication."""
     track_api_request("push_unsubscribe")
@@ -302,7 +289,7 @@ class UnsubscribeByEndpointRequest(BaseModel):
 async def unsubscribe_by_endpoint(
     request_data: UnsubscribeByEndpointRequest,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    current_user: dict = Depends(get_current_user),
 ):
     """Unsubscribe from push notifications by endpoint. Requires authentication."""
     track_api_request("push_unsubscribe_by_endpoint")
@@ -334,7 +321,7 @@ async def unsubscribe_by_endpoint(
 async def list_subscriptions(
     active_only: bool = True,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    current_user: dict = Depends(get_current_user),
 ):
     """List all push subscriptions. Requires authentication."""
     track_api_request("push_list_subscriptions")
@@ -364,7 +351,7 @@ async def test_push_notification(
     subscription_id: UUID,
     request: TestPushRequest,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    current_user: dict = Depends(get_current_user),
 ):
     """Send a test push notification to a specific subscription. Requires authentication."""
     track_api_request("push_test_notification")
@@ -407,7 +394,7 @@ async def send_manual_push(
     request: PushNotificationRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    current_user: dict = Depends(get_current_user),
 ):
     """Send a manual push notification. Requires authentication."""
     track_api_request("push_send_manual")
@@ -535,6 +522,7 @@ async def send_push_to_multiple(
     silent: bool = False,
     data: Optional[Dict[str, Any]] = None,
     batch_size: int = 10,  # Process in batches to avoid overwhelming the system
+    db: Optional[AsyncSession] = None,  # Pass database session for subscription updates
 ):
     """Send push notifications to multiple subscriptions in parallel."""
     
@@ -553,6 +541,7 @@ async def send_push_to_multiple(
             badge=badge,
             tag=tag,
             data=notification_data,
+            db=db,  # Pass database session for subscription updates
         )
     
     # Process subscriptions in batches to avoid too many concurrent connections
@@ -621,6 +610,7 @@ async def send_push_to_multiple_background(
                     require_interaction=require_interaction,
                     silent=silent,
                     data=data,
+                    db=db,  # Pass the database session
                 )
             else:
                 logger.warning("No active subscriptions found for background push task")
@@ -666,4 +656,5 @@ async def send_chapter_notification(
         notification_type="new_chapter",
         icon=series.cover_url,
         data=data,
+        db=db,  # Pass database session for subscription updates
     )
