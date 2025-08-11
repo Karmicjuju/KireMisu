@@ -18,7 +18,7 @@ from pywebpush import webpush, WebPushException
 from pydantic import BaseModel, Field, validator, HttpUrl
 
 from kiremisu.database.connection import get_db, get_db_session
-from kiremisu.database.models import PushSubscription, Notification, Series, Chapter
+from kiremisu.database.models import PushSubscription, Notification, Series, Chapter, User
 from kiremisu.core.config import get_settings
 from kiremisu.core.auth import get_current_user
 
@@ -146,7 +146,7 @@ class PushNotificationRequest(BaseModel):
 @router.get("/vapid-public-key", response_model=VapidKeysResponse)
 async def get_vapid_public_key(
     request: Request,
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Get the VAPID public key for push subscriptions.
     
@@ -171,17 +171,23 @@ async def subscribe_to_push(
     subscription: PushSubscriptionCreate,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """Subscribe to push notifications. Requires authentication."""
     track_api_request("push_subscribe")
     
-    # JWT authentication provides user-based rate limiting
-
-    # Check if subscription already exists
+    # Get user ID - handle both User model and dict for backwards compatibility
+    user_id = current_user.id if hasattr(current_user, 'id') else current_user.get('id')
+    
+    # Check if subscription already exists for this user
     endpoint_str = str(subscription.endpoint)
     existing = await db.execute(
-        select(PushSubscription).where(PushSubscription.endpoint == endpoint_str)
+        select(PushSubscription).where(
+            and_(
+                PushSubscription.endpoint == endpoint_str,
+                PushSubscription.user_id == user_id
+            )
+        )
     )
     existing_sub = existing.scalar_one_or_none()
 
@@ -216,6 +222,7 @@ async def subscribe_to_push(
 
     # Create new subscription
     new_subscription = PushSubscription(
+        user_id=user_id,
         endpoint=endpoint_str,
         keys=subscription.keys,
         user_agent=subscription.user_agent,
@@ -253,13 +260,21 @@ async def subscribe_to_push(
 async def unsubscribe_from_push(
     subscription_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """Unsubscribe from push notifications. Requires authentication."""
     track_api_request("push_unsubscribe")
+    
+    # Get user ID
+    user_id = current_user.id if hasattr(current_user, 'id') else current_user.get('id')
 
     result = await db.execute(
-        select(PushSubscription).where(PushSubscription.id == subscription_id)
+        select(PushSubscription).where(
+            and_(
+                PushSubscription.id == subscription_id,
+                PushSubscription.user_id == user_id
+            )
+        )
     )
     subscription = result.scalar_one_or_none()
 
@@ -289,13 +304,21 @@ class UnsubscribeByEndpointRequest(BaseModel):
 async def unsubscribe_by_endpoint(
     request_data: UnsubscribeByEndpointRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """Unsubscribe from push notifications by endpoint. Requires authentication."""
     track_api_request("push_unsubscribe_by_endpoint")
+    
+    # Get user ID
+    user_id = current_user.id if hasattr(current_user, 'id') else current_user.get('id')
 
     result = await db.execute(
-        select(PushSubscription).where(PushSubscription.endpoint == request_data.endpoint)
+        select(PushSubscription).where(
+            and_(
+                PushSubscription.endpoint == request_data.endpoint,
+                PushSubscription.user_id == user_id
+            )
+        )
     )
     subscription = result.scalar_one_or_none()
 
@@ -321,12 +344,15 @@ async def unsubscribe_by_endpoint(
 async def list_subscriptions(
     active_only: bool = True,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    """List all push subscriptions. Requires authentication."""
+    """List push subscriptions for current user. Requires authentication."""
     track_api_request("push_list_subscriptions")
+    
+    # Get user ID
+    user_id = current_user.id if hasattr(current_user, 'id') else current_user.get('id')
 
-    query = select(PushSubscription)
+    query = select(PushSubscription).where(PushSubscription.user_id == user_id)
     if active_only:
         query = query.where(PushSubscription.is_active == True)
 
@@ -351,15 +377,22 @@ async def test_push_notification(
     subscription_id: UUID,
     request: TestPushRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """Send a test push notification to a specific subscription. Requires authentication."""
     track_api_request("push_test_notification")
+    
+    # Get user ID
+    user_id = current_user.id if hasattr(current_user, 'id') else current_user.get('id')
 
-    # Get subscription
+    # Get subscription for current user only
     result = await db.execute(
         select(PushSubscription).where(
-            and_(PushSubscription.id == subscription_id, PushSubscription.is_active == True)
+            and_(
+                PushSubscription.id == subscription_id,
+                PushSubscription.user_id == user_id,
+                PushSubscription.is_active == True
+            )
         )
     )
     subscription = result.scalar_one_or_none()
@@ -394,13 +427,21 @@ async def send_manual_push(
     request: PushNotificationRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    """Send a manual push notification. Requires authentication."""
+    """Send a manual push notification to user's subscriptions. Requires authentication."""
     track_api_request("push_send_manual")
+    
+    # Get user ID
+    user_id = current_user.id if hasattr(current_user, 'id') else current_user.get('id')
 
-    # Get target subscriptions
-    query = select(PushSubscription).where(PushSubscription.is_active == True)
+    # Get target subscriptions for current user only
+    query = select(PushSubscription).where(
+        and_(
+            PushSubscription.is_active == True,
+            PushSubscription.user_id == user_id
+        )
+    )
 
     if request.subscription_ids:
         query = query.where(PushSubscription.id.in_(request.subscription_ids))

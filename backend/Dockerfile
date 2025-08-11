@@ -14,8 +14,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 # Copy dependency files first for better caching
 COPY pyproject.toml uv.lock ./
 
-# Create virtual environment and install dependencies (including dev for development)
-RUN uv sync --frozen
+# Create virtual environment and install dependencies (production only)
+RUN uv sync --frozen --no-dev
 
 # Copy backend source
 COPY backend/ ./backend/
@@ -36,5 +36,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 
 # Use startup script as entrypoint
 ENTRYPOINT ["/app/startup.sh"]
-# Default command for startup script
-CMD ["uv", "run", "uvicorn", "kiremisu.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Default command for production
+CMD ["uv", "run", "uvicorn", "kiremisu.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]

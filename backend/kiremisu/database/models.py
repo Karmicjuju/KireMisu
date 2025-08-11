@@ -18,6 +18,7 @@ from sqlalchemy import (
     Table,
     Column,
     TIMESTAMP,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -27,6 +28,123 @@ class Base(DeclarativeBase):
     """Base class for all database models."""
 
     pass
+
+
+class User(Base):
+    """User model for authentication and authorization."""
+
+    __tablename__ = "users"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    username: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    
+    # User profile
+    display_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    # Account status
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    
+    # Security
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_failed_login: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    
+    # API tokens (for future use)
+    api_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, unique=True, index=True)
+    api_key_created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    
+    # Preferences
+    preferences: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+    last_login: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    
+    # Relationships
+    push_subscriptions: Mapped[list["PushSubscription"]] = relationship(
+        "PushSubscription", back_populates="user", cascade="all, delete-orphan"
+    )
+    notifications: Mapped[list["Notification"]] = relationship(
+        "Notification", back_populates="user", cascade="all, delete-orphan"
+    )
+    reading_progress: Mapped[list["ReadingProgress"]] = relationship(
+        "ReadingProgress", back_populates="user", cascade="all, delete-orphan"
+    )
+    
+    __table_args__ = (
+        # Index for login lookups
+        Index("ix_users_username_active", "username", "is_active"),
+        Index("ix_users_email_active", "email", "is_active"),
+        # Index for admin queries
+        Index("ix_users_admin_active", "is_admin", "is_active"),
+        # Check constraints
+        CheckConstraint(
+            "email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}$'",
+            name="ck_users_email_format",
+        ),
+        CheckConstraint(
+            "length(username) >= 3",
+            name="ck_users_username_length",
+        ),
+    )
+
+
+class ReadingProgress(Base):
+    """User-specific reading progress tracking."""
+
+    __tablename__ = "reading_progress"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    chapter_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("chapters.id", ondelete="CASCADE"), nullable=False
+    )
+    
+    # Reading state
+    last_page_read: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_pages: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    
+    # Timestamps
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+    last_read_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="reading_progress")
+    chapter: Mapped["Chapter"] = relationship("Chapter")
+    
+    __table_args__ = (
+        # Unique constraint for user-chapter combination
+        UniqueConstraint("user_id", "chapter_id", name="uq_reading_progress_user_chapter"),
+        # Indexes for querying
+        Index("ix_reading_progress_user_id", "user_id"),
+        Index("ix_reading_progress_chapter_id", "chapter_id"),
+        Index("ix_reading_progress_user_completed", "user_id", "is_completed"),
+        Index("ix_reading_progress_last_read", "user_id", "last_read_at"),
+    )
 
 
 # Association table for many-to-many relationship between Series and Tags
@@ -102,6 +220,9 @@ class Series(Base):
     __tablename__ = "series"
 
     id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[Optional[UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
+    )
     title_primary: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
     title_alternative: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -282,6 +403,9 @@ class UserList(Base):
     __tablename__ = "user_lists"
 
     id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     series_ids: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
@@ -459,6 +583,9 @@ class Notification(Base):
     __tablename__ = "notifications"
 
     id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     notification_type: Mapped[str] = mapped_column(
         String(50), nullable=False, default="new_chapter"
     )
@@ -486,14 +613,17 @@ class Notification(Base):
     )
 
     # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="notifications")
     series: Mapped[Optional["Series"]] = relationship("Series", foreign_keys=[series_id])
     chapter: Mapped[Optional["Chapter"]] = relationship("Chapter", foreign_keys=[chapter_id])
 
     __table_args__ = (
-        # Compound index for efficient unread notification queries
-        Index("ix_notifications_unread_created", "is_read", "created_at"),
+        # Compound index for efficient unread notification queries per user
+        Index("ix_notifications_user_unread_created", "user_id", "is_read", "created_at"),
         # Index for querying notifications by series
         Index("ix_notifications_series", "series_id", "created_at"),
+        # Index for user notifications
+        Index("ix_notifications_user_created", "user_id", "created_at"),
         # Check constraint for notification type
         CheckConstraint(
             "notification_type IN ('new_chapter', 'chapter_available', 'download_complete', 'download_failed', 'series_complete', 'library_update', 'system_alert', 'series_update')",
@@ -506,25 +636,19 @@ class PushSubscription(Base):
     """Push notification subscriptions for web push."""
 
     __tablename__ = "push_subscriptions"
-    __table_args__ = (
-        # Index for active subscriptions
-        Index("ix_push_subscriptions_active", "is_active"),
-        # Index for endpoint lookup
-        Index("ix_push_subscriptions_endpoint", "endpoint"),
-        # Unique constraint on endpoint
-        CheckConstraint(
-            "endpoint IS NOT NULL AND endpoint != ''",
-            name="ck_push_subscription_endpoint_not_empty",
-        ),
-    )
 
     # Primary key
     id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid4, nullable=False
     )
+    
+    # User relationship
+    user_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
 
-    # Push subscription endpoint URL
-    endpoint: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    # Push subscription endpoint URL (unique per user, not globally)
+    endpoint: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Encryption keys for push messages
     keys: Mapped[dict] = mapped_column(JSONB, nullable=False)
@@ -551,4 +675,21 @@ class PushSubscription(Base):
         default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
         onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
         nullable=False,
+    )
+    
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="push_subscriptions")
+    
+    __table_args__ = (
+        # Unique constraint on user_id + endpoint combination
+        UniqueConstraint("user_id", "endpoint", name="uq_push_subscription_user_endpoint"),
+        # Index for active subscriptions per user
+        Index("ix_push_subscriptions_user_active", "user_id", "is_active"),
+        # Index for endpoint lookup
+        Index("ix_push_subscriptions_endpoint", "endpoint"),
+        # Check constraint on endpoint
+        CheckConstraint(
+            "endpoint IS NOT NULL AND endpoint != ''",
+            name="ck_push_subscription_endpoint_not_empty",
+        ),
     )

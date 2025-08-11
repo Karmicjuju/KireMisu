@@ -2,7 +2,6 @@
 
 import logging
 import jwt
-import hashlib
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
@@ -10,10 +9,12 @@ from typing import Optional, Dict, Any
 from fastapi import HTTPException, status, Depends, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
+from passlib.context import CryptContext
 
 from kiremisu.core.config import get_settings
 from kiremisu.database.connection import get_db
+from kiremisu.database.models import User
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -24,6 +25,9 @@ security = HTTPBearer(auto_error=False)
 # JWT settings
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 # User management functions
@@ -44,9 +48,8 @@ class UserManager:
         if username in cls._users:
             raise ValueError(f"User {username} already exists")
             
-        # Hash password with salt
-        salt = secrets.token_hex(16)
-        password_hash = hashlib.sha256((password + salt).encode()).hexdigest()
+        # Hash password with bcrypt
+        password_hash = pwd_context.hash(password)
         
         user_id = f"user_{secrets.token_hex(8)}"
         user_data = {
@@ -54,14 +57,13 @@ class UserManager:
             "username": username,
             "email": email,
             "password_hash": password_hash,
-            "salt": salt,
             "created_at": datetime.utcnow(),
             "is_active": True
         }
         
         cls._users[username] = user_data
         logger.info(f"Created user: {username}")
-        return {k: v for k, v in user_data.items() if k not in ['password_hash', 'salt']}
+        return {k: v for k, v in user_data.items() if k not in ['password_hash']}
     
     @classmethod
     def verify_user(cls, username: str, password: str) -> Optional[Dict[str, Any]]:
@@ -70,13 +72,9 @@ class UserManager:
         if not user_data or not user_data.get('is_active'):
             return None
             
-        # Check password
-        salt = user_data['salt']
-        expected_hash = user_data['password_hash']
-        provided_hash = hashlib.sha256((password + salt).encode()).hexdigest()
-        
-        if expected_hash == provided_hash:
-            return {k: v for k, v in user_data.items() if k not in ['password_hash', 'salt']}
+        # Check password with bcrypt
+        if pwd_context.verify(password, user_data['password_hash']):
+            return {k: v for k, v in user_data.items() if k not in ['password_hash']}
         return None
     
     @classmethod
@@ -84,7 +82,7 @@ class UserManager:
         """Get user by ID."""
         for user_data in cls._users.values():
             if user_data['id'] == user_id:
-                return {k: v for k, v in user_data.items() if k not in ['password_hash', 'salt']}
+                return {k: v for k, v in user_data.items() if k not in ['password_hash']}
         return None
 
 # Initialize default users from environment
@@ -109,29 +107,178 @@ def initialize_default_users():
     else:
         logger.warning("No DEFAULT_ADMIN_PASSWORD environment variable set - no default admin user created")
     
-    # Create additional demo users for development (only if not in production)
-    if os.getenv("ENVIRONMENT", "development").lower() != "production":
-        try:
-            # Only create demo users if they don't already exist and we're not in production
-            if default_username != "demo":  # Don't create demo if admin is already demo
-                UserManager.create_user("demo", "demo123", "demo@kiremisu.local")
-                logger.info("Created demo user for development")
-        except ValueError as e:
-            if "already exists" not in str(e):
-                logger.error(f"Failed to create demo user: {e}")
+    # Demo users removed for security - no hardcoded test credentials
 
 # Initialize default users on module load
 initialize_default_users()
 
+
+# Database-backed user management functions
+async def create_user_db(
+    db: AsyncSession,
+    username: str,
+    email: str,
+    password: str,
+    is_admin: bool = False
+) -> User:
+    """Create a new user in the database."""
+    # Check if user already exists
+    result = await db.execute(
+        select(User).where(
+            (User.username == username) | (User.email == email)
+        )
+    )
+    if result.scalar_one_or_none():
+        raise ValueError("User with this username or email already exists")
+    
+    # Create new user
+    user = User(
+        username=username,
+        email=email,
+        password_hash=pwd_context.hash(password),
+        is_admin=is_admin,
+        is_active=True,
+        email_verified=False,
+    )
+    
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    
+    logger.info(f"Created user in database: {username}")
+    return user
+
+
+async def verify_user_db(
+    db: AsyncSession,
+    username_or_email: str,
+    password: str
+) -> Optional[User]:
+    """Verify user credentials against database."""
+    # Find user by username or email
+    result = await db.execute(
+        select(User).where(
+            (User.username == username_or_email) | (User.email == username_or_email)
+        )
+    )
+    user = result.scalar_one_or_none()
+    
+    if not user or not user.is_active:
+        return None
+    
+    # Check if account is locked
+    if user.locked_until and user.locked_until > datetime.utcnow():
+        logger.warning(f"Login attempt for locked account: {username_or_email}")
+        return None
+    
+    # Verify password
+    if not pwd_context.verify(password, user.password_hash):
+        # Increment failed login attempts
+        user.failed_login_attempts += 1
+        user.last_failed_login = datetime.utcnow()
+        
+        # Lock account after 5 failed attempts
+        if user.failed_login_attempts >= 5:
+            user.locked_until = datetime.utcnow() + timedelta(minutes=30)
+            logger.warning(f"Account locked due to failed login attempts: {username_or_email}")
+        
+        await db.commit()
+        return None
+    
+    # Reset failed login attempts on successful login
+    user.failed_login_attempts = 0
+    user.last_login = datetime.utcnow()
+    user.locked_until = None
+    await db.commit()
+    
+    return user
+
+
+async def get_user_by_id_db(db: AsyncSession, user_id: str) -> Optional[User]:
+    """Get user by ID from database."""
+    try:
+        from uuid import UUID
+        user_uuid = UUID(user_id)
+    except (ValueError, TypeError):
+        return None
+    
+    result = await db.execute(
+        select(User).where(User.id == user_uuid)
+    )
+    return result.scalar_one_or_none()
+
+
+async def update_user_password(
+    db: AsyncSession,
+    user: User,
+    new_password: str
+) -> None:
+    """Update user password."""
+    user.password_hash = pwd_context.hash(new_password)
+    user.updated_at = datetime.utcnow()
+    await db.commit()
+    logger.info(f"Password updated for user: {user.username}")
+
+
+async def initialize_admin_user(db: AsyncSession) -> None:
+    """Initialize admin user from environment variables."""
+    import os
+    
+    admin_username = os.getenv("DEFAULT_ADMIN_USERNAME", "admin")
+    admin_password = os.getenv("DEFAULT_ADMIN_PASSWORD")
+    admin_email = os.getenv("DEFAULT_ADMIN_EMAIL", f"{admin_username}@kiremisu.local")
+    
+    if not admin_password:
+        logger.warning("No DEFAULT_ADMIN_PASSWORD set - skipping admin user creation")
+        return
+    
+    try:
+        # Check if admin already exists
+        result = await db.execute(
+            select(User).where(
+                (User.username == admin_username) | (User.email == admin_email)
+            )
+        )
+        if result.scalar_one_or_none():
+            logger.debug(f"Admin user already exists: {admin_username}")
+            return
+        
+        # Create admin user
+        await create_user_db(
+            db=db,
+            username=admin_username,
+            email=admin_email,
+            password=admin_password,
+            is_admin=True
+        )
+        logger.info(f"Created admin user: {admin_username}")
+        
+    except Exception as e:
+        logger.error(f"Failed to create admin user: {e}")
+
 def create_jwt_token(user_data: Dict[str, Any]) -> str:
     """Create a JWT token for the user."""
-    payload = {
-        "user_id": user_data["id"],
-        "username": user_data["username"],
-        "email": user_data.get("email"),
-        "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS),
-        "iat": datetime.utcnow(),
-    }
+    # Handle both dict and User model
+    if hasattr(user_data, 'id'):
+        # User model
+        payload = {
+            "user_id": str(user_data.id),
+            "username": user_data.username,
+            "email": user_data.email,
+            "is_admin": user_data.is_admin,
+            "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS),
+            "iat": datetime.utcnow(),
+        }
+    else:
+        # Dict (legacy support)
+        payload = {
+            "user_id": user_data["id"],
+            "username": user_data["username"],
+            "email": user_data.get("email"),
+            "is_admin": user_data.get("is_admin", False),
+            "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS),
+            "iat": datetime.utcnow(),
+        }
     
     return jwt.encode(payload, settings.secret_key, algorithm=JWT_ALGORITHM)
 
@@ -188,8 +335,11 @@ async def get_api_key(authorization: Optional[str] = Header(None)) -> str:
     
     return token
 
-async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
-    """Get the current authenticated user."""
+async def get_current_user(
+    authorization: Optional[str] = Header(None),
+    db: AsyncSession = Depends(get_db)
+) -> User:
+    """Get the current authenticated user from database."""
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -212,16 +362,64 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[
     # Verify JWT token
     payload = verify_jwt_token(token)
     
-    # Get user data
-    user_data = UserManager.get_user_by_id(payload["user_id"])
-    if not user_data or not user_data.get("is_active"):
+    # Get user from database
+    user = await get_user_by_id_db(db, payload["user_id"])
+    if not user or not user.is_active:
+        # Fallback to in-memory user manager for backwards compatibility
+        user_data = UserManager.get_user_by_id(payload["user_id"])
+        if user_data and user_data.get("is_active"):
+            # Return a mock User object for compatibility
+            from uuid import uuid4
+            mock_user = User(
+                id=uuid4(),
+                username=user_data["username"],
+                email=user_data.get("email", f"{user_data['username']}@kiremisu.local"),
+                password_hash="",
+                is_active=True,
+                is_admin=False
+            )
+            return mock_user
+        
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User account not found or inactive",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    return user_data
+    # Check if account is locked
+    if user.locked_until and user.locked_until > datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is temporarily locked due to failed login attempts",
+        )
+    
+    return user
+
+
+async def get_current_user_optional(
+    authorization: Optional[str] = Header(None),
+    db: AsyncSession = Depends(get_db)
+) -> Optional[User]:
+    """Get the current authenticated user if available, otherwise return None."""
+    if not authorization:
+        return None
+    
+    try:
+        return await get_current_user(authorization, db)
+    except HTTPException:
+        return None
+
+
+async def require_admin(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """Require the current user to be an admin."""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return current_user
 
 
 async def get_optional_api_key(

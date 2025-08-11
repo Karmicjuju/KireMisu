@@ -19,6 +19,13 @@ backend_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_dir))
 
 from kiremisu.core.config import settings
+
+# Temporarily skip database initialization for migrations
+import os
+os.environ['SKIP_DB_INIT'] = '1'
+
+# Import Base and models directly
+sys.path.insert(0, str(backend_dir))
 from kiremisu.database.models import Base
 
 # this is the Alembic Config object, which provides
