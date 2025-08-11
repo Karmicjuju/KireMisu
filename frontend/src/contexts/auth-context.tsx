@@ -110,7 +110,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username_or_email: username, password }),
       });
 
       if (!response.ok) {
@@ -218,26 +218,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return null;
   };
 
-  // Generate a demo token for development
-  const generateDemoToken = (): string => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result = '';
-    for (let i = 0; i < 32; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return `demo_${result}`;
-  };
-
-  // Generate an auth token based on user ID
-  const generateAuthToken = (userId: string): string => {
-    const timestamp = Date.now();
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let random = '';
-    for (let i = 0; i < 16; i++) {
-      random += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return `usr_${userId.slice(-8)}_${timestamp}_${random}`;
-  };
 
   const value: AuthContextType = {
     user,

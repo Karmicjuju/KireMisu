@@ -39,7 +39,7 @@ services:
       - ENVIRONMENT=development
       # Default admin user configuration
       - DEFAULT_ADMIN_USERNAME=admin
-      - DEFAULT_ADMIN_PASSWORD=admin123
+      - DEFAULT_ADMIN_PASSWORD=KireMisu2025
       - DEFAULT_ADMIN_EMAIL=admin@kiremisu.local
     ports:
       - "8000:8000"

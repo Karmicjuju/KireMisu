@@ -14,7 +14,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [showDemoUsers, setShowDemoUsers] = useState(false);
   const { login, isLoading } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -34,18 +33,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
     }
   };
 
-  const handleDemoLogin = async (demoUsername: string, demoPassword: string) => {
-    setUsername(demoUsername);
-    setPassword(demoPassword);
-    setError('');
-
-    try {
-      await login(demoUsername, demoPassword);
-      onSuccess?.();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Login failed');
-    }
-  };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-muted/30 to-background p-6">
@@ -123,55 +110,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
               )}
             </Button>
           </form>
-
-          {/* Demo Users Section */}
-          <div className="mt-6 pt-6 border-t border-border">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowDemoUsers(!showDemoUsers)}
-              className="w-full text-muted-foreground hover:text-foreground"
-            >
-              {showDemoUsers ? '↑ Hide' : '↓ Show'} demo accounts
-            </Button>
-
-            {showDemoUsers && (
-              <div className="mt-4 space-y-2">
-                <p className="text-xs text-muted-foreground text-center mb-3">
-                  Demo accounts for development and testing
-                </p>
-                
-                <div className="grid gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDemoLogin('demo', 'demo123')}
-                    disabled={isLoading}
-                    className="justify-start text-left h-auto p-3"
-                  >
-                    <div>
-                      <div className="font-medium">demo / demo123</div>
-                      <div className="text-xs text-muted-foreground">Regular user account</div>
-                    </div>
-                  </Button>
-                  
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDemoLogin('admin', 'admin123')}
-                    disabled={isLoading}
-                    className="justify-start text-left h-auto p-3"
-                  >
-                    <div>
-                      <div className="font-medium">admin / admin123</div>
-                      <div className="text-xs text-muted-foreground">Administrator account</div>
-                    </div>
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Footer */}

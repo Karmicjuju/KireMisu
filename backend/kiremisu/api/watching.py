@@ -11,6 +11,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.database.connection import get_db
+from kiremisu.core.auth import get_current_user
 from kiremisu.database.schemas import WatchingResponse, WatchingContextRequest, ErrorResponse
 from kiremisu.services.watching_service import WatchingService
 from kiremisu.core.error_handler import create_not_found_error, create_standardized_error_response
@@ -31,8 +32,7 @@ async def get_watching_list(
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0, description="Number of series to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of series to return"),
-    # TODO: Add user context parameter for multi-user support
-    # user_context: Optional[UserContextBase] = Depends(get_current_user)
+    current_user = Depends(get_current_user),
 ) -> List[WatchingResponse]:
     """Get list of all watched series.
 
@@ -61,8 +61,7 @@ async def get_watching_list(
 async def get_watching_status(
     series_id: UUID,
     db: AsyncSession = Depends(get_db),
-    # TODO: Add user context for ownership validation
-    # user_context: Optional[UserContextBase] = Depends(get_current_user)
+    current_user = Depends(get_current_user),
 ) -> WatchingResponse:
     """Get watching status for a specific series.
 
@@ -105,8 +104,7 @@ async def watch_series(
     request: Request,
     series_id: UUID,
     db: AsyncSession = Depends(get_db),
-    # TODO: Add user context for ownership validation and user-specific watching
-    # user_context: Optional[UserContextBase] = Depends(get_current_user)
+    current_user = Depends(get_current_user),
 ) -> WatchingResponse:
     """Start watching a series.
 
@@ -141,8 +139,7 @@ async def unwatch_series(
     request: Request,
     series_id: UUID,
     db: AsyncSession = Depends(get_db),
-    # TODO: Add user context for ownership validation
-    # user_context: Optional[UserContextBase] = Depends(get_current_user)
+    current_user = Depends(get_current_user),
 ) -> dict:
     """Stop watching a series.
 

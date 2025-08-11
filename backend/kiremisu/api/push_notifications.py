@@ -50,21 +50,44 @@ class PushSubscriptionCreate(BaseModel):
     def validate_endpoint(cls, v):
         """Validate push notification endpoint URL."""
         url = str(v)
-        # Check for valid push service domains
-        valid_domains = [
+        
+        # Parse URL and validate structure
+        parsed = urlparse(url)
+        
+        # Must use HTTPS (except localhost for development)
+        if parsed.scheme != 'https':
+            if not (parsed.netloc in ['localhost', '127.0.0.1'] or parsed.netloc.startswith('localhost:')):
+                raise ValueError("Push notification endpoints must use HTTPS")
+        
+        # Check for valid push service domains (exact match for security)
+        valid_domains = {
             'fcm.googleapis.com',
-            'updates.push.services.mozilla.com',
+            'updates.push.services.mozilla.com', 
+            'updates-autopush.stage.mozaws.net',  # Mozilla staging
+            'updates-autopush.dev.mozaws.net',    # Mozilla dev
             'notify.windows.com',
             'push.apple.com',
             'web.push.apple.com',
-            'android.googleapis.com'
-        ]
+            'android.googleapis.com',
+            'localhost',  # Development only
+            '127.0.0.1'   # Development only
+        }
         
-        parsed = urlparse(url)
-        if not any(domain in parsed.netloc for domain in valid_domains):
-            # Allow localhost for testing
-            if 'localhost' not in parsed.netloc and '127.0.0.1' not in parsed.netloc:
-                raise ValueError(f"Invalid push service endpoint domain: {parsed.netloc}")
+        # Extract hostname without port
+        hostname = parsed.netloc.split(':')[0]
+        
+        if hostname not in valid_domains:
+            raise ValueError(f"Invalid push service endpoint domain: {hostname}. Only trusted push services are allowed.")
+        
+        # Additional security checks
+        if len(url) > 2000:  # Reasonable URL length limit
+            raise ValueError("Push notification endpoint URL too long")
+            
+        # Check for suspicious patterns
+        suspicious_patterns = ['javascript:', 'data:', 'vbscript:', 'file:', 'ftp:']
+        url_lower = url.lower()
+        if any(pattern in url_lower for pattern in suspicious_patterns):
+            raise ValueError("Invalid URL scheme detected")
         
         return v
     
@@ -88,11 +111,32 @@ class PushSubscriptionCreate(BaseModel):
     
     @validator('user_agent')
     def sanitize_user_agent(cls, v):
-        """Sanitize user agent string."""
-        if v:
-            # HTML escape to prevent XSS
-            return html.escape(v[:500])  # Limit length and escape
-        return v
+        """Sanitize user agent string to prevent XSS and injection attacks."""
+        if not v:
+            return None
+            
+        # Strip whitespace and limit length
+        v = v.strip()[:500]
+        
+        # HTML escape to prevent XSS
+        v = html.escape(v)
+        
+        # Additional sanitization: remove control characters and non-printable chars
+        v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
+        
+        # Remove potentially dangerous patterns
+        dangerous_patterns = [
+            r'<script[^>]*>',
+            r'javascript:',
+            r'vbscript:',
+            r'data:',
+            r'on\w+\s*=',  # Event handlers like onclick=
+        ]
+        
+        for pattern in dangerous_patterns:
+            v = re.sub(pattern, '', v, flags=re.IGNORECASE)
+        
+        return v if v else None
 
     class Config:
         json_schema_extra = {

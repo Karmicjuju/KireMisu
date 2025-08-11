@@ -3,8 +3,9 @@
 import logging
 import jwt
 import secrets
+import re
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from fastapi import HTTPException, status, Depends, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -26,91 +27,99 @@ security = HTTPBearer(auto_error=False)
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hashing - Use bcrypt with cost factor 12 for security
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
+
+# Token blacklist for secure logout
+_token_blacklist: set = set()
+
+# Password validation patterns
+PASSWORD_MIN_LENGTH = 8
+PASSWORD_PATTERNS = {
+    "uppercase": re.compile(r"[A-Z]"),
+    "lowercase": re.compile(r"[a-z]"),
+    "digit": re.compile(r"[0-9]"),
+    "special": re.compile(r"[!@#$%^&*(),.?\":{}|<>]"),
+}
+
+# Rate limiting for authentication
+_auth_attempts: Dict[str, List[datetime]] = {}
+MAX_AUTH_ATTEMPTS = 5
+AUTH_WINDOW_MINUTES = 30
 
 
-# User management functions
-class UserManager:
-    """Simple user management for demonstration purposes.
+def validate_password_complexity(password: str) -> List[str]:
+    """Validate password complexity requirements.
     
-    In a production environment, this would integrate with your existing
-    user authentication system (e.g., OAuth, LDAP, database users, etc.)
+    Returns:
+        List of validation error messages. Empty list if password is valid.
     """
+    errors = []
     
-    # Simple in-memory user store for demo purposes
-    # In production, this would be backed by a database
-    _users: Dict[str, Dict[str, Any]] = {}
+    if len(password) < PASSWORD_MIN_LENGTH:
+        errors.append(f"Password must be at least {PASSWORD_MIN_LENGTH} characters long")
     
-    @classmethod
-    def create_user(cls, username: str, password: str, email: Optional[str] = None) -> Dict[str, Any]:
-        """Create a new user with hashed password."""
-        if username in cls._users:
-            raise ValueError(f"User {username} already exists")
-            
-        # Hash password with bcrypt
-        password_hash = pwd_context.hash(password)
-        
-        user_id = f"user_{secrets.token_hex(8)}"
-        user_data = {
-            "id": user_id,
-            "username": username,
-            "email": email,
-            "password_hash": password_hash,
-            "created_at": datetime.utcnow(),
-            "is_active": True
-        }
-        
-        cls._users[username] = user_data
-        logger.info(f"Created user: {username}")
-        return {k: v for k, v in user_data.items() if k not in ['password_hash']}
+    if not PASSWORD_PATTERNS["uppercase"].search(password):
+        errors.append("Password must contain at least one uppercase letter")
     
-    @classmethod
-    def verify_user(cls, username: str, password: str) -> Optional[Dict[str, Any]]:
-        """Verify user credentials and return user data if valid."""
-        user_data = cls._users.get(username)
-        if not user_data or not user_data.get('is_active'):
-            return None
-            
-        # Check password with bcrypt
-        if pwd_context.verify(password, user_data['password_hash']):
-            return {k: v for k, v in user_data.items() if k not in ['password_hash']}
-        return None
+    if not PASSWORD_PATTERNS["lowercase"].search(password):
+        errors.append("Password must contain at least one lowercase letter")
     
-    @classmethod
-    def get_user_by_id(cls, user_id: str) -> Optional[Dict[str, Any]]:
-        """Get user by ID."""
-        for user_data in cls._users.values():
-            if user_data['id'] == user_id:
-                return {k: v for k, v in user_data.items() if k not in ['password_hash']}
-        return None
+    if not PASSWORD_PATTERNS["digit"].search(password):
+        errors.append("Password must contain at least one digit")
+    
+    if not PASSWORD_PATTERNS["special"].search(password):
+        errors.append("Password must contain at least one special character (!@#$%^&*(),.?\":{}|<>)")
+    
+    # Check for common weak patterns
+    lower_password = password.lower()
+    weak_patterns = ["password", "123456", "qwerty", "admin", "letmein", "welcome"]
+    for pattern in weak_patterns:
+        if pattern in lower_password:
+            errors.append("Password contains common weak patterns")
+            break
+    
+    return errors
 
-# Initialize default users from environment
-def initialize_default_users():
-    """Initialize default users from environment variables."""
-    import os
+def check_auth_rate_limit(client_ip: str) -> bool:
+    """Check if authentication attempts are within rate limits.
     
-    # Create default admin user from environment
-    default_username = os.getenv("DEFAULT_ADMIN_USERNAME", "admin")
-    default_password = os.getenv("DEFAULT_ADMIN_PASSWORD")
-    default_email = os.getenv("DEFAULT_ADMIN_EMAIL", f"{default_username}@kiremisu.local")
+    Args:
+        client_ip: Client IP address
+        
+    Returns:
+        True if within limits, False if rate limited
+    """
+    now = datetime.utcnow()
+    cutoff_time = now - timedelta(minutes=AUTH_WINDOW_MINUTES)
     
-    if default_password:
-        try:
-            UserManager.create_user(default_username, default_password, default_email)
-            logger.info(f"Created default admin user: {default_username}")
-        except ValueError as e:
-            if "already exists" in str(e):
-                logger.debug(f"Default admin user already exists: {default_username}")
-            else:
-                logger.error(f"Failed to create default admin user: {e}")
+    # Clean old attempts
+    if client_ip in _auth_attempts:
+        _auth_attempts[client_ip] = [
+            attempt_time for attempt_time in _auth_attempts[client_ip]
+            if attempt_time > cutoff_time
+        ]
     else:
-        logger.warning("No DEFAULT_ADMIN_PASSWORD environment variable set - no default admin user created")
+        _auth_attempts[client_ip] = []
     
-    # Demo users removed for security - no hardcoded test credentials
+    # Check if limit exceeded
+    if len(_auth_attempts[client_ip]) >= MAX_AUTH_ATTEMPTS:
+        logger.warning(f"Authentication rate limit exceeded for IP: {client_ip}")
+        return False
+    
+    # Record this attempt
+    _auth_attempts[client_ip].append(now)
+    return True
 
-# Initialize default users on module load
-initialize_default_users()
+def blacklist_token(token: str) -> None:
+    """Add token to blacklist for secure logout."""
+    _token_blacklist.add(token)
+    # In production, this should be stored in Redis or database
+    # and cleaned up periodically
+
+def is_token_blacklisted(token: str) -> bool:
+    """Check if token is blacklisted."""
+    return token in _token_blacklist
 
 
 # Database-backed user management functions
@@ -121,17 +130,51 @@ async def create_user_db(
     password: str,
     is_admin: bool = False
 ) -> User:
-    """Create a new user in the database."""
+    """Create a new user in the database.
+    
+    Args:
+        db: Database session
+        username: Username (must be unique)
+        email: Email address (must be unique and valid)
+        password: Password (must meet complexity requirements)
+        is_admin: Whether user should have admin privileges
+        
+    Returns:
+        Created user
+        
+    Raises:
+        ValueError: If validation fails or user already exists
+    """
+    # Validate inputs
+    if not username or len(username.strip()) < 3:
+        raise ValueError("Username must be at least 3 characters long")
+    
+    if not email or "@" not in email:
+        raise ValueError("Valid email address is required")
+    
+    # Validate password complexity
+    password_errors = validate_password_complexity(password)
+    if password_errors:
+        raise ValueError("Password validation failed: " + "; ".join(password_errors))
+    
+    # Normalize inputs
+    username = username.strip().lower()
+    email = email.strip().lower()
+    
     # Check if user already exists
     result = await db.execute(
         select(User).where(
             (User.username == username) | (User.email == email)
         )
     )
-    if result.scalar_one_or_none():
-        raise ValueError("User with this username or email already exists")
+    existing_user = result.scalar_one_or_none()
+    if existing_user:
+        if existing_user.username == username:
+            raise ValueError("Username is already taken")
+        else:
+            raise ValueError("Email address is already registered")
     
-    # Create new user
+    # Create new user with secure password hash
     user = User(
         username=username,
         email=email,
@@ -139,22 +182,42 @@ async def create_user_db(
         is_admin=is_admin,
         is_active=True,
         email_verified=False,
+        failed_login_attempts=0,
     )
     
     db.add(user)
     await db.commit()
     await db.refresh(user)
     
-    logger.info(f"Created user in database: {username}")
+    logger.info(f"Created user: {username} (admin={is_admin})")
     return user
 
 
 async def verify_user_db(
     db: AsyncSession,
     username_or_email: str,
-    password: str
+    password: str,
+    client_ip: Optional[str] = None
 ) -> Optional[User]:
-    """Verify user credentials against database."""
+    """Verify user credentials against database.
+    
+    Args:
+        db: Database session
+        username_or_email: Username or email address
+        password: Password to verify
+        client_ip: Client IP for rate limiting (optional)
+        
+    Returns:
+        User if authentication successful, None otherwise
+    """
+    # Check rate limiting if IP provided
+    if client_ip and not check_auth_rate_limit(client_ip):
+        logger.warning(f"Authentication rate limit exceeded for IP: {client_ip}")
+        return None
+    
+    # Normalize input
+    username_or_email = username_or_email.strip().lower()
+    
     # Find user by username or email
     result = await db.execute(
         select(User).where(
@@ -163,12 +226,19 @@ async def verify_user_db(
     )
     user = result.scalar_one_or_none()
     
-    if not user or not user.is_active:
+    if not user:
+        # Log attempt but don't specify what was wrong
+        logger.warning(f"Authentication attempt for non-existent user: {username_or_email}")
+        return None
+    
+    if not user.is_active:
+        logger.warning(f"Authentication attempt for inactive user: {user.username}")
         return None
     
     # Check if account is locked
     if user.locked_until and user.locked_until > datetime.utcnow():
-        logger.warning(f"Login attempt for locked account: {username_or_email}")
+        remaining_minutes = (user.locked_until - datetime.utcnow()).seconds // 60
+        logger.warning(f"Authentication attempt for locked account: {user.username} ({remaining_minutes}m remaining)")
         return None
     
     # Verify password
@@ -177,20 +247,23 @@ async def verify_user_db(
         user.failed_login_attempts += 1
         user.last_failed_login = datetime.utcnow()
         
-        # Lock account after 5 failed attempts
+        # Lock account after 5 failed attempts for 30 minutes
         if user.failed_login_attempts >= 5:
             user.locked_until = datetime.utcnow() + timedelta(minutes=30)
-            logger.warning(f"Account locked due to failed login attempts: {username_or_email}")
+            logger.warning(f"Account locked due to {user.failed_login_attempts} failed attempts: {user.username}")
+        else:
+            logger.warning(f"Failed login attempt {user.failed_login_attempts}/5 for user: {user.username}")
         
         await db.commit()
         return None
     
-    # Reset failed login attempts on successful login
+    # Successful authentication - reset security counters
     user.failed_login_attempts = 0
     user.last_login = datetime.utcnow()
     user.locked_until = None
     await db.commit()
     
+    logger.info(f"Successful authentication: {user.username}")
     return user
 
 
@@ -213,15 +286,29 @@ async def update_user_password(
     user: User,
     new_password: str
 ) -> None:
-    """Update user password."""
+    """Update user password with secure hashing.
+    
+    Args:
+        db: Database session
+        user: User to update
+        new_password: New password (already validated)
+    """
     user.password_hash = pwd_context.hash(new_password)
     user.updated_at = datetime.utcnow()
+    
+    # Reset any security flags
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    
     await db.commit()
     logger.info(f"Password updated for user: {user.username}")
 
 
 async def initialize_admin_user(db: AsyncSession) -> None:
-    """Initialize admin user from environment variables."""
+    """Initialize admin user from environment variables.
+    
+    Only creates admin user if none exist and password meets complexity requirements.
+    """
     import os
     
     admin_username = os.getenv("DEFAULT_ADMIN_USERNAME", "admin")
@@ -229,18 +316,34 @@ async def initialize_admin_user(db: AsyncSession) -> None:
     admin_email = os.getenv("DEFAULT_ADMIN_EMAIL", f"{admin_username}@kiremisu.local")
     
     if not admin_password:
-        logger.warning("No DEFAULT_ADMIN_PASSWORD set - skipping admin user creation")
+        logger.warning("No DEFAULT_ADMIN_PASSWORD set - admin user creation skipped")
+        logger.warning("Set DEFAULT_ADMIN_PASSWORD environment variable to create initial admin user")
+        return
+    
+    # Validate admin password complexity
+    password_errors = validate_password_complexity(admin_password)
+    if password_errors:
+        logger.error("Admin password does not meet complexity requirements:")
+        for error in password_errors:
+            logger.error(f"  - {error}")
+        logger.error("Please set a stronger DEFAULT_ADMIN_PASSWORD")
         return
     
     try:
-        # Check if admin already exists
+        # Check if any admin users exist
+        result = await db.execute(select(User).where(User.is_admin == True))
+        if result.scalar_one_or_none():
+            logger.debug("Admin user already exists - skipping creation")
+            return
+        
+        # Check if username/email already exist
         result = await db.execute(
             select(User).where(
                 (User.username == admin_username) | (User.email == admin_email)
             )
         )
         if result.scalar_one_or_none():
-            logger.debug(f"Admin user already exists: {admin_username}")
+            logger.error(f"User with username '{admin_username}' or email '{admin_email}' already exists")
             return
         
         # Create admin user
@@ -251,146 +354,164 @@ async def initialize_admin_user(db: AsyncSession) -> None:
             password=admin_password,
             is_admin=True
         )
-        logger.info(f"Created admin user: {admin_username}")
+        logger.info(f"Created initial admin user: {admin_username}")
+        logger.info("IMPORTANT: Change the admin password after first login")
         
     except Exception as e:
         logger.error(f"Failed to create admin user: {e}")
 
-def create_jwt_token(user_data: Dict[str, Any]) -> str:
-    """Create a JWT token for the user."""
-    # Handle both dict and User model
-    if hasattr(user_data, 'id'):
-        # User model
-        payload = {
-            "user_id": str(user_data.id),
-            "username": user_data.username,
-            "email": user_data.email,
-            "is_admin": user_data.is_admin,
-            "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS),
-            "iat": datetime.utcnow(),
-        }
-    else:
-        # Dict (legacy support)
-        payload = {
-            "user_id": user_data["id"],
-            "username": user_data["username"],
-            "email": user_data.get("email"),
-            "is_admin": user_data.get("is_admin", False),
-            "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS),
-            "iat": datetime.utcnow(),
-        }
+def create_jwt_token(user: User) -> str:
+    """Create a JWT token for the user.
+    
+    Args:
+        user: User model instance
+        
+    Returns:
+        JWT token string
+    """
+    now = datetime.utcnow()
+    
+    # Create secure payload with only necessary information
+    payload = {
+        "user_id": str(user.id),
+        "username": user.username,
+        "is_admin": user.is_admin,
+        "exp": now + timedelta(hours=JWT_EXPIRATION_HOURS),
+        "iat": now,
+        "jti": secrets.token_hex(16),  # JWT ID for token blacklisting
+    }
+    
+    # Ensure we have a secure secret key
+    if not settings.secret_key or len(settings.secret_key) < 32:
+        raise ValueError("JWT secret key must be at least 32 characters long")
     
     return jwt.encode(payload, settings.secret_key, algorithm=JWT_ALGORITHM)
 
 def verify_jwt_token(token: str) -> Dict[str, Any]:
-    """Verify a JWT token and return the payload."""
+    """Verify a JWT token and return the payload.
+    
+    Args:
+        token: JWT token string
+        
+    Returns:
+        Token payload dictionary
+        
+    Raises:
+        HTTPException: If token is invalid, expired, or blacklisted
+    """
     try:
+        # Check if token is blacklisted first
+        if is_token_blacklisted(token):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Verify and decode token
         payload = jwt.decode(token, settings.secret_key, algorithms=[JWT_ALGORITHM])
+        
+        # Validate required fields
+        required_fields = ["user_id", "username", "exp", "iat", "jti"]
+        for field in required_fields:
+            if field not in payload:
+                raise jwt.InvalidTokenError(f"Missing required field: {field}")
+        
         return payload
     except jwt.ExpiredSignatureError:
+        logger.info(f"Expired JWT token attempted")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has expired",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    except jwt.InvalidTokenError:
+    except jwt.InvalidTokenError as e:
+        logger.warning(f"Invalid JWT token: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-async def get_api_key(authorization: Optional[str] = Header(None)) -> str:
-    """Extract and validate JWT token from Authorization header."""
-    if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authorization header is required",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+def extract_bearer_token(authorization: str) -> str:
+    """Extract token from Bearer authorization header.
     
-    # Extract token from "Bearer <token>" format
+    Args:
+        authorization: Authorization header value
+        
+    Returns:
+        JWT token string
+        
+    Raises:
+        HTTPException: If header format is invalid
+    """
     try:
         scheme, token = authorization.split(" ", 1)
         if scheme.lower() != "bearer":
             raise ValueError("Invalid scheme")
+        return token.strip()
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authorization header format. Expected: Bearer <token>",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    # Verify JWT token
-    payload = verify_jwt_token(token)
-    
-    # Verify user still exists and is active
-    user_data = UserManager.get_user_by_id(payload["user_id"])
-    if not user_data or not user_data.get("is_active"):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User account not found or inactive",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    return token
 
 async def get_current_user(
     authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db)
 ) -> User:
-    """Get the current authenticated user from database."""
+    """Get the current authenticated user from database.
+    
+    Args:
+        authorization: Authorization header value
+        db: Database session
+        
+    Returns:
+        Authenticated user
+        
+    Raises:
+        HTTPException: If authentication fails
+    """
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authorization header is required",
+            detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Extract token from "Bearer <token>" format
-    try:
-        scheme, token = authorization.split(" ", 1)
-        if scheme.lower() != "bearer":
-            raise ValueError("Invalid scheme")
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header format. Expected: Bearer <token>",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    # Verify JWT token
+    # Extract and verify token
+    token = extract_bearer_token(authorization)
     payload = verify_jwt_token(token)
     
     # Get user from database
     user = await get_user_by_id_db(db, payload["user_id"])
-    if not user or not user.is_active:
-        # Fallback to in-memory user manager for backwards compatibility
-        user_data = UserManager.get_user_by_id(payload["user_id"])
-        if user_data and user_data.get("is_active"):
-            # Return a mock User object for compatibility
-            from uuid import uuid4
-            mock_user = User(
-                id=uuid4(),
-                username=user_data["username"],
-                email=user_data.get("email", f"{user_data['username']}@kiremisu.local"),
-                password_hash="",
-                is_active=True,
-                is_admin=False
-            )
-            return mock_user
-        
+    if not user:
+        logger.warning(f"Token contains invalid user_id: {payload['user_id']}")
+        # Blacklist the token since user doesn't exist
+        blacklist_token(token)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User account not found or inactive",
+            detail="User account not found",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Check if user is active
+    if not user.is_active:
+        logger.warning(f"Inactive user attempted access: {user.username}")
+        blacklist_token(token)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is disabled",
         )
     
     # Check if account is locked
     if user.locked_until and user.locked_until > datetime.utcnow():
+        remaining_time = user.locked_until - datetime.utcnow()
+        logger.warning(f"Locked user attempted access: {user.username}")
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is temporarily locked due to failed login attempts",
+            status_code=status.HTTP_423_LOCKED,
+            detail=f"Account is locked for {remaining_time.seconds // 60} more minutes",
         )
     
     return user
@@ -413,64 +534,56 @@ async def get_current_user_optional(
 async def require_admin(
     current_user: User = Depends(get_current_user)
 ) -> User:
-    """Require the current user to be an admin."""
+    """Require the current user to be an admin.
+    
+    Args:
+        current_user: Currently authenticated user
+        
+    Returns:
+        User if they have admin privileges
+        
+    Raises:
+        HTTPException: If user is not an admin
+    """
     if not current_user.is_admin:
+        logger.warning(f"Non-admin user attempted admin action: {current_user.username}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
+            detail="Administrator privileges required",
         )
     return current_user
 
 
-async def get_optional_api_key(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
-) -> Optional[str]:
-    """Optional authentication - returns None if not authenticated."""
-    if not credentials:
-        return None
-    
-    try:
-        # Validate the token
-        expected_key = settings.secret_key
-        if credentials.credentials != expected_key:
-            return None
-        return credentials.credentials
-    except Exception:
-        return None
-
-
-# Rate limiting storage (in-memory for simplicity)
-_rate_limit_store = {}
-
-
-def check_rate_limit(client_ip: str, endpoint: str, max_requests: int = 10, window_minutes: int = 5) -> bool:
-    """Simple rate limiting implementation.
+async def logout_user(token: str) -> None:
+    """Logout user by blacklisting their token.
     
     Args:
-        client_ip: Client IP address
-        endpoint: API endpoint being accessed
-        max_requests: Maximum requests allowed in window
-        window_minutes: Time window in minutes
-        
-    Returns:
-        True if request should be allowed, False if rate limited
+        token: JWT token to blacklist
     """
-    now = datetime.utcnow()
-    key = f"{client_ip}:{endpoint}"
+    blacklist_token(token)
+    logger.info("User logged out successfully")
+
+
+# Clean up old auth attempts periodically
+def cleanup_auth_attempts() -> None:
+    """Clean up old authentication attempts to prevent memory leaks."""
+    cutoff_time = datetime.utcnow() - timedelta(minutes=AUTH_WINDOW_MINUTES * 2)
     
-    # Clean old entries
-    if key in _rate_limit_store:
-        _rate_limit_store[key] = [
-            timestamp for timestamp in _rate_limit_store[key]
-            if (now - timestamp).total_seconds() < (window_minutes * 60)
+    for client_ip in list(_auth_attempts.keys()):
+        _auth_attempts[client_ip] = [
+            attempt_time for attempt_time in _auth_attempts[client_ip]
+            if attempt_time > cutoff_time
         ]
-    else:
-        _rate_limit_store[key] = []
+        
+        # Remove empty entries
+        if not _auth_attempts[client_ip]:
+            del _auth_attempts[client_ip]
+
+def generate_secure_secret_key() -> str:
+    """Generate a secure secret key for JWT tokens.
     
-    # Check if limit exceeded
-    if len(_rate_limit_store[key]) >= max_requests:
-        return False
-    
-    # Record this request
-    _rate_limit_store[key].append(now)
-    return True
+    Returns:
+        Base64 encoded secure random string
+    """
+    import base64
+    return base64.b64encode(secrets.token_bytes(64)).decode('utf-8')

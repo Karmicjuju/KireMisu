@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.database.connection import get_db
+from kiremisu.core.auth import get_current_user
 from kiremisu.database.schemas import (
     ChapterMarkReadResponse,
     ReadingProgressResponse,
@@ -35,6 +36,7 @@ async def update_chapter_progress(
     chapter_id: UUID,
     progress: ReadingProgressUpdateRequest,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
 ) -> ReadingProgressResponse:
     """
     Update reading progress for a chapter.
@@ -81,6 +83,7 @@ async def update_chapter_progress(
 async def toggle_chapter_read_status(
     chapter_id: UUID,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
 ) -> ChapterMarkReadResponse:
     """
     Toggle the read status of a chapter.
@@ -150,6 +153,7 @@ async def toggle_chapter_read_status(
 async def mark_chapter_unread(
     chapter_id: UUID,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
 ) -> ChapterMarkReadResponse:
     """
     Mark a chapter as unread.
@@ -229,6 +233,7 @@ async def mark_chapter_unread(
 async def get_series_progress(
     series_id: UUID,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
 ) -> SeriesProgressResponse:
     """
     Get reading progress statistics for a series.
@@ -274,6 +279,7 @@ async def get_series_progress(
 async def mark_series_read(
     series_id: UUID,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """
     Mark all chapters in a series as read.
@@ -327,6 +333,7 @@ async def mark_series_read(
 async def mark_series_unread(
     series_id: UUID,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """
     Mark all chapters in a series as unread.
@@ -379,6 +386,7 @@ async def mark_series_unread(
 @router.get("/user/stats", response_model=UserReadingStatsResponse)
 async def get_user_reading_stats(
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
 ) -> UserReadingStatsResponse:
     """
     Get comprehensive user reading statistics.
@@ -413,6 +421,7 @@ async def get_user_reading_stats(
 async def get_chapter_progress(
     chapter_id: UUID,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
 ) -> ReadingProgressResponse:
     """
     Get current reading progress for a specific chapter.

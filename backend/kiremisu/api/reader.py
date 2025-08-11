@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 
 from kiremisu.database.connection import get_db
+from kiremisu.core.auth import get_current_user
 from kiremisu.database.models import Chapter, Series
 from kiremisu.database.schemas import ChapterProgressUpdate, ChapterProgressResponse
 
@@ -169,7 +170,7 @@ async def _extract_chapter_page(chapter: Chapter, page_index: int) -> Optional[t
 
 @router.get("/chapter/{chapter_id}/page/{page_index}")
 async def get_chapter_page(
-    chapter_id: UUID, page_index: int, db: AsyncSession = Depends(get_db)
+    chapter_id: UUID, page_index: int, db: AsyncSession = Depends(get_db), current_user = Depends(get_current_user)
 ) -> StreamingResponse:
     """Stream a specific page from a chapter.
 
@@ -226,7 +227,7 @@ async def get_chapter_page(
 
 
 @router.get("/chapter/{chapter_id}/info")
-async def get_chapter_info(chapter_id: UUID, db: AsyncSession = Depends(get_db)) -> dict:
+async def get_chapter_info(chapter_id: UUID, db: AsyncSession = Depends(get_db), current_user = Depends(get_current_user)) -> dict:
     """Get chapter information including reading progress.
 
     Args:
@@ -270,7 +271,7 @@ async def get_chapter_info(chapter_id: UUID, db: AsyncSession = Depends(get_db))
 
 @router.put("/chapter/{chapter_id}/progress")
 async def update_reading_progress(
-    chapter_id: UUID, progress: ChapterProgressUpdate, db: AsyncSession = Depends(get_db)
+    chapter_id: UUID, progress: ChapterProgressUpdate, db: AsyncSession = Depends(get_db), current_user = Depends(get_current_user)
 ) -> ChapterProgressResponse:
     """Update reading progress for a chapter.
 
@@ -326,7 +327,7 @@ async def update_reading_progress(
 
 
 @router.get("/series/{series_id}/chapters")
-async def get_series_chapters(series_id: UUID, db: AsyncSession = Depends(get_db)) -> dict:
+async def get_series_chapters(series_id: UUID, db: AsyncSession = Depends(get_db), current_user = Depends(get_current_user)) -> dict:
     """Get all chapters for a series with reading progress.
 
     Args:
