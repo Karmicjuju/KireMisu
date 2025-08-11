@@ -38,23 +38,21 @@ class ReadingProgressService:
     ) -> ReadingProgressResponse:
         """
         Update reading progress for a chapter.
-        
+
         Args:
             db: Database session
             chapter_id: Chapter UUID
             progress: Progress update data
-            
+
         Returns:
             Updated reading progress response
-            
+
         Raises:
             ValueError: If chapter not found or invalid progress data
         """
         # Get chapter with series relationship
         result = await db.execute(
-            select(Chapter)
-            .options(selectinload(Chapter.series))
-            .where(Chapter.id == chapter_id)
+            select(Chapter).options(selectinload(Chapter.series)).where(Chapter.id == chapter_id)
         )
         chapter = result.scalar_one_or_none()
 
@@ -89,9 +87,7 @@ class ReadingProgressService:
             update_data["read_at"] = datetime.utcnow()
 
         # Update chapter
-        await db.execute(
-            update(Chapter).where(Chapter.id == chapter_id).values(**update_data)
-        )
+        await db.execute(update(Chapter).where(Chapter.id == chapter_id).values(**update_data))
 
         # Update series read_chapters count if chapter was completed
         if is_complete and not chapter.is_read:
@@ -99,7 +95,7 @@ class ReadingProgressService:
             series_result = await db.execute(select(Series).where(Series.id == chapter.series_id))
             series = series_result.scalar_one()
             new_read_count = series.read_chapters + 1
-            
+
             await db.execute(
                 update(Series)
                 .where(Series.id == chapter.series_id)
@@ -122,9 +118,7 @@ class ReadingProgressService:
 
         # Calculate progress percentage
         progress_percentage = (
-            (progress.current_page + 1) / chapter.page_count * 100
-            if chapter.page_count > 0
-            else 0
+            (progress.current_page + 1) / chapter.page_count * 100 if chapter.page_count > 0 else 0
         )
 
         return ReadingProgressResponse(
@@ -134,7 +128,7 @@ class ReadingProgressService:
             total_pages=chapter.page_count,
             progress_percentage=progress_percentage,
             is_read=chapter.is_read,
-            started_at=getattr(chapter, 'started_reading_at', None),
+            started_at=getattr(chapter, "started_reading_at", None),
             read_at=chapter.read_at,
             updated_at=chapter.updated_at,
         )
@@ -145,14 +139,14 @@ class ReadingProgressService:
     ) -> Tuple[bool, datetime]:
         """
         Toggle the read status of a chapter.
-        
+
         Args:
             db: Database session
             chapter_id: Chapter UUID
-            
+
         Returns:
             Tuple of (new_read_status, read_at_timestamp)
-            
+
         Raises:
             ValueError: If chapter not found
         """
@@ -171,13 +165,13 @@ class ReadingProgressService:
         # Store original read status to determine if change is needed
         original_read_status = chapter.is_read
         new_read_status = not original_read_status
-        
+
         # Debug logging
         logger.info(
             "Toggle chapter read status: chapter_id=%s, current_status=%s, new_status=%s",
             chapter_id,
             original_read_status,
-            new_read_status
+            new_read_status,
         )
         now = datetime.utcnow()
 
@@ -191,29 +185,27 @@ class ReadingProgressService:
             update_data["read_at"] = now
             update_data["last_read_page"] = max(0, chapter.page_count - 1)
             # Set started_reading_at if not already set
-            if not getattr(chapter, 'started_reading_at', None):
+            if not getattr(chapter, "started_reading_at", None):
                 update_data["started_reading_at"] = now
         else:
             # Mark as unread - clear read timestamp but keep progress
             update_data["read_at"] = None
 
         # Update chapter
-        await db.execute(
-            update(Chapter).where(Chapter.id == chapter_id).values(**update_data)
-        )
+        await db.execute(update(Chapter).where(Chapter.id == chapter_id).values(**update_data))
 
         # Update series read count manually - only if status actually changed
         if original_read_status != new_read_status:
             series_result = await db.execute(select(Series).where(Series.id == chapter.series_id))
             series = series_result.scalar_one()
-            
+
             if new_read_status:
                 # Chapter was marked as read - increment count
                 new_read_count = series.read_chapters + 1
             else:
                 # Chapter was marked as unread - decrement count
                 new_read_count = max(0, series.read_chapters - 1)
-                
+
             await db.execute(
                 update(Series)
                 .where(Series.id == chapter.series_id)
@@ -232,27 +224,23 @@ class ReadingProgressService:
         return new_read_status, update_data.get("read_at")
 
     @staticmethod
-    async def get_series_progress(
-        db: AsyncSession, series_id: str
-    ) -> SeriesProgressResponse:
+    async def get_series_progress(db: AsyncSession, series_id: str) -> SeriesProgressResponse:
         """
         Get reading progress for a series.
-        
+
         Args:
             db: Database session
             series_id: Series UUID
-            
+
         Returns:
             Series progress information
-            
+
         Raises:
             ValueError: If series not found
         """
         # Get series (fresh from database)
         series_result = await db.execute(
-            select(Series)
-            .where(Series.id == series_id)
-            .execution_options(populate_existing=True)
+            select(Series).where(Series.id == series_id).execution_options(populate_existing=True)
         )
         series = series_result.scalar_one_or_none()
 
@@ -278,9 +266,7 @@ class ReadingProgressService:
 
         # Calculate progress percentage
         progress_percentage = (
-            (series.read_chapters / series.total_chapters * 100)
-            if series.total_chapters > 0
-            else 0
+            (series.read_chapters / series.total_chapters * 100) if series.total_chapters > 0 else 0
         )
 
         return SeriesProgressResponse(
@@ -288,9 +274,7 @@ class ReadingProgressService:
             total_chapters=series.total_chapters,
             read_chapters=series.read_chapters,
             progress_percentage=progress_percentage,
-            recent_chapters=[
-                ChapterResponse.from_model(chapter) for chapter in recent_chapters
-            ],
+            recent_chapters=[ChapterResponse.from_model(chapter) for chapter in recent_chapters],
             last_read_at=last_read_at,
         )
 
@@ -298,10 +282,10 @@ class ReadingProgressService:
     async def get_user_reading_stats(db: AsyncSession) -> UserReadingStatsResponse:
         """
         Get comprehensive user reading statistics.
-        
+
         Args:
             db: Database session
-            
+
         Returns:
             User reading statistics
         """
@@ -330,9 +314,7 @@ class ReadingProgressService:
         in_progress_chapters = in_progress_result.scalar() or 0
 
         # Calculate overall progress
-        overall_progress = (
-            (read_chapters / total_chapters * 100) if total_chapters > 0 else 0
-        )
+        overall_progress = (read_chapters / total_chapters * 100) if total_chapters > 0 else 0
 
         # Get reading streak (consecutive days with reading activity)
         reading_streak = await ReadingProgressService._calculate_reading_streak(db)
@@ -389,14 +371,14 @@ class ReadingProgressService:
     async def mark_series_read(db: AsyncSession, series_id: str) -> int:
         """
         Mark all chapters in a series as read.
-        
+
         Args:
             db: Database session
             series_id: Series UUID
-            
+
         Returns:
             Number of chapters updated
-            
+
         Raises:
             ValueError: If series not found
         """
@@ -412,9 +394,7 @@ class ReadingProgressService:
         # Update all unread chapters in the series
         result = await db.execute(
             update(Chapter)
-            .where(
-                and_(Chapter.series_id == series_id, Chapter.is_read == False)
-            )
+            .where(and_(Chapter.series_id == series_id, Chapter.is_read == False))
             .values(
                 is_read=True,
                 read_at=now,
@@ -428,7 +408,7 @@ class ReadingProgressService:
 
         # Update series read_chapters count manually - add the number of chapters we just marked as read
         new_read_count = series.read_chapters + chapters_updated
-        
+
         await db.execute(
             update(Series)
             .where(Series.id == series_id)
@@ -449,14 +429,14 @@ class ReadingProgressService:
     async def mark_series_unread(db: AsyncSession, series_id: str) -> int:
         """
         Mark all chapters in a series as unread.
-        
+
         Args:
             db: Database session
             series_id: Series UUID
-            
+
         Returns:
             Number of chapters updated
-            
+
         Raises:
             ValueError: If series not found
         """
@@ -472,9 +452,7 @@ class ReadingProgressService:
         # Update all read chapters in the series
         result = await db.execute(
             update(Chapter)
-            .where(
-                and_(Chapter.series_id == series_id, Chapter.is_read == True)
-            )
+            .where(and_(Chapter.series_id == series_id, Chapter.is_read == True))
             .values(
                 is_read=False,
                 read_at=None,
@@ -488,7 +466,7 @@ class ReadingProgressService:
 
         # Update series read_chapters count manually - subtract the chapters we just marked as unread
         new_read_count = max(0, series.read_chapters - chapters_updated)
-        
+
         await db.execute(
             update(Series)
             .where(Series.id == series_id)
@@ -509,28 +487,28 @@ class ReadingProgressService:
     async def reconcile_series_counts(db: AsyncSession, series_id: str = None) -> Dict[str, int]:
         """
         Reconcile series read counts with actual chapter counts.
-        
+
         Args:
             db: Database session
             series_id: Optional specific series ID to reconcile, or None for all series
-            
+
         Returns:
             Dictionary with reconciliation results
         """
         results = {"series_checked": 0, "discrepancies_found": 0, "series_fixed": 0}
-        
+
         # Get series to check
         if series_id:
             series_query = select(Series).where(Series.id == series_id)
         else:
             series_query = select(Series)
-            
+
         series_result = await db.execute(series_query)
         series_list = series_result.scalars().all()
-        
+
         for series in series_list:
             results["series_checked"] += 1
-            
+
             # Count actual read chapters
             actual_count_result = await db.execute(
                 select(func.count(Chapter.id)).where(
@@ -538,18 +516,18 @@ class ReadingProgressService:
                 )
             )
             actual_count = actual_count_result.scalar() or 0
-            
+
             # Check for discrepancy
             if series.read_chapters != actual_count:
                 results["discrepancies_found"] += 1
-                
+
                 logger.warning(
                     "Series count discrepancy found: series_id=%s, stored=%d, actual=%d",
                     series.id,
                     series.read_chapters,
-                    actual_count
+                    actual_count,
                 )
-                
+
                 # Fix the discrepancy
                 await db.execute(
                     update(Series)
@@ -557,35 +535,32 @@ class ReadingProgressService:
                     .values(read_chapters=actual_count, updated_at=datetime.utcnow())
                 )
                 results["series_fixed"] += 1
-        
+
         await db.commit()
-        
-        logger.info(
-            "Series count reconciliation completed: %s",
-            results
-        )
-        
+
+        logger.info("Series count reconciliation completed: %s", results)
+
         return results
-        
+
     @staticmethod
     async def validate_series_count(db: AsyncSession, series_id: str) -> bool:
         """
         Validate that a series count matches the actual chapter count.
-        
+
         Args:
             db: Database session
             series_id: Series UUID
-            
+
         Returns:
             True if counts match, False if there's a discrepancy
         """
         # Get series
         series_result = await db.execute(select(Series).where(Series.id == series_id))
         series = series_result.scalar_one_or_none()
-        
+
         if not series:
             raise ValueError(f"Series with ID {series_id} not found")
-            
+
         # Count actual read chapters
         actual_count_result = await db.execute(
             select(func.count(Chapter.id)).where(
@@ -593,27 +568,27 @@ class ReadingProgressService:
             )
         )
         actual_count = actual_count_result.scalar() or 0
-        
+
         is_valid = series.read_chapters == actual_count
-        
+
         if not is_valid:
             logger.warning(
                 "Series count validation failed: series_id=%s, stored=%d, actual=%d",
                 series_id,
                 series.read_chapters,
-                actual_count
+                actual_count,
             )
-            
+
         return is_valid
 
     @staticmethod
     async def _calculate_reading_streak(db: AsyncSession) -> int:
         """
         Calculate the current reading streak in days.
-        
+
         Args:
             db: Database session
-            
+
         Returns:
             Current reading streak in days
         """
@@ -651,11 +626,11 @@ class ReadingProgressService:
     async def _get_favorite_genres(db: AsyncSession, limit: int = 5) -> List[str]:
         """
         Get the user's favorite genres based on read chapters.
-        
+
         Args:
             db: Database session
             limit: Maximum number of genres to return
-            
+
         Returns:
             List of favorite genre names
         """
@@ -673,8 +648,6 @@ class ReadingProgressService:
                 genre_counts[genre] += 1
 
         # Sort by count and return top genres
-        sorted_genres = sorted(
-            genre_counts.items(), key=lambda x: x[1], reverse=True
-        )
+        sorted_genres = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)
 
         return [genre for genre, _ in sorted_genres[:limit]]

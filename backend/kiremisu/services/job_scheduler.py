@@ -248,7 +248,9 @@ class JobScheduler:
         """
         from sqlalchemy import delete
 
-        cutoff_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=older_than_days)
+        cutoff_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
+            days=older_than_days
+        )
 
         # Delete completed jobs older than cutoff using bulk delete
         result = await db.execute(

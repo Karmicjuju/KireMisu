@@ -18,6 +18,7 @@ from sqlalchemy import select, update, func
 from sqlalchemy.orm import selectinload
 
 from kiremisu.database.connection import get_db
+from kiremisu.core.auth import get_current_user
 from kiremisu.database.models import Chapter, Series
 from kiremisu.database.schemas import (
     ChapterResponse,
@@ -39,7 +40,11 @@ router = APIRouter(prefix="/api/chapters", tags=["chapters"])
 
 
 @router.get("/{chapter_id}", response_model=ChapterResponse)
-async def get_chapter(chapter_id: UUID, db: AsyncSession = Depends(get_db)) -> ChapterResponse:
+async def get_chapter(
+    chapter_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+) -> ChapterResponse:
     """Get chapter details by ID."""
     result = await db.execute(
         select(Chapter).options(selectinload(Chapter.series)).where(Chapter.id == chapter_id)

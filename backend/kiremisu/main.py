@@ -27,6 +27,8 @@ from kiremisu.api.notifications import router as notifications_router
 from kiremisu.api.watching import router as watching_router
 from kiremisu.api.websocket import router as websocket_router
 from kiremisu.api.metrics import router as metrics_router
+from kiremisu.api.push_notifications import router as push_router
+from kiremisu.api.auth import router as auth_router
 from kiremisu.core.config import settings
 from kiremisu.core.error_handler import global_exception_handler
 from kiremisu.core.rate_limiter import RateLimiter, RateLimitMiddleware
@@ -43,11 +45,34 @@ _scheduler_runner: SchedulerRunner = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan manager for background services."""
+    """Application lifespan manager for background services and security initialization."""
     global _worker_runner, _scheduler_runner
 
     # Initialize database session factory
     db_session_factory = get_db_session_factory()
+
+    # Initialize security and authentication
+    try:
+        logger.info("Initializing security and authentication...")
+        
+        # Initialize admin user if needed
+        async with db_session_factory() as db:
+            from kiremisu.core.auth import initialize_admin_user
+            await initialize_admin_user(db)
+        
+        # Validate JWT configuration
+        if not settings.secret_key or len(settings.secret_key) < 32:
+            logger.error("JWT SECRET_KEY not properly configured")
+            logger.error("Please set a secure SECRET_KEY environment variable (at least 32 characters)")
+            from kiremisu.core.auth import generate_secure_secret_key
+            logger.info(f"Generated secure key example: {generate_secure_secret_key()}")
+            raise ValueError("JWT SECRET_KEY configuration required")
+        
+        logger.info("Security initialization completed")
+    
+    except Exception as e:
+        logger.error(f"Security initialization failed: {e}")
+        raise
 
     # Initialize and start background services
     try:
@@ -92,12 +117,16 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="KireMisu API",
-    description="Self-hosted manga reader and library management system",
+    description="Secure self-hosted manga reader and library management system",
     version="0.1.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
     lifespan=lifespan,
+    # Security headers
+    swagger_ui_parameters={
+        "persistAuthorization": True,
+    },
 )
 
 # Add global exception handler for security
@@ -111,11 +140,31 @@ app.add_middleware(SlowAPIMiddleware)
 
 # Rate limiting middleware (add before CORS)
 rate_limiter = RateLimiter(
-    requests_per_minute=120,  # Allow more requests for development
-    requests_per_hour=3600,  # Generous hourly limit
-    burst_limit=20,  # Allow reasonable bursts
+    requests_per_minute=120,  # Reasonable limit for general usage
+    requests_per_hour=3600,  # Hourly limit
+    burst_limit=20,  # Allow reasonable bursts for UI interactions
 )
 app.add_middleware(RateLimitMiddleware, rate_limiter=rate_limiter)
+
+# Security headers middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Add security headers to all responses."""
+    response = await call_next(request)
+    
+    # Security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    
+    # Don't cache sensitive endpoints
+    if request.url.path.startswith("/api/auth") or "token" in request.url.path:
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    
+    return response
 
 # CORS middleware for frontend integration
 app.add_middleware(
@@ -143,6 +192,8 @@ app.include_router(notifications_router)
 app.include_router(watching_router)
 app.include_router(websocket_router)
 app.include_router(metrics_router)
+app.include_router(push_router)
+app.include_router(auth_router)
 
 
 @app.get("/")

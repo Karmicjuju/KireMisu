@@ -52,7 +52,10 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        "ix_file_operations_status_created", "file_operations", ["status", "created_at"], unique=False
+        "ix_file_operations_status_created",
+        "file_operations",
+        ["status", "created_at"],
+        unique=False,
     )
     op.create_index(
         "ix_file_operations_type_status",
@@ -60,7 +63,12 @@ def upgrade() -> None:
         ["operation_type", "status"],
         unique=False,
     )
-    op.create_index(op.f("ix_file_operations_operation_type"), "file_operations", ["operation_type"], unique=False)
+    op.create_index(
+        op.f("ix_file_operations_operation_type"),
+        "file_operations",
+        ["operation_type"],
+        unique=False,
+    )
     op.create_index(op.f("ix_file_operations_status"), "file_operations", ["status"], unique=False)
     # ### end Alembic commands ###
 

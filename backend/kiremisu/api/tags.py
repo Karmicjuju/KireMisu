@@ -58,10 +58,7 @@ async def get_tags(
     result = await db.execute(query)
     tags = result.scalars().all()
 
-    return TagListResponse(
-        tags=[TagResponse.from_model(tag) for tag in tags],
-        total=total
-    )
+    return TagListResponse(tags=[TagResponse.from_model(tag) for tag in tags], total=total)
 
 
 @router.post("/", response_model=TagResponse)
@@ -115,10 +112,7 @@ async def update_tag(
     # Check for name conflicts if name is being updated
     if tag_data.name and tag_data.name != tag.name:
         existing_tag = await db.execute(
-            select(Tag).where(
-                func.lower(Tag.name) == func.lower(tag_data.name),
-                Tag.id != tag_id
-            )
+            select(Tag).where(func.lower(Tag.name) == func.lower(tag_data.name), Tag.id != tag_id)
         )
         if existing_tag.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Tag with this name already exists")
@@ -186,38 +180,26 @@ async def assign_tags_to_series(
         raise HTTPException(status_code=404, detail="Series not found")
 
     # Verify all tags exist
-    tags_result = await db.execute(
-        select(Tag).where(Tag.id.in_(assignment.tag_ids))
-    )
+    tags_result = await db.execute(select(Tag).where(Tag.id.in_(assignment.tag_ids)))
     tags = tags_result.scalars().all()
-    
+
     if len(tags) != len(assignment.tag_ids):
         found_ids = {tag.id for tag in tags}
         missing_ids = set(assignment.tag_ids) - found_ids
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Tags not found: {list(missing_ids)}"
-        )
+        raise HTTPException(status_code=400, detail=f"Tags not found: {list(missing_ids)}")
 
     # Get current tags to calculate usage changes
     current_tags_result = await db.execute(
-        select(Tag.id)
-        .join(series_tags)
-        .where(series_tags.c.series_id == series_id)
+        select(Tag.id).join(series_tags).where(series_tags.c.series_id == series_id)
     )
     current_tag_ids = {row[0] for row in current_tags_result.fetchall()}
 
     # Remove current tag assignments
-    await db.execute(
-        delete(series_tags).where(series_tags.c.series_id == series_id)
-    )
+    await db.execute(delete(series_tags).where(series_tags.c.series_id == series_id))
 
     # Add new tag assignments
     if assignment.tag_ids:
-        values = [
-            {"series_id": series_id, "tag_id": tag_id}
-            for tag_id in assignment.tag_ids
-        ]
+        values = [{"series_id": series_id, "tag_id": tag_id} for tag_id in assignment.tag_ids]
         await db.execute(series_tags.insert().values(values))
 
     # Update usage counts for affected tags
@@ -226,16 +208,12 @@ async def assign_tags_to_series(
 
     if tags_to_decrement:
         await db.execute(
-            update(Tag)
-            .where(Tag.id.in_(tags_to_decrement))
-            .values(usage_count=Tag.usage_count - 1)
+            update(Tag).where(Tag.id.in_(tags_to_decrement)).values(usage_count=Tag.usage_count - 1)
         )
 
     if tags_to_increment:
         await db.execute(
-            update(Tag)
-            .where(Tag.id.in_(tags_to_increment))
-            .values(usage_count=Tag.usage_count + 1)
+            update(Tag).where(Tag.id.in_(tags_to_increment)).values(usage_count=Tag.usage_count + 1)
         )
 
     await db.commit()
@@ -265,23 +243,17 @@ async def add_tags_to_series(
         raise HTTPException(status_code=404, detail="Series not found")
 
     # Verify all tags exist
-    tags_result = await db.execute(
-        select(Tag).where(Tag.id.in_(assignment.tag_ids))
-    )
+    tags_result = await db.execute(select(Tag).where(Tag.id.in_(assignment.tag_ids)))
     tags = tags_result.scalars().all()
-    
+
     if len(tags) != len(assignment.tag_ids):
         found_ids = {tag.id for tag in tags}
         missing_ids = set(assignment.tag_ids) - found_ids
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Tags not found: {list(missing_ids)}"
-        )
+        raise HTTPException(status_code=400, detail=f"Tags not found: {list(missing_ids)}")
 
     # Get current tag assignments
     current_assignments = await db.execute(
-        select(series_tags.c.tag_id)
-        .where(series_tags.c.series_id == series_id)
+        select(series_tags.c.tag_id).where(series_tags.c.series_id == series_id)
     )
     current_tag_ids = {row[0] for row in current_assignments.fetchall()}
 
@@ -290,17 +262,12 @@ async def add_tags_to_series(
 
     if new_tag_ids:
         # Add new tag assignments
-        values = [
-            {"series_id": series_id, "tag_id": tag_id}
-            for tag_id in new_tag_ids
-        ]
+        values = [{"series_id": series_id, "tag_id": tag_id} for tag_id in new_tag_ids]
         await db.execute(series_tags.insert().values(values))
 
         # Update usage counts
         await db.execute(
-            update(Tag)
-            .where(Tag.id.in_(new_tag_ids))
-            .values(usage_count=Tag.usage_count + 1)
+            update(Tag).where(Tag.id.in_(new_tag_ids)).values(usage_count=Tag.usage_count + 1)
         )
 
         await db.commit()
@@ -332,16 +299,13 @@ async def remove_tags_from_series(
     # Remove specified tag assignments
     await db.execute(
         delete(series_tags).where(
-            series_tags.c.series_id == series_id,
-            series_tags.c.tag_id.in_(assignment.tag_ids)
+            series_tags.c.series_id == series_id, series_tags.c.tag_id.in_(assignment.tag_ids)
         )
     )
 
     # Update usage counts
     await db.execute(
-        update(Tag)
-        .where(Tag.id.in_(assignment.tag_ids))
-        .values(usage_count=Tag.usage_count - 1)
+        update(Tag).where(Tag.id.in_(assignment.tag_ids)).values(usage_count=Tag.usage_count - 1)
     )
 
     await db.commit()

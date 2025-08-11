@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 # KireMisu Development Context
-_Last updated: 2025-08-05_
+_Last updated: 2025-08-10_
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -35,7 +35,7 @@ KireMisu is a self-hosted, cloud-first manga reader and library management syste
 - **Backend:** FastAPI with async/await patterns, ThreadPoolExecutor for file I/O
 - **Frontend:** Next.js 13+ app router, React with TypeScript, SWR for caching
 - **File Processing:** Support for CBZ/ZIP, CBR/RAR, PDF (PyMuPDF), loose folders
-- **Security:** Path traversal protection, input validation, MIME type checking
+- **Security:** Path traversal protection, input validation, MIME type checking, JWT authentication, bcrypt password hashing
 
 
 **Key Insight:** uv is not just a faster pip replacement - it's a complete Python toolchain that replaces pyenv, virtualenv, pip, and python -m with a single, fast, unified tool.
@@ -134,3 +134,153 @@ docker-compose -f docker-compose.dev.yml up -d
 2. **Always test via Docker endpoints** (localhost:3000, localhost:8000)
 3. **Always verify container logs** if issues occur
 4. **Always restart services** after rebuilds
+
+# Recently Completed Sessions
+
+## NT-1: Web Push Notifications System (2025-08-10)
+**Status**: ✅ Complete - Ready for PR
+**GitHub Issue**: #14 - NT-1: Web-push notifications
+
+### Implementation Summary
+Successfully implemented a comprehensive web push notifications system that integrates with the existing W-1 watching system:
+
+**Backend Components**:
+- Push subscription management API (`/api/push/*`)  
+- VAPID key configuration and handling
+- Push notification sending infrastructure with WebPush protocol
+- Database model and migration for push subscriptions
+- Integration with existing notification service for automatic chapter alerts
+- Manual push test script for development/debugging
+
+**Frontend Components**:
+- Service worker for handling push notifications (`/public/service-worker.js`)
+- React hook for push notification management (`use-push-notifications.ts`)
+- User opt-in UI component with browser compatibility detection
+- Integration with existing notification dropdown
+- PWA manifest for app-like experience
+
+**Key Features**:
+- Browser support detection with graceful degradation
+- Test notification functionality for user verification  
+- Automatic new chapter push notifications
+- Subscription management (subscribe/unsubscribe)
+- Error handling for expired subscriptions
+- Background sync for offline notification queuing
+
+**Testing & Quality**:
+- Comprehensive unit tests for API endpoints
+- Integration tests with notification system
+- Frontend E2E tests for user workflows
+- Database tests for subscription model
+- Code formatting and linting completed
+
+**Configuration Required**:
+Users must set VAPID keys in environment:
+```
+VAPID_PUBLIC_KEY=<generated_public_key>
+VAPID_PRIVATE_KEY=<generated_private_key>
+VAPID_CLAIMS={"sub": "mailto:admin@kiremisu.local"}
+```
+
+**Next Steps**: Create PR, test in production environment, add PWA icons
+
+## SEC-1: Comprehensive Security Overhaul (2025-08-11)
+**Status**: ✅ Complete - Production Ready
+**GitHub Issue**: PR #56 Security Issues
+
+### Security Implementation Summary
+Addressed all critical security vulnerabilities identified in PR #56 feedback, implementing enterprise-level security standards:
+
+**Critical Security Fixes**:
+- ✅ **Removed All Hardcoded Credentials**: Eliminated demo user buttons and hardcoded tokens from frontend
+- ✅ **Fixed Push Notification Security**: Implemented strict endpoint validation, HTTPS enforcement, XSS prevention
+- ✅ **Added Missing Authentication**: All user data endpoints now require JWT authentication
+- ✅ **Enhanced Input Validation**: Comprehensive XSS, SQL injection, and SSRF protection
+- ✅ **User-Scoped Authorization**: Strict data protection preventing cross-user access
+
+**Security Infrastructure**:
+- Database-backed user management with bcrypt password hashing
+- JWT authentication with environment-driven secret management
+- Login rate limiting (5 attempts per 30 minutes per IP)
+- Comprehensive input validation across all API endpoints
+- Production-ready security defaults with zero hardcoded secrets
+
+**Testing & Verification**:
+- Complete security test suite covering all vulnerabilities
+- Docker environment build and deployment verification
+- End-to-end authentication testing with environment variables
+- All protected endpoints verified to require authentication
+
+**Files Modified**: 8 security-critical files updated with comprehensive fixes
+
+## Security Requirements for Future Development
+
+### 🚨 CRITICAL SECURITY STANDARDS
+
+**Authentication & Authorization**:
+- ❌ **NEVER** hardcode credentials, tokens, or secrets in code
+- ✅ **ALWAYS** use environment variables for sensitive configuration
+- ✅ **ALWAYS** require JWT authentication for user data endpoints
+- ✅ **ALWAYS** use bcrypt for password hashing (cost factor 12+)
+- ✅ **ALWAYS** implement rate limiting for authentication endpoints
+- ✅ **ALWAYS** validate JWT tokens and handle expired/invalid tokens
+
+**Input Validation & Sanitization**:
+- ✅ **ALWAYS** validate and sanitize ALL user inputs
+- ✅ **ALWAYS** use parameterized queries to prevent SQL injection
+- ✅ **ALWAYS** sanitize HTML content to prevent XSS attacks
+- ✅ **ALWAYS** validate URLs and enforce HTTPS (except localhost)
+- ✅ **ALWAYS** implement input length limits and pattern validation
+- ✅ **ALWAYS** escape special characters in user-generated content
+
+**API Security**:
+- ✅ **ALWAYS** require authentication for endpoints handling user data
+- ✅ **ALWAYS** implement user-scoped data access (no cross-user access)
+- ✅ **ALWAYS** validate API parameters and request bodies
+- ✅ **ALWAYS** implement proper error handling without information leakage
+- ✅ **ALWAYS** use HTTPS in production environments
+- ✅ **ALWAYS** implement CORS policies appropriate for deployment
+
+**File & Path Security**:
+- ✅ **ALWAYS** validate file paths to prevent directory traversal
+- ✅ **ALWAYS** validate MIME types for file uploads
+- ✅ **ALWAYS** sanitize filenames and paths
+- ✅ **ALWAYS** implement file size limits and type restrictions
+- ✅ **ALWAYS** store uploaded files outside web root
+
+**Configuration Security**:
+- ❌ **NEVER** commit secrets, keys, or passwords to git
+- ✅ **ALWAYS** use environment variables for configuration
+- ✅ **ALWAYS** implement secure defaults for production
+- ✅ **ALWAYS** validate environment variable presence and format
+- ✅ **ALWAYS** use separate configurations for dev/staging/production
+
+**Testing Security**:
+- ✅ **ALWAYS** include security test coverage for new features
+- ✅ **ALWAYS** test authentication and authorization paths
+- ✅ **ALWAYS** test input validation with malicious inputs
+- ✅ **ALWAYS** verify Docker environment functionality
+- ✅ **ALWAYS** run security linting and static analysis
+
+### Security Checklist for Pull Requests
+
+Before submitting any PR, verify:
+- [ ] No hardcoded credentials, secrets, or sensitive data
+- [ ] All user data endpoints require authentication
+- [ ] Comprehensive input validation implemented
+- [ ] User-scoped authorization prevents cross-user access
+- [ ] Security tests written and passing
+- [ ] Docker build and deployment tested
+- [ ] Environment variables used for all configuration
+- [ ] Error messages don't leak sensitive information
+- [ ] File operations validate paths and permissions
+- [ ] HTTPS enforced in production configurations
+
+### Security Incident Response
+If security vulnerabilities are identified:
+1. **Immediate**: Create private security issue (not public)
+2. **Assessment**: Evaluate severity and impact
+3. **Fix**: Implement comprehensive fix following these standards
+4. **Test**: Verify fix with security test suite
+5. **Deploy**: Deploy to all environments immediately
+6. **Document**: Update security requirements if needed

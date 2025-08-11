@@ -34,6 +34,11 @@ services:
       - HOST=0.0.0.0
       - PORT=8000
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-["http://localhost:3000"]}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      # Default admin user configuration
+      - DEFAULT_ADMIN_USERNAME=${DEFAULT_ADMIN_USERNAME:-admin}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD}
+      - DEFAULT_ADMIN_EMAIL=${DEFAULT_ADMIN_EMAIL:-admin@kiremisu.local}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:

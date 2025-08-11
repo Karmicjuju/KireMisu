@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.core.error_handler import create_secure_http_exception
+from kiremisu.core.auth import get_current_user
 from kiremisu.database.connection import get_db
 from kiremisu.database.schemas import (
     LibraryPathCreate,
@@ -23,7 +24,10 @@ router = APIRouter(prefix="/api/library", tags=["library"])
 
 
 @router.get("/paths", response_model=LibraryPathList)
-async def get_library_paths(db: AsyncSession = Depends(get_db)) -> LibraryPathList:
+async def get_library_paths(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+) -> LibraryPathList:
     """Get all library paths."""
     paths = await LibraryPathService.get_all(db)
     return LibraryPathList(
@@ -34,7 +38,9 @@ async def get_library_paths(db: AsyncSession = Depends(get_db)) -> LibraryPathLi
 
 @router.get("/paths/{path_id}", response_model=LibraryPathResponse)
 async def get_library_path(
-    path_id: UUID, db: AsyncSession = Depends(get_db)
+    path_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ) -> LibraryPathResponse:
     """Get a specific library path by ID."""
     path = await LibraryPathService.get_by_id(db, path_id)
@@ -48,7 +54,9 @@ async def get_library_path(
 
 @router.post("/paths", response_model=LibraryPathResponse, status_code=status.HTTP_201_CREATED)
 async def create_library_path(
-    library_path_data: LibraryPathCreate, db: AsyncSession = Depends(get_db)
+    library_path_data: LibraryPathCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ) -> LibraryPathResponse:
     """Create a new library path."""
     try:
@@ -66,6 +74,7 @@ async def update_library_path(
     path_id: UUID,
     update_data: LibraryPathUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ) -> LibraryPathResponse:
     """Update an existing library path."""
     try:
@@ -84,7 +93,11 @@ async def update_library_path(
 
 
 @router.delete("/paths/{path_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_library_path(path_id: UUID, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_library_path(
+    path_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+) -> None:
     """Delete a library path."""
     success = await LibraryPathService.delete(db, path_id)
     if not success:
@@ -96,7 +109,9 @@ async def delete_library_path(path_id: UUID, db: AsyncSession = Depends(get_db))
 
 @router.post("/scan", response_model=LibraryScanResponse)
 async def scan_library(
-    scan_request: LibraryScanRequest, db: AsyncSession = Depends(get_db)
+    scan_request: LibraryScanRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ) -> LibraryScanResponse:
     """Scan library paths and import/update series and chapters.
 

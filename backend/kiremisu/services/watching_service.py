@@ -53,11 +53,7 @@ class WatchingService:
         if enabled:
             update_values["last_watched_check"] = None
 
-        await db.execute(
-            update(Series)
-            .where(Series.id == series_id)
-            .values(**update_values)
-        )
+        await db.execute(update(Series).where(Series.id == series_id).values(**update_values))
 
         await db.commit()
 
@@ -85,7 +81,7 @@ class WatchingService:
         # Start metrics tracking for this polling operation
         async with metrics_collector.track_polling_operation(
             "watching_schedule_checks",
-            series_count=0  # Will be updated with actual count
+            series_count=0,  # Will be updated with actual count
         ) as tracker:
             logger.info("Starting chapter update check job scheduling")
 
@@ -108,13 +104,17 @@ class WatchingService:
             skipped_count = 0
 
             for series in watched_series:
-                logger.debug(f"Processing series for update check: {series.title_primary} (ID: {series.id})")
-                
+                logger.debug(
+                    f"Processing series for update check: {series.title_primary} (ID: {series.id})"
+                )
+
                 # Check if there's already a pending/running job for this series
                 existing_job = await WatchingService._get_existing_update_job(db, series.id)
 
                 if existing_job:
-                    logger.debug(f"Skipping update check for series {series.id}: existing job found (status: {existing_job.status})")
+                    logger.debug(
+                        f"Skipping update check for series {series.id}: existing job found (status: {existing_job.status})"
+                    )
                     skipped_count += 1
                     metrics_collector.increment_counter("watching.scheduling.skipped")
                     continue
@@ -126,7 +126,9 @@ class WatchingService:
                         "series_id": str(series.id),
                         "mangadx_id": series.mangadx_id,
                         "series_title": series.title_primary,
-                        "last_watched_check": series.last_watched_check.isoformat() if series.last_watched_check else None,
+                        "last_watched_check": series.last_watched_check.isoformat()
+                        if series.last_watched_check
+                        else None,
                     },
                     priority=2,  # Medium priority for automatic update checks
                     scheduled_at=datetime.now(timezone.utc).replace(tzinfo=None),
@@ -135,7 +137,9 @@ class WatchingService:
                 db.add(job)
                 scheduled_count += 1
                 metrics_collector.increment_counter("watching.scheduling.scheduled")
-                logger.info(f"Scheduled chapter update check job for series: {series.title_primary}")
+                logger.info(
+                    f"Scheduled chapter update check job for series: {series.title_primary}"
+                )
 
             await db.commit()
 
@@ -154,9 +158,7 @@ class WatchingService:
             return result
 
     @staticmethod
-    async def get_watched_series(
-        db: AsyncSession, skip: int = 0, limit: int = 100
-    ) -> List[Series]:
+    async def get_watched_series(db: AsyncSession, skip: int = 0, limit: int = 100) -> List[Series]:
         """Get list of watched series with optimized loading to prevent N+1 queries.
 
         Args:
@@ -229,9 +231,7 @@ class WatchingService:
         }
 
     @staticmethod
-    async def _get_existing_update_job(
-        db: AsyncSession, series_id: UUID
-    ) -> Optional[JobQueue]:
+    async def _get_existing_update_job(db: AsyncSession, series_id: UUID) -> Optional[JobQueue]:
         """Check if there's already a pending or running update check job for this series.
 
         Args:
@@ -280,7 +280,9 @@ class WatchingScheduler:
 
         self._running = True
         self._task = asyncio.create_task(self._run_scheduler())
-        logger.info(f"Started background watching scheduler (check interval: {self.check_interval}s)")
+        logger.info(
+            f"Started background watching scheduler (check interval: {self.check_interval}s)"
+        )
 
     async def stop(self):
         """Stop the background watching scheduler."""

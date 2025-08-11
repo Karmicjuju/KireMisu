@@ -67,7 +67,11 @@ class JobWorker:
 
             # Complete job successfully - mark as completed
             await self._update_job_status(
-                db, job.id, "completed", completed_at=datetime.now(timezone.utc).replace(tzinfo=None), error_message=None
+                db,
+                job.id,
+                "completed",
+                completed_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                error_message=None,
             )
 
             # Commit all changes in single transaction
@@ -192,19 +196,21 @@ class JobWorker:
         try:
             # Use the download service to execute the job
             result = await self.download_service.execute_download_job(db, job)
-            
+
             logger.info(f"Download job {job.id} completed successfully")
             return result
-            
+
         except Exception as e:
             logger.error(f"Download job {job.id} failed: {e}")
             raise JobExecutionError(f"Download job execution failed: {e}")
-        
+
         finally:
             # Clean up download service resources
             await self.download_service.cleanup()
 
-    async def _execute_chapter_update_check(self, db: AsyncSession, job: JobQueue) -> Dict[str, Any]:
+    async def _execute_chapter_update_check(
+        self, db: AsyncSession, job: JobQueue
+    ) -> Dict[str, Any]:
         """Execute a chapter update check job for a watched series.
 
         Args:
@@ -220,10 +226,14 @@ class JobWorker:
         series_title = payload.get("series_title", "Unknown Series")
 
         if not series_id_str or not mangadx_id:
-            raise JobExecutionError("Chapter update check job missing required fields: series_id and mangadx_id")
+            raise JobExecutionError(
+                "Chapter update check job missing required fields: series_id and mangadx_id"
+            )
 
         series_id = UUID(series_id_str)
-        logger.info(f"Executing chapter update check for series {series_title} (MangaDx: {mangadx_id})")
+        logger.info(
+            f"Executing chapter update check for series {series_title} (MangaDx: {mangadx_id})"
+        )
 
         # Get the series from database
         series_result = await db.execute(select(Series).where(Series.id == series_id))
@@ -258,9 +268,11 @@ class JobWorker:
                     # This is a new chapter - create a Chapter model but don't download the file yet
                     chapter_number = mangadx_chapter.get_chapter_number()
                     volume_number = mangadx_chapter.get_volume_number()
-                    
+
                     if chapter_number is None:
-                        logger.warning(f"Skipping chapter with invalid number: {mangadx_chapter.id}")
+                        logger.warning(
+                            f"Skipping chapter with invalid number: {mangadx_chapter.id}"
+                        )
                         continue
 
                     # Create chapter record with MangaDx metadata
@@ -326,9 +338,9 @@ class JobWorker:
             "series_id": series_id_str,
             "series_title": series_title,
             "mangadx_id": mangadx_id,
-            "chapters_found": len(mangadx_chapters) if 'mangadx_chapters' in locals() else 0,
+            "chapters_found": len(mangadx_chapters) if "mangadx_chapters" in locals() else 0,
             "new_chapters": len(new_chapters),
-            "notifications_created": len(notifications) if 'notifications' in locals() else 0,
+            "notifications_created": len(notifications) if "notifications" in locals() else 0,
         }
 
         logger.info(f"Chapter update check completed: {result}")
@@ -355,7 +367,10 @@ class JobWorker:
             error_message: Optional error message
             retry_count: Optional retry count
         """
-        update_values = {"status": status, "updated_at": datetime.now(timezone.utc).replace(tzinfo=None)}
+        update_values = {
+            "status": status,
+            "updated_at": datetime.now(timezone.utc).replace(tzinfo=None),
+        }
 
         # Handle started_at explicitly - None means clear it for retries
         if started_at is not None:
@@ -383,7 +398,10 @@ class JobWorker:
         await db.execute(
             update(LibraryPath)
             .where(LibraryPath.id == library_path_id)
-            .values(last_scan=datetime.now(timezone.utc).replace(tzinfo=None), updated_at=datetime.now(timezone.utc).replace(tzinfo=None))
+            .values(
+                last_scan=datetime.now(timezone.utc).replace(tzinfo=None),
+                updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            )
         )
         # Note: Commit is handled by caller for transaction consistency
 
@@ -396,7 +414,10 @@ class JobWorker:
         await db.execute(
             update(LibraryPath)
             .where(LibraryPath.enabled == True)
-            .values(last_scan=datetime.now(timezone.utc).replace(tzinfo=None), updated_at=datetime.now(timezone.utc).replace(tzinfo=None))
+            .values(
+                last_scan=datetime.now(timezone.utc).replace(tzinfo=None),
+                updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            )
         )
         # Note: Commit is handled by caller for transaction consistency
 
@@ -506,7 +527,9 @@ class JobWorkerRunner:
                         JobQueue.status == "pending",  # Double-check they're still pending
                     )
                 )
-                .values(status="running", started_at=datetime.now(timezone.utc).replace(tzinfo=None))
+                .values(
+                    status="running", started_at=datetime.now(timezone.utc).replace(tzinfo=None)
+                )
                 .returning(JobQueue)
             )
 

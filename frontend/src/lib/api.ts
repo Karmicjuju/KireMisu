@@ -285,6 +285,41 @@ const api = axios.create({
   timeout: 60000, // Increased timeout for library scanning operations
 });
 
+// Auth token getter function - will be set by auth context
+let getAuthToken: () => string | null = () => null;
+
+// Request interceptor to add auth headers
+api.interceptors.request.use(
+  (config) => {
+    const token = getAuthToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response interceptor to handle 401 errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Clear auth data and redirect to login
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('kiremisu_auth');
+        window.location.href = '/';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Function to configure auth for the API client
+export const configureApiAuth = (tokenGetter: () => string | null) => {
+  getAuthToken = tokenGetter;
+};
+
 export const libraryApi = {
   async getPaths(): Promise<LibraryPathList> {
     const response = await api.get<LibraryPathList>('/api/library/paths');
