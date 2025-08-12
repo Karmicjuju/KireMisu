@@ -1,6 +1,6 @@
 """Tests for job scheduler service."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -371,3 +371,27 @@ class TestJobScheduler:
         assert "library_path" in job.payload
         assert job.payload["library_path_id"] == str(path.id)
         assert job.payload["library_path"] == path.path
+
+    async def test_job_timestamps_are_timezone_naive(self, db_session: AsyncSession):
+        """Test that all job timestamps are stored without timezone info."""
+        # Create a job
+        job_id = await JobScheduler.schedule_job(
+            db_session,
+            job_type="test_timezone",
+            payload={"test": "data"},
+            priority=5,
+        )
+        
+        # Retrieve the job
+        job = await db_session.get(JobQueue, job_id)
+        assert job is not None
+        
+        # Check that all timestamps are timezone-naive
+        assert job.created_at.tzinfo is None, "created_at should be timezone-naive"
+        assert job.updated_at.tzinfo is None, "updated_at should be timezone-naive"
+        assert job.scheduled_at.tzinfo is None, "scheduled_at should be timezone-naive"
+        
+        # Verify scheduled_at is set correctly (should be roughly now)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        time_diff = abs((job.scheduled_at - now).total_seconds())
+        assert time_diff < 5, "scheduled_at should be close to current time"

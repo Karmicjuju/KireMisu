@@ -173,7 +173,7 @@ async def mangadx_health_check(
         return MangaDxHealthResponse(
             api_accessible=is_healthy,
             response_time_ms=response_time_ms,
-            last_check=datetime.now(timezone.utc),
+            last_check=datetime.now(timezone.utc).replace(tzinfo=None),
             error_message=None if is_healthy else "API health check failed",
         )
 
@@ -183,7 +183,7 @@ async def mangadx_health_check(
         return MangaDxHealthResponse(
             api_accessible=False,
             response_time_ms=response_time_ms,
-            last_check=datetime.now(timezone.utc),
+            last_check=datetime.now(timezone.utc).replace(tzinfo=None),
             error_message=str(e),
         )
 
