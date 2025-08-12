@@ -45,6 +45,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app/backend:ro
+      - ./tests:/app/tests:ro
       - ./pyproject.toml:/app/pyproject.toml:ro
       - ./manga-storage:/manga-storage:ro
     depends_on:

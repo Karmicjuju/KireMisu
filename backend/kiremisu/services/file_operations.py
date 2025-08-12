@@ -166,7 +166,7 @@ class FileOperationService:
 
             # Update operation with validation results
             operation.status = "validated" if validation_result.is_valid else "failed"
-            operation.validated_at = datetime.now(timezone.utc)
+            operation.validated_at = datetime.now(timezone.utc).replace(tzinfo=None)
             operation.validation_results = validation_result.model_dump()
 
             # Store affected records for tracking
@@ -239,7 +239,7 @@ class FileOperationService:
 
         # Update status to in_progress
         operation.status = "in_progress"
-        operation.started_at = datetime.now(timezone.utc)
+        operation.started_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await db.commit()
 
         try:
@@ -258,7 +258,7 @@ class FileOperationService:
 
             # Mark operation as completed
             operation.status = "completed"
-            operation.completed_at = datetime.now(timezone.utc)
+            operation.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
             await db.commit()
 
             operation_logger.info(
@@ -678,7 +678,7 @@ class FileOperationService:
 
     async def cleanup_old_operations(self, db: AsyncSession, days_old: int = 30) -> int:
         """Clean up old completed operations and their backups."""
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_old)
+        cutoff_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days_old)
 
         # Find old completed operations
         result = await db.execute(

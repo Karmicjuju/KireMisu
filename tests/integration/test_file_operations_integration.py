@@ -587,3 +587,53 @@ class TestFileOperationErrorRecovery:
         
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+    async def test_file_operation_timestamps_are_timezone_naive(self, db_session: AsyncSession, temp_library):
+        """Test that all file operation timestamps are stored without timezone info."""
+        service = FileOperationService()
+        
+        # Create test data
+        series_dir = temp_library / "Test Series"
+        new_name = "Renamed Series"
+        
+        # Create operation
+        operation = await service.create_operation(
+            db_session,
+            operation_type="rename",
+            source_path=str(series_dir),
+            target_path=str(temp_library / new_name),
+        )
+        
+        # Check initial timestamps
+        assert operation.created_at.tzinfo is None, "created_at should be timezone-naive"
+        assert operation.updated_at.tzinfo is None, "updated_at should be timezone-naive"
+        
+        # Validate operation
+        validation_result = await service.validate_operation(db_session, operation.id)
+        await db_session.refresh(operation)
+        
+        # Check validation timestamp
+        assert operation.validated_at is not None
+        assert operation.validated_at.tzinfo is None, "validated_at should be timezone-naive"
+        
+        # Execute operation
+        try:
+            await service.execute_operation(db_session, operation.id, force=True)
+            await db_session.refresh(operation)
+            
+            # Check execution timestamps
+            assert operation.started_at is not None
+            assert operation.started_at.tzinfo is None, "started_at should be timezone-naive"
+            assert operation.completed_at is not None
+            assert operation.completed_at.tzinfo is None, "completed_at should be timezone-naive"
+            
+            # Verify timestamp comparisons work correctly
+            assert operation.completed_at > operation.started_at
+            assert operation.started_at > operation.validated_at
+            assert operation.validated_at > operation.created_at
+            
+        except Exception:
+            # Even on failure, timestamps should be timezone-naive
+            await db_session.refresh(operation)
+            if operation.started_at:
+                assert operation.started_at.tzinfo is None

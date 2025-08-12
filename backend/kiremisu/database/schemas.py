@@ -1120,7 +1120,7 @@ class MangaDxImportResult(BaseModel):
 
     # Timing information
     import_duration_ms: Optional[int] = Field(None, description="Import duration in milliseconds")
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class MangaDxImportResponse(BaseModel):
@@ -1709,7 +1709,7 @@ class DownloadStatsResponse(BaseModel):
     available_storage_gb: Optional[float] = Field(None, description="Available storage space in GB")
 
     # Last updated
-    stats_generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    stats_generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class BulkDownloadRequest(BaseModel):
@@ -1762,7 +1762,7 @@ class ErrorResponse(BaseModel):
     details: Optional[List[ErrorDetail]] = Field(None, description="Detailed error information")
     request_id: Optional[str] = Field(None, description="Request tracking ID")
     timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), description="Error timestamp"
+        default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None), description="Error timestamp"
     )
 
     @classmethod
@@ -2033,5 +2033,5 @@ class MangaDxDownloadedChapter(BaseModel):
     download_quality: str = Field(..., description="Download quality used")
     download_duration_seconds: Optional[float] = Field(None, description="Time taken to download")
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), description="Download timestamp"
+        default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None), description="Download timestamp"
     )
