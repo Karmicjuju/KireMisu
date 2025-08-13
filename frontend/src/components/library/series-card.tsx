@@ -65,7 +65,7 @@ export function SeriesCard({ series, className, viewMode = 'grid' }: SeriesCardP
           <div className="flex-1 min-w-0 space-y-1">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <h3 className="font-medium text-sm line-clamp-1">{series.title_primary}</h3>
+                <h3 className="font-medium text-sm line-clamp-1 series-title">{series.title_primary}</h3>
                 {series.author && (
                   <p className="text-xs text-muted-foreground line-clamp-1">by {series.author}</p>
                 )}
@@ -189,7 +189,7 @@ export function SeriesCard({ series, className, viewMode = 'grid' }: SeriesCardP
 
       <div className="space-y-2 p-3">
         <div>
-          <h3 className="mb-1 line-clamp-2 text-sm font-semibold">{series.title_primary}</h3>
+          <h3 className="mb-1 line-clamp-2 text-sm font-semibold series-title">{series.title_primary}</h3>
           {series.author && (
             <p className="line-clamp-1 text-xs text-muted-foreground">by {series.author}</p>
           )}

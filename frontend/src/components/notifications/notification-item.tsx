@@ -95,6 +95,7 @@ export function NotificationItem({
         className
       )}
       onClick={handleClick}
+      data-testid="notification-item"
     >
       {/* Icon */}
       <div className={cn(
@@ -124,6 +125,7 @@ export function NotificationItem({
               onClick={handleMarkAsRead}
               className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
               aria-label="Mark as read"
+              data-testid="mark-read-button"
             >
               <X className="h-3 w-3" />
             </Button>

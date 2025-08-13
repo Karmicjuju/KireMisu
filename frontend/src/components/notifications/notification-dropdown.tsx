@@ -120,6 +120,9 @@ export function NotificationDropdown({
         top: `${position.top}px`,
         right: `${position.right}px`,
       }}
+      data-testid="notification-dropdown"
+      role="dialog"
+      aria-label="Notifications"
     >
       <GlassCard variant="strong" className="overflow-hidden shadow-2xl border-border bg-card/95 backdrop-blur-xl relative z-10">
         {/* Header */}
@@ -139,6 +142,7 @@ export function NotificationDropdown({
                 size="sm"
                 onClick={handleMarkAllAsRead}
                 className="h-7 px-2 text-xs text-foreground/80 hover:text-foreground hover:bg-accent"
+                data-testid="mark-all-read-button"
               >
                 <CheckCheck className="h-3 w-3 mr-1" />
                 Mark all read
