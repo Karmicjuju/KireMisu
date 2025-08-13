@@ -1,1 +1,0 @@
-# KireMisu public assets

@@ -4,18 +4,24 @@ A self-hosted, cloud-first manga reader and library management system built with
 
 ## 🚧 Development Status
 
-KireMisu is currently in Phase 0 - Initial Setup. The repository contains the foundational architecture and development environment setup.
+KireMisu is an actively developed manga reader and library management system. Core features including reading progress tracking, push notifications, library management, and security systems are implemented and tested.
 
-## 📋 Features (Planned)
+## 📋 Features
 
+### ✅ Implemented
 - **📚 Library Management**: Organize and manage your manga collection with rich metadata
-- **🔍 MangaDx Integration**: Search, import, and track manga from MangaDx
-- **📖 Reading Experience**: Modern web-based manga reader with annotations
-- **🏷️ Custom Organization**: Tags, lists, and advanced filtering
-- **👀 Watching System**: Track new chapter releases automatically
-- **🔄 File Organization**: Bulk renaming and file management tools
-- **🌐 API Access**: RESTful API for automation and integrations
+- **📖 Reading Experience**: Modern web-based manga reader with annotations and progress tracking
+- **🏷️ Custom Organization**: Tags, series management, and filtering
+- **👀 Watching System**: Track new chapter releases with notifications
+- **🔔 Push Notifications**: Web push notifications for new chapters (with VAPID support)
+- **🔐 Security**: JWT authentication, input validation, and comprehensive security measures
 - **🐳 Self-Hosted**: Docker-based deployment for complete control
+- **⚡ Performance**: Async backend with connection pooling and caching
+
+### 🚧 In Development
+- **🔍 MangaDx Integration**: Enhanced search, import, and metadata enrichment
+- **🔄 File Organization**: Advanced bulk renaming and file management tools
+- **🌐 API Access**: Extended RESTful API for automation and integrations
 
 ## 🏗️ Architecture
 
@@ -323,14 +329,19 @@ make test-coverage-compare
 
 ## 📋 Roadmap
 
-The project follows a phased development approach:
+### ✅ Completed Phases
+- **Phase 0**: Repository setup and development environment
+- **Phase 1**: Core database schema and API endpoints
+- **Phase 2**: Library management and file processing
+- **Phase 3**: Basic MangaDx integration and metadata
+- **Phase 4**: Reading interface and progress tracking
+- **Security Phase**: Comprehensive security implementation
 
-- **Phase 0**: ✅ Repository setup and development environment
-- **Phase 1**: 🚧 Core database schema and basic API endpoints
-- **Phase 2**: 📚 Library management and file processing
-- **Phase 3**: 🔍 MangaDx integration and metadata enrichment
-- **Phase 4**: 📖 Reading interface and user experience
-- **Phase 5**: 🏷️ Advanced features and automation
+### 🚧 Current Development
+- **Enhanced MangaDx Integration**: Advanced search and metadata enrichment
+- **File Organization Tools**: Bulk operations and automated file management
+- **Performance Optimization**: Large library handling and caching improvements
+- **Mobile Experience**: Touch navigation and responsive design enhancements
 
 See `docs/kiremisu_prd.md` for detailed feature specifications.
 
