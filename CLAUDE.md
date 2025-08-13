@@ -137,81 +137,7 @@ docker-compose -f docker-compose.dev.yml up -d
 
 # Recently Completed Sessions
 
-## NT-1: Web Push Notifications System (2025-08-10)
-**Status**: ✅ Complete - Ready for PR
-**GitHub Issue**: #14 - NT-1: Web-push notifications
-
-### Implementation Summary
-Successfully implemented a comprehensive web push notifications system that integrates with the existing W-1 watching system:
-
-**Backend Components**:
-- Push subscription management API (`/api/push/*`)  
-- VAPID key configuration and handling
-- Push notification sending infrastructure with WebPush protocol
-- Database model and migration for push subscriptions
-- Integration with existing notification service for automatic chapter alerts
-- Manual push test script for development/debugging
-
-**Frontend Components**:
-- Service worker for handling push notifications (`/public/service-worker.js`)
-- React hook for push notification management (`use-push-notifications.ts`)
-- User opt-in UI component with browser compatibility detection
-- Integration with existing notification dropdown
-- PWA manifest for app-like experience
-
-**Key Features**:
-- Browser support detection with graceful degradation
-- Test notification functionality for user verification  
-- Automatic new chapter push notifications
-- Subscription management (subscribe/unsubscribe)
-- Error handling for expired subscriptions
-- Background sync for offline notification queuing
-
-**Testing & Quality**:
-- Comprehensive unit tests for API endpoints
-- Integration tests with notification system
-- Frontend E2E tests for user workflows
-- Database tests for subscription model
-- Code formatting and linting completed
-
-**Configuration Required**:
-Users must set VAPID keys in environment:
-```
-VAPID_PUBLIC_KEY=<generated_public_key>
-VAPID_PRIVATE_KEY=<generated_private_key>
-VAPID_CLAIMS={"sub": "mailto:admin@kiremisu.local"}
-```
-
-**Next Steps**: Create PR, test in production environment, add PWA icons
-
-## SEC-1: Comprehensive Security Overhaul (2025-08-11)
-**Status**: ✅ Complete - Production Ready
-**GitHub Issue**: PR #56 Security Issues
-
-### Security Implementation Summary
-Addressed all critical security vulnerabilities identified in PR #56 feedback, implementing enterprise-level security standards:
-
-**Critical Security Fixes**:
-- ✅ **Removed All Hardcoded Credentials**: Eliminated demo user buttons and hardcoded tokens from frontend
-- ✅ **Fixed Push Notification Security**: Implemented strict endpoint validation, HTTPS enforcement, XSS prevention
-- ✅ **Added Missing Authentication**: All user data endpoints now require JWT authentication
-- ✅ **Enhanced Input Validation**: Comprehensive XSS, SQL injection, and SSRF protection
-- ✅ **User-Scoped Authorization**: Strict data protection preventing cross-user access
-
-**Security Infrastructure**:
-- Database-backed user management with bcrypt password hashing
-- JWT authentication with environment-driven secret management
-- Login rate limiting (5 attempts per 30 minutes per IP)
-- Comprehensive input validation across all API endpoints
-- Production-ready security defaults with zero hardcoded secrets
-
-**Testing & Verification**:
-- Complete security test suite covering all vulnerabilities
-- Docker environment build and deployment verification
-- End-to-end authentication testing with environment variables
-- All protected endpoints verified to require authentication
-
-**Files Modified**: 8 security-critical files updated with comprehensive fixes
+**Note**: Session details have been moved to git commit history. See commits for detailed implementation notes.
 
 ## Security Requirements for Future Development
 
@@ -284,3 +210,17 @@ If security vulnerabilities are identified:
 4. **Test**: Verify fix with security test suite
 5. **Deploy**: Deploy to all environments immediately
 6. **Document**: Update security requirements if needed
+
+# Documentation Standards for Future Development
+
+**CRITICAL**: Prevent accumulation of temporary documentation files:
+
+- ❌ **NEVER create session summary files** (`*_SUMMARY.md`, `*_IMPLEMENTATION_SUMMARY.md`, `*_TEST_COVERAGE*.md`)
+- ❌ **NEVER create API contract documentation** (`*_API_CONTRACT.md`) 
+- ❌ **NEVER create quick test files** (`QUICK_TEST.md`)
+- ✅ **Implementation details belong in git commit messages**, not separate documentation files
+- ✅ **Session notes should be archived to git history**, not accumulated in CLAUDE.md
+- ✅ **Temporary documentation must follow .gitignore patterns** to prevent accidental commits
+- ✅ **Only create documentation files when explicitly requested by the user**
+
+The .gitignore has been updated to catch these patterns automatically.

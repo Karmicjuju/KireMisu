@@ -10,6 +10,6 @@ interface NavigationState {
 export const useNavigationStore = create<NavigationState>((set) => ({
   sidebarCollapsed: false,
   currentPage: 'dashboard',
-  setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
-  setCurrentPage: (page) => set({ currentPage: page }),
+  setSidebarCollapsed: (collapsed: boolean) => set({ sidebarCollapsed: collapsed }),
+  setCurrentPage: (page: string) => set({ currentPage: page }),
 }));

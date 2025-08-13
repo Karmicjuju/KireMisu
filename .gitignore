@@ -2,11 +2,8 @@
 # Generated for Python FastAPI + Next.js + Docker stack
 
 # Environment Variables & Secrets
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env*
+!.env.example
 *.pem
 *.key
 
@@ -19,11 +16,11 @@ __pycache__/
 build/
 develop-eggs/
 dist/
-downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# Python lib directories (root level only to avoid blocking frontend/src/lib)
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -51,7 +48,6 @@ coverage.xml
 cover/
 
 # Virtual Environments
-.env
 .venv
 env/
 venv/
@@ -104,7 +100,6 @@ cache/
 !test_fixtures/*.cbr
 
 # Docker
-.dockerignore
 docker-compose.override.yml
 # Keep main docker-compose files
 # docker-compose.yml
@@ -120,7 +115,6 @@ k8s/secrets/
 *.kubeconfig
 
 # IDE & Editor Files
-.vscode/
 .idea/
 *.swp
 *.swo
@@ -212,3 +206,10 @@ NOTES.md
 dev_notes/
 scratch/
 temp/
+
+# Session Summary & Implementation Documentation
+*_SUMMARY.md
+*_IMPLEMENTATION_SUMMARY.md
+*_TEST_COVERAGE*.md
+*_API_CONTRACT.md
+QUICK_TEST.md
