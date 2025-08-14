@@ -1,20 +1,19 @@
 """API endpoints for watching series functionality."""
 
 import logging
-from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiremisu.database.connection import get_db
-from kiremisu.core.unified_auth import get_current_user
-from kiremisu.database.schemas import WatchingResponse, WatchingContextRequest, ErrorResponse
-from kiremisu.services.watching_service import WatchingService
 from kiremisu.core.error_handler import create_not_found_error, create_standardized_error_response
+from kiremisu.core.unified_auth import get_current_user
+from kiremisu.database.connection import get_db
+from kiremisu.database.schemas import ErrorResponse, WatchingResponse
+from kiremisu.services.watching_service import WatchingService
 
 router = APIRouter(prefix="/api/watching", tags=["watching"])
 logger = logging.getLogger(__name__)
@@ -25,7 +24,7 @@ limiter = Limiter(key_func=get_remote_address)
 
 @router.get(
     "/",
-    response_model=List[WatchingResponse],
+    response_model=list[WatchingResponse],
     responses={500: {"model": ErrorResponse, "description": "Internal server error"}},
 )
 async def get_watching_list(
@@ -33,7 +32,7 @@ async def get_watching_list(
     skip: int = Query(0, ge=0, description="Number of series to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of series to return"),
     current_user = Depends(get_current_user),
-) -> List[WatchingResponse]:
+) -> list[WatchingResponse]:
     """Get list of all watched series.
 
     TODO: Add user filtering when user authentication is implemented.
@@ -69,8 +68,9 @@ async def get_watching_status(
     """
     try:
         # Get the series to check its watching status
-        from kiremisu.database.models import Series
         from sqlalchemy import select
+
+        from kiremisu.database.models import Series
 
         result = await db.execute(select(Series).where(Series.id == series_id))
         series = result.scalar_one_or_none()
@@ -114,7 +114,7 @@ async def watch_series(
     try:
         series = await WatchingService.toggle_watch(db=db, series_id=series_id, enabled=True)
         return WatchingResponse.from_series(series)
-    except ValueError as e:
+    except ValueError:
         error_response = create_not_found_error("series", str(series_id))
         return JSONResponse(status_code=404, content=error_response)
     except Exception as e:
@@ -148,7 +148,7 @@ async def unwatch_series(
     try:
         await WatchingService.toggle_watch(db=db, series_id=series_id, enabled=False)
         return {"message": "Series unwatched successfully", "status": "success"}
-    except ValueError as e:
+    except ValueError:
         error_response = create_not_found_error("series", str(series_id))
         return JSONResponse(status_code=404, content=error_response)
     except Exception as e:

@@ -1,21 +1,19 @@
 """API endpoints for tag management."""
 
-from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, update, delete
-from sqlalchemy.orm import selectinload
 
 from kiremisu.database.connection import get_db
-from kiremisu.database.models import Tag, Series, series_tags
+from kiremisu.database.models import Series, Tag, series_tags
 from kiremisu.database.schemas import (
-    TagResponse,
-    TagCreate,
-    TagUpdate,
-    TagListResponse,
     SeriesTagAssignment,
+    TagCreate,
+    TagListResponse,
+    TagResponse,
+    TagUpdate,
 )
 
 router = APIRouter(prefix="/api/tags", tags=["tags"])
@@ -26,7 +24,7 @@ async def get_tags(
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0, description="Number of tags to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of tags to return"),
-    search: Optional[str] = Query(None, description="Search term for tag name"),
+    search: str | None = Query(None, description="Search term for tag name"),
     sort_by: str = Query("usage", enum=["name", "usage", "created"], description="Sort order"),
 ) -> TagListResponse:
     """Get list of all tags."""
@@ -145,8 +143,8 @@ async def delete_tag(tag_id: UUID, db: AsyncSession = Depends(get_db)) -> dict:
 
 
 # Series-specific tag endpoints
-@router.get("/series/{series_id}", response_model=List[TagResponse])
-async def get_series_tags(series_id: UUID, db: AsyncSession = Depends(get_db)) -> List[TagResponse]:
+@router.get("/series/{series_id}", response_model=list[TagResponse])
+async def get_series_tags(series_id: UUID, db: AsyncSession = Depends(get_db)) -> list[TagResponse]:
     """Get all tags assigned to a series."""
     # First verify series exists
     series_result = await db.execute(select(Series).where(Series.id == series_id))
@@ -167,10 +165,10 @@ async def get_series_tags(series_id: UUID, db: AsyncSession = Depends(get_db)) -
     return [TagResponse.from_model(tag) for tag in tags]
 
 
-@router.put("/series/{series_id}", response_model=List[TagResponse])
+@router.put("/series/{series_id}", response_model=list[TagResponse])
 async def assign_tags_to_series(
     series_id: UUID, assignment: SeriesTagAssignment, db: AsyncSession = Depends(get_db)
-) -> List[TagResponse]:
+) -> list[TagResponse]:
     """Assign tags to a series (replaces existing tags)."""
     # Verify series exists
     series_result = await db.execute(select(Series).where(Series.id == series_id))
@@ -230,10 +228,10 @@ async def assign_tags_to_series(
     return [TagResponse.from_model(tag) for tag in updated_tags]
 
 
-@router.post("/series/{series_id}/add", response_model=List[TagResponse])
+@router.post("/series/{series_id}/add", response_model=list[TagResponse])
 async def add_tags_to_series(
     series_id: UUID, assignment: SeriesTagAssignment, db: AsyncSession = Depends(get_db)
-) -> List[TagResponse]:
+) -> list[TagResponse]:
     """Add tags to a series (keeps existing tags)."""
     # Verify series exists
     series_result = await db.execute(select(Series).where(Series.id == series_id))
@@ -284,10 +282,10 @@ async def add_tags_to_series(
     return [TagResponse.from_model(tag) for tag in all_tags]
 
 
-@router.delete("/series/{series_id}/remove", response_model=List[TagResponse])
+@router.delete("/series/{series_id}/remove", response_model=list[TagResponse])
 async def remove_tags_from_series(
     series_id: UUID, assignment: SeriesTagAssignment, db: AsyncSession = Depends(get_db)
-) -> List[TagResponse]:
+) -> list[TagResponse]:
     """Remove specific tags from a series."""
     # Verify series exists
     series_result = await db.execute(select(Series).where(Series.id == series_id))

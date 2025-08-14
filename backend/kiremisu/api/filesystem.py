@@ -2,13 +2,13 @@
 Filesystem browsing API endpoints with enhanced security.
 """
 
-import os
 import logging
+import os
 import re
 from pathlib import Path
-from typing import List, Optional
+
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, validator
+from pydantic import BaseModel
 
 # Security logging setup
 security_logger = logging.getLogger("kiremisu.security.filesystem")
@@ -49,16 +49,16 @@ class DirectoryItem(BaseModel):
     name: str
     path: str
     is_directory: bool
-    size: Optional[int] = None
-    modified: Optional[int] = None
+    size: int | None = None
+    modified: int | None = None
 
 
 class DirectoryListing(BaseModel):
     """Response for directory listing."""
 
     current_path: str
-    parent_path: Optional[str]
-    items: List[DirectoryItem]
+    parent_path: str | None
+    items: list[DirectoryItem]
     total_items: int
     page: int = 1
     page_size: int = DEFAULT_PAGE_SIZE
@@ -305,7 +305,7 @@ async def validate_path(
 
         return result
 
-    except HTTPException as e:
+    except HTTPException:
         # Return safe error response without exposing details
         return {
             "exists": False,

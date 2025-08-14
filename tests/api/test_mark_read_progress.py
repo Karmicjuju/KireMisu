@@ -1,11 +1,12 @@
 """Tests for mark-read functionality and progress tracking API endpoints."""
 
-import pytest
 from datetime import datetime, timedelta
 from uuid import uuid4
+
+import pytest
 from httpx import AsyncClient
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
 
 from kiremisu.database.models import Chapter, Series
 
@@ -281,7 +282,7 @@ class TestSeriesProgressAPI:
     ):
         """Test successful series progress retrieval."""
         series = test_series_with_mixed_progress["series"]
-        chapters = test_series_with_mixed_progress["chapters"]
+        test_series_with_mixed_progress["chapters"]
 
         response = await client.get(f"/api/series/{series.id}/progress")
 
@@ -362,7 +363,6 @@ class TestDashboardStatsAPI:
     @pytest.fixture
     async def test_library_with_stats(self, db_session: AsyncSession):
         """Create a test library with various series and reading progress."""
-        series_data = []
 
         # Series 1: Fully read
         series1 = Series(
@@ -638,7 +638,7 @@ class TestProgressAggregationValidation:
             # Count actual read chapters
             result = await db_session.execute(
                 select(func.count(Chapter.id)).where(
-                    Chapter.series_id == series.id, Chapter.is_read == True
+                    Chapter.series_id == series.id, Chapter.is_read
                 )
             )
             actual_read_count = result.scalar()
@@ -738,7 +738,7 @@ class TestProgressAggregationValidation:
         # Verify all chapters are marked as read
         result = await db_session.execute(
             select(func.count(Chapter.id)).where(
-                Chapter.series_id == series.id, Chapter.is_read == True
+                Chapter.series_id == series.id, Chapter.is_read
             )
         )
         actual_read_count = result.scalar()

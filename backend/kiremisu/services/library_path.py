@@ -3,7 +3,6 @@
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
 from uuid import UUID
 
 from sqlalchemy import select
@@ -105,19 +104,19 @@ class LibraryPathService:
         return normalized_path
 
     @staticmethod
-    async def get_all(db: AsyncSession) -> List[LibraryPath]:
+    async def get_all(db: AsyncSession) -> list[LibraryPath]:
         """Get all library paths."""
         result = await db.execute(select(LibraryPath).order_by(LibraryPath.created_at))
         return list(result.scalars().all())
 
     @staticmethod
-    async def get_by_id(db: AsyncSession, path_id: UUID) -> Optional[LibraryPath]:
+    async def get_by_id(db: AsyncSession, path_id: UUID) -> LibraryPath | None:
         """Get library path by ID."""
         result = await db.execute(select(LibraryPath).where(LibraryPath.id == path_id))
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_by_path(db: AsyncSession, path: str) -> Optional[LibraryPath]:
+    async def get_by_path(db: AsyncSession, path: str) -> LibraryPath | None:
         """Get library path by path string."""
         result = await db.execute(select(LibraryPath).where(LibraryPath.path == path))
         return result.scalar_one_or_none()
@@ -157,7 +156,7 @@ class LibraryPathService:
     @staticmethod
     async def update(
         db: AsyncSession, path_id: UUID, update_data: LibraryPathUpdate
-    ) -> Optional[LibraryPath]:
+    ) -> LibraryPath | None:
         """Update an existing library path."""
         library_path = await LibraryPathService.get_by_id(db, path_id)
         if not library_path:
@@ -209,15 +208,15 @@ class LibraryPathService:
         return True
 
     @staticmethod
-    async def get_enabled_paths(db: AsyncSession) -> List[LibraryPath]:
+    async def get_enabled_paths(db: AsyncSession) -> list[LibraryPath]:
         """Get all enabled library paths."""
         result = await db.execute(
-            select(LibraryPath).where(LibraryPath.enabled == True).order_by(LibraryPath.created_at)
+            select(LibraryPath).where(LibraryPath.enabled).order_by(LibraryPath.created_at)
         )
         return list(result.scalars().all())
 
     @staticmethod
-    async def update_last_scan(db: AsyncSession, path_id: UUID) -> Optional[LibraryPath]:
+    async def update_last_scan(db: AsyncSession, path_id: UUID) -> LibraryPath | None:
         """Update the last scan timestamp for a library path."""
         library_path = await LibraryPathService.get_by_id(db, path_id)
         if not library_path:

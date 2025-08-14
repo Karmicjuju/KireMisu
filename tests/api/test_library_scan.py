@@ -1,14 +1,15 @@
 """Test library scan API endpoints."""
 
 import tempfile
-import pytest
+from unittest.mock import patch
 from uuid import uuid4
-from unittest.mock import AsyncMock, patch
+
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiremisu.database.models import LibraryPath, Series, Chapter
-from kiremisu.services.filesystem_parser import SeriesInfo, ChapterInfo
+from kiremisu.database.models import Chapter, LibraryPath, Series
+from kiremisu.services.filesystem_parser import ChapterInfo, SeriesInfo
 from kiremisu.services.importer import ImportStats
 
 

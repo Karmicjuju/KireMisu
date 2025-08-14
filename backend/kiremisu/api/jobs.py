@@ -1,17 +1,16 @@
 """Job management API endpoints."""
 
-from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiremisu.database.connection import get_db
 from kiremisu.core.unified_auth import get_current_user
+from kiremisu.database.connection import get_db
 from kiremisu.database.schemas import (
-    JobResponse,
     JobListResponse,
+    JobResponse,
     JobScheduleRequest,
     JobScheduleResponse,
     JobStatsResponse,
@@ -27,13 +26,13 @@ class JobWorkerDependency:
     """Dependency provider for job worker runner."""
 
     def __init__(self):
-        self._worker_runner: Optional[JobWorkerRunner] = None
+        self._worker_runner: JobWorkerRunner | None = None
 
     def set_worker_runner(self, worker_runner: JobWorkerRunner):
         """Set the worker runner instance."""
         self._worker_runner = worker_runner
 
-    def get_worker_runner(self) -> Optional[JobWorkerRunner]:
+    def get_worker_runner(self) -> JobWorkerRunner | None:
         """Get the worker runner instance."""
         return self._worker_runner
 
@@ -42,7 +41,7 @@ class JobWorkerDependency:
 job_worker_dependency = JobWorkerDependency()
 
 
-def get_worker_runner() -> Optional[JobWorkerRunner]:
+def get_worker_runner() -> JobWorkerRunner | None:
     """Dependency function to get worker runner."""
     return job_worker_dependency.get_worker_runner()
 
@@ -55,7 +54,7 @@ def set_worker_runner(worker_runner: JobWorkerRunner):
 @router.get("/status", response_model=JobStatsResponse)
 async def get_job_status(
     db: AsyncSession = Depends(get_db),
-    worker_runner: Optional[JobWorkerRunner] = Depends(get_worker_runner),
+    worker_runner: JobWorkerRunner | None = Depends(get_worker_runner),
     current_user: dict = Depends(get_current_user)
 ) -> JobStatsResponse:
     """Get job queue status and statistics."""
@@ -68,13 +67,13 @@ async def get_job_status(
         worker_status = await worker_runner.get_worker_status()
 
     return JobStatsResponse(
-        queue_stats=queue_stats, worker_status=worker_status, timestamp=datetime.now(timezone.utc)
+        queue_stats=queue_stats, worker_status=worker_status, timestamp=datetime.now(UTC)
     )
 
 
 @router.get("/recent", response_model=JobListResponse)
 async def get_recent_jobs(
-    job_type: Optional[str] = Query(None, description="Filter by job type"),
+    job_type: str | None = Query(None, description="Filter by job type"),
     limit: int = Query(50, ge=1, le=100, description="Maximum number of jobs to return"),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
@@ -198,14 +197,14 @@ async def schedule_jobs(
         )
 
 
-@router.post("/cleanup", response_model=Dict[str, int])
+@router.post("/cleanup", response_model=dict[str, int])
 async def cleanup_old_jobs(
     older_than_days: int = Query(
         30, ge=1, le=365, description="Remove jobs completed more than this many days ago"
     ),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
-) -> Dict[str, int]:
+) -> dict[str, int]:
     """Clean up old completed jobs."""
     try:
         deleted_count = await JobScheduler.cleanup_old_jobs(db, older_than_days)
@@ -227,7 +226,7 @@ async def cleanup_old_jobs(
 
 @router.get("/worker/status", response_model=WorkerStatusResponse)
 async def get_worker_status(
-    worker_runner: Optional[JobWorkerRunner] = Depends(get_worker_runner),
+    worker_runner: JobWorkerRunner | None = Depends(get_worker_runner),
     current_user: dict = Depends(get_current_user)
 ) -> WorkerStatusResponse:
     """Get current worker status."""

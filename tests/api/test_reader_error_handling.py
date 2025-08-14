@@ -3,13 +3,13 @@
 import os
 import tempfile
 import zipfile
-from uuid import uuid4
-from unittest.mock import patch, Mock, AsyncMock
+from unittest.mock import Mock, patch
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiremisu.database.models import Series, Chapter
+from kiremisu.database.models import Chapter, Series
 
 
 @pytest.fixture
@@ -89,7 +89,7 @@ class TestReaderErrorHandling:
 
         # Create an empty CBZ file
         with tempfile.NamedTemporaryFile(suffix=".cbz", delete=False) as temp_file:
-            with zipfile.ZipFile(temp_file.name, "w") as zf:
+            with zipfile.ZipFile(temp_file.name, "w"):
                 pass  # Create empty zip
             empty_cbz_path = temp_file.name
 

@@ -2,16 +2,15 @@
 
 import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select, update, and_, func
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from kiremisu.database.models import JobQueue, Series
 from kiremisu.core.metrics import metrics_collector
+from kiremisu.database.models import JobQueue, Series
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +45,7 @@ class WatchingService:
         # Update watching status and last check time
         update_values = {
             "watching_enabled": enabled,
-            "updated_at": datetime.now(timezone.utc).replace(tzinfo=None),
+            "updated_at": datetime.now(UTC).replace(tzinfo=None),
         }
 
         # Reset last_watched_check when enabling to force immediate check
@@ -69,7 +68,7 @@ class WatchingService:
         return series
 
     @staticmethod
-    async def schedule_update_checks(db: AsyncSession) -> Dict[str, int]:
+    async def schedule_update_checks(db: AsyncSession) -> dict[str, int]:
         """Schedule chapter update check jobs for watched series.
 
         Args:
@@ -89,7 +88,7 @@ class WatchingService:
             result = await db.execute(
                 select(Series).where(
                     and_(
-                        Series.watching_enabled == True,
+                        Series.watching_enabled,
                         Series.mangadx_id.isnot(None),
                     )
                 )
@@ -131,7 +130,7 @@ class WatchingService:
                         else None,
                     },
                     priority=2,  # Medium priority for automatic update checks
-                    scheduled_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                    scheduled_at=datetime.now(UTC).replace(tzinfo=None),
                 )
 
                 db.add(job)
@@ -158,7 +157,7 @@ class WatchingService:
             return result
 
     @staticmethod
-    async def get_watched_series(db: AsyncSession, skip: int = 0, limit: int = 100) -> List[Series]:
+    async def get_watched_series(db: AsyncSession, skip: int = 0, limit: int = 100) -> list[Series]:
         """Get list of watched series with optimized loading to prevent N+1 queries.
 
         Args:
@@ -172,7 +171,7 @@ class WatchingService:
         result = await db.execute(
             select(Series)
             .options(joinedload(Series.user_tags))  # Eagerly load user_tags to prevent N+1 queries
-            .where(Series.watching_enabled == True)
+            .where(Series.watching_enabled)
             .order_by(Series.title_primary.asc())
             .offset(skip)
             .limit(limit)
@@ -190,12 +189,12 @@ class WatchingService:
             Number of series being watched
         """
         result = await db.execute(
-            select(func.count(Series.id)).where(Series.watching_enabled == True)
+            select(func.count(Series.id)).where(Series.watching_enabled)
         )
         return result.scalar() or 0
 
     @staticmethod
-    async def get_watching_stats(db: AsyncSession) -> Dict[str, int]:
+    async def get_watching_stats(db: AsyncSession) -> dict[str, int]:
         """Get statistics about watching system.
 
         Args:
@@ -231,7 +230,7 @@ class WatchingService:
         }
 
     @staticmethod
-    async def _get_existing_update_job(db: AsyncSession, series_id: UUID) -> Optional[JobQueue]:
+    async def _get_existing_update_job(db: AsyncSession, series_id: UUID) -> JobQueue | None:
         """Check if there's already a pending or running update check job for this series.
 
         Args:

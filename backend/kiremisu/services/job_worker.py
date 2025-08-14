@@ -2,16 +2,16 @@
 
 import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select, and_, update
+from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiremisu.database.models import JobQueue, LibraryPath, Series, Chapter
-from kiremisu.services.importer import ImporterService
+from kiremisu.database.models import Chapter, JobQueue, LibraryPath, Series
 from kiremisu.services.download_service import DownloadService
+from kiremisu.services.importer import ImporterService
 from kiremisu.services.mangadx_client import MangaDxClient
 from kiremisu.services.notification_service import NotificationService
 
@@ -33,7 +33,7 @@ class JobWorker:
         self.mangadx_client = MangaDxClient()
         self.notification_service = NotificationService()
 
-    async def execute_job(self, db: AsyncSession, job: JobQueue) -> Dict[str, Any]:
+    async def execute_job(self, db: AsyncSession, job: JobQueue) -> dict[str, Any]:
         """Execute a single job and update its status.
 
         Uses a single transaction for all database operations to ensure consistency.
@@ -70,7 +70,7 @@ class JobWorker:
                 db,
                 job.id,
                 "completed",
-                completed_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                completed_at=datetime.now(UTC).replace(tzinfo=None),
                 error_message=None,
             )
 
@@ -127,7 +127,7 @@ class JobWorker:
                     db,
                     job.id,
                     "failed",
-                    completed_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                    completed_at=datetime.now(UTC).replace(tzinfo=None),
                     error_message=error_msg,
                 )
                 logger.error(f"Job {job.id} failed permanently after {job.retry_count} retries")
@@ -139,7 +139,7 @@ class JobWorker:
             await db.rollback()
             logger.error(f"Failed to update job failure status: {retry_error}", exc_info=True)
 
-    async def _execute_library_scan(self, db: AsyncSession, job: JobQueue) -> Dict[str, Any]:
+    async def _execute_library_scan(self, db: AsyncSession, job: JobQueue) -> dict[str, Any]:
         """Execute a library scan job.
 
         Args:
@@ -175,7 +175,7 @@ class JobWorker:
         logger.info(f"Library scan completed: {result}")
         return result
 
-    async def _execute_download(self, db: AsyncSession, job: JobQueue) -> Dict[str, Any]:
+    async def _execute_download(self, db: AsyncSession, job: JobQueue) -> dict[str, Any]:
         """Execute a download job for manga from external sources.
 
         Args:
@@ -210,7 +210,7 @@ class JobWorker:
 
     async def _execute_chapter_update_check(
         self, db: AsyncSession, job: JobQueue
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Execute a chapter update check job for a watched series.
 
         Args:
@@ -288,7 +288,7 @@ class JobWorker:
                         source_metadata={
                             "mangadx_data": mangadx_chapter.model_dump(),
                             "discovered_via": "chapter_update_check",
-                            "discovered_at": datetime.now(timezone.utc).isoformat(),
+                            "discovered_at": datetime.now(UTC).isoformat(),
                         },
                     )
 
@@ -304,8 +304,8 @@ class JobWorker:
                     update(Series)
                     .where(Series.id == series_id)
                     .values(
-                        last_watched_check=datetime.now(timezone.utc).replace(tzinfo=None),
-                        updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                        last_watched_check=datetime.now(UTC).replace(tzinfo=None),
+                        updated_at=datetime.now(UTC).replace(tzinfo=None),
                     )
                 )
                 await db.commit()
@@ -322,8 +322,8 @@ class JobWorker:
                     update(Series)
                     .where(Series.id == series_id)
                     .values(
-                        last_watched_check=datetime.now(timezone.utc).replace(tzinfo=None),
-                        updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                        last_watched_check=datetime.now(UTC).replace(tzinfo=None),
+                        updated_at=datetime.now(UTC).replace(tzinfo=None),
                     )
                 )
                 await db.commit()
@@ -351,10 +351,10 @@ class JobWorker:
         db: AsyncSession,
         job_id: UUID,
         status: str,
-        started_at: Optional[datetime] = None,
-        completed_at: Optional[datetime] = None,
-        error_message: Optional[str] = None,
-        retry_count: Optional[int] = None,
+        started_at: datetime | None = None,
+        completed_at: datetime | None = None,
+        error_message: str | None = None,
+        retry_count: int | None = None,
     ):
         """Update job status and related fields.
 
@@ -369,7 +369,7 @@ class JobWorker:
         """
         update_values = {
             "status": status,
-            "updated_at": datetime.now(timezone.utc).replace(tzinfo=None),
+            "updated_at": datetime.now(UTC).replace(tzinfo=None),
         }
 
         # Handle started_at explicitly - None means clear it for retries
@@ -399,8 +399,8 @@ class JobWorker:
             update(LibraryPath)
             .where(LibraryPath.id == library_path_id)
             .values(
-                last_scan=datetime.now(timezone.utc).replace(tzinfo=None),
-                updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                last_scan=datetime.now(UTC).replace(tzinfo=None),
+                updated_at=datetime.now(UTC).replace(tzinfo=None),
             )
         )
         # Note: Commit is handled by caller for transaction consistency
@@ -413,10 +413,10 @@ class JobWorker:
         """
         await db.execute(
             update(LibraryPath)
-            .where(LibraryPath.enabled == True)
+            .where(LibraryPath.enabled)
             .values(
-                last_scan=datetime.now(timezone.utc).replace(tzinfo=None),
-                updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                last_scan=datetime.now(UTC).replace(tzinfo=None),
+                updated_at=datetime.now(UTC).replace(tzinfo=None),
             )
         )
         # Note: Commit is handled by caller for transaction consistency
@@ -507,7 +507,7 @@ class JobWorkerRunner:
                 .where(
                     and_(
                         JobQueue.status == "pending",
-                        JobQueue.scheduled_at <= datetime.now(timezone.utc).replace(tzinfo=None),
+                        JobQueue.scheduled_at <= datetime.now(UTC).replace(tzinfo=None),
                     )
                 )
                 .order_by(JobQueue.priority.desc(), JobQueue.scheduled_at.asc())
@@ -528,7 +528,7 @@ class JobWorkerRunner:
                     )
                 )
                 .values(
-                    status="running", started_at=datetime.now(timezone.utc).replace(tzinfo=None)
+                    status="running", started_at=datetime.now(UTC).replace(tzinfo=None)
                 )
                 .returning(JobQueue)
             )
@@ -566,7 +566,7 @@ class JobWorkerRunner:
                 if current_task in self._active_jobs:
                     self._active_jobs.remove(current_task)
 
-    async def get_worker_status(self) -> Dict[str, Any]:
+    async def get_worker_status(self) -> dict[str, Any]:
         """Get current worker status.
 
         Returns:

@@ -8,10 +8,10 @@ import logging
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
-from threading import Lock
-from typing import Dict, List, Optional, Any, Deque
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from threading import Lock
+from typing import Any
 from uuid import UUID
 
 logger = logging.getLogger(__name__)
@@ -23,17 +23,17 @@ class PollingMetric:
 
     operation_type: str  # e.g., "watching_check", "mangadx_fetch", "notification_poll"
     start_time: float
-    end_time: Optional[float] = None
+    end_time: float | None = None
     success: bool = False
-    error_message: Optional[str] = None
-    series_id: Optional[UUID] = None
+    error_message: str | None = None
+    series_id: UUID | None = None
     series_count: int = 0
     chapters_processed: int = 0
     notifications_created: int = 0
     external_api_calls: int = 0
 
     @property
-    def duration_ms(self) -> Optional[float]:
+    def duration_ms(self) -> float | None:
         """Calculate operation duration in milliseconds."""
         if self.end_time is None:
             return None
@@ -52,13 +52,13 @@ class APIMetric:
     endpoint: str
     method: str
     start_time: float
-    end_time: Optional[float] = None
-    status_code: Optional[int] = None
+    end_time: float | None = None
+    status_code: int | None = None
     response_size_bytes: int = 0
-    user_id: Optional[UUID] = None  # For future user tracking
+    user_id: UUID | None = None  # For future user tracking
 
     @property
-    def duration_ms(self) -> Optional[float]:
+    def duration_ms(self) -> float | None:
         """Calculate request duration in milliseconds."""
         if self.end_time is None:
             return None
@@ -77,7 +77,7 @@ class SystemMetrics:
 
     # API metrics
     total_api_requests: int = 0
-    api_requests_by_status: Dict[int, int] = field(default_factory=dict)
+    api_requests_by_status: dict[int, int] = field(default_factory=dict)
     average_api_response_time_ms: float = 0.0
 
     # Job metrics
@@ -91,9 +91,9 @@ class SystemMetrics:
     notifications_sent_last_hour: int = 0
 
     # System health
-    memory_usage_mb: Optional[float] = None
-    cpu_usage_percent: Optional[float] = None
-    last_updated: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    memory_usage_mb: float | None = None
+    cpu_usage_percent: float | None = None
+    last_updated: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 class MetricsCollector:
@@ -104,22 +104,22 @@ class MetricsCollector:
         self._lock = Lock()
 
         # Polling metrics history
-        self.polling_metrics: Deque[PollingMetric] = deque(maxlen=max_history_size)
+        self.polling_metrics: deque[PollingMetric] = deque(maxlen=max_history_size)
 
         # API metrics history
-        self.api_metrics: Deque[APIMetric] = deque(maxlen=max_history_size)
+        self.api_metrics: deque[APIMetric] = deque(maxlen=max_history_size)
 
         # Real-time counters
-        self.counters: Dict[str, int] = defaultdict(int)
-        self.gauges: Dict[str, float] = {}
+        self.counters: dict[str, int] = defaultdict(int)
+        self.gauges: dict[str, float] = {}
 
         # Performance tracking
-        self.performance_buckets: Dict[str, List[float]] = defaultdict(list)
+        self.performance_buckets: dict[str, list[float]] = defaultdict(list)
 
         logger.info(f"MetricsCollector initialized with history size: {max_history_size}")
 
     def record_polling_start(
-        self, operation_type: str, series_id: Optional[UUID] = None, series_count: int = 0
+        self, operation_type: str, series_id: UUID | None = None, series_count: int = 0
     ) -> PollingMetric:
         """Start tracking a polling operation.
 
@@ -149,7 +149,7 @@ class MetricsCollector:
         self,
         metric: PollingMetric,
         success: bool = True,
-        error_message: Optional[str] = None,
+        error_message: str | None = None,
         chapters_processed: int = 0,
         notifications_created: int = 0,
         external_api_calls: int = 0,
@@ -203,7 +203,7 @@ class MetricsCollector:
 
     @asynccontextmanager
     async def track_polling_operation(
-        self, operation_type: str, series_id: Optional[UUID] = None, series_count: int = 0
+        self, operation_type: str, series_id: UUID | None = None, series_count: int = 0
     ):
         """Context manager for tracking polling operations.
 
@@ -248,7 +248,7 @@ class MetricsCollector:
             raise
 
     def record_api_request_start(
-        self, endpoint: str, method: str, user_id: Optional[UUID] = None
+        self, endpoint: str, method: str, user_id: UUID | None = None
     ) -> APIMetric:
         """Start tracking an API request.
 
@@ -374,8 +374,8 @@ class MetricsCollector:
         )
 
     def get_polling_metrics(
-        self, operation_type: Optional[str] = None, limit: int = 100
-    ) -> List[Dict[str, Any]]:
+        self, operation_type: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
         """Get recent polling metrics.
 
         Args:
@@ -405,12 +405,12 @@ class MetricsCollector:
                 "chapters_processed": m.chapters_processed,
                 "notifications_created": m.notifications_created,
                 "external_api_calls": m.external_api_calls,
-                "timestamp": datetime.fromtimestamp(m.start_time, tz=timezone.utc).isoformat(),
+                "timestamp": datetime.fromtimestamp(m.start_time, tz=UTC).isoformat(),
             }
             for m in metrics
         ]
 
-    def get_performance_stats(self, metric_name: str) -> Dict[str, float]:
+    def get_performance_stats(self, metric_name: str) -> dict[str, float]:
         """Get performance statistics for a metric.
 
         Args:

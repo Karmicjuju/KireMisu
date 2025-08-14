@@ -1,13 +1,10 @@
 """Importer service for importing manga series and chapters into the database."""
 
-import logging
 from datetime import datetime
-from typing import Dict, List, Optional
 from uuid import UUID
 
 import structlog
 from sqlalchemy import select, update
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.database.models import Chapter, LibraryPath, Series
@@ -28,7 +25,7 @@ class ImportStats:
         self.chapters_updated = 0
         self.errors = 0
 
-    def to_dict(self) -> Dict[str, int]:
+    def to_dict(self) -> dict[str, int]:
         """Convert stats to dictionary."""
         return {
             "series_found": self.series_found,
@@ -51,7 +48,7 @@ class ImporterService:
     async def scan_library_paths(
         self,
         db: AsyncSession,
-        library_path_id: Optional[UUID] = None,
+        library_path_id: UUID | None = None,
     ) -> ImportStats:
         """Scan one or all library paths and import series/chapters.
 
@@ -134,8 +131,8 @@ class ImporterService:
     async def _get_paths_to_scan(
         self,
         db: AsyncSession,
-        library_path_id: Optional[UUID] = None,
-    ) -> List[LibraryPath]:
+        library_path_id: UUID | None = None,
+    ) -> list[LibraryPath]:
         """Get library paths to scan based on the request."""
         if library_path_id:
             # Scan specific path
@@ -186,7 +183,7 @@ class ImporterService:
         self,
         db: AsyncSession,
         file_path: str,
-    ) -> Optional[Series]:
+    ) -> Series | None:
         """Get existing series by file path."""
         result = await db.execute(select(Series).where(Series.file_path == file_path))
         return result.scalar_one_or_none()
@@ -278,7 +275,7 @@ class ImporterService:
         self,
         db: AsyncSession,
         series: Series,
-        new_chapters: List,
+        new_chapters: list,
         stats: ImportStats,
     ) -> None:
         """Synchronize chapters for a series."""

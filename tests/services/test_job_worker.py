@@ -1,6 +1,5 @@
 """Tests for job worker service."""
 
-import asyncio
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -9,8 +8,8 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.database.models import JobQueue, LibraryPath
-from kiremisu.services.job_worker import JobWorker, JobWorkerRunner, JobExecutionError
 from kiremisu.services.importer import ImportStats
+from kiremisu.services.job_worker import JobExecutionError, JobWorker, JobWorkerRunner
 
 
 class TestJobWorker:
@@ -414,7 +413,6 @@ class TestJobWorkerRunner:
 
     async def test_execute_job_with_cleanup_removes_from_active_set(self, mock_db_session_factory):
         """Test that completed jobs are removed from active set."""
-        mock_session = mock_db_session_factory.return_value.__aenter__.return_value
 
         # Mock job
         job = MagicMock()

@@ -5,16 +5,15 @@ particularly focused on polling operations, background jobs, and API performance
 """
 
 import logging
-from typing import Dict, List, Optional, Any
-from uuid import UUID
+from typing import Any
 
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from kiremisu.core.metrics import metrics_collector, SystemMetrics
-from kiremisu.database.schemas import ErrorResponse
 from kiremisu.core.error_handler import create_standardized_error_response
+from kiremisu.core.metrics import SystemMetrics, metrics_collector
+from kiremisu.database.schemas import ErrorResponse
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
 logger = logging.getLogger(__name__)
@@ -23,9 +22,9 @@ logger = logging.getLogger(__name__)
 class PollingMetricsResponse(BaseModel):
     """Schema for polling metrics response."""
 
-    metrics: List[Dict[str, Any]] = Field(..., description="List of polling metrics")
+    metrics: list[dict[str, Any]] = Field(..., description="List of polling metrics")
     total_operations: int = Field(..., description="Total number of operations")
-    operation_type_filter: Optional[str] = Field(None, description="Applied operation type filter")
+    operation_type_filter: str | None = Field(None, description="Applied operation type filter")
     success_rate: float = Field(..., description="Success rate percentage")
     average_duration_ms: float = Field(
         ..., description="Average operation duration in milliseconds"
@@ -36,7 +35,7 @@ class PerformanceStatsResponse(BaseModel):
     """Schema for performance statistics response."""
 
     metric_name: str = Field(..., description="Name of the performance metric")
-    stats: Dict[str, float] = Field(..., description="Performance statistics")
+    stats: dict[str, float] = Field(..., description="Performance statistics")
 
 
 class SystemMetricsResponse(BaseModel):
@@ -44,7 +43,7 @@ class SystemMetricsResponse(BaseModel):
 
     system_metrics: SystemMetrics = Field(..., description="Aggregated system metrics")
     timestamp: str = Field(..., description="Metrics timestamp")
-    uptime_info: Dict[str, Any] = Field(..., description="System uptime information")
+    uptime_info: dict[str, Any] = Field(..., description="System uptime information")
 
 
 @router.get(
@@ -91,7 +90,7 @@ async def get_system_metrics() -> SystemMetricsResponse:
     responses={500: {"model": ErrorResponse, "description": "Internal server error"}},
 )
 async def get_polling_metrics(
-    operation_type: Optional[str] = Query(None, description="Filter by operation type"),
+    operation_type: str | None = Query(None, description="Filter by operation type"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of metrics to return"),
 ) -> PollingMetricsResponse:
     """Get polling operation metrics.

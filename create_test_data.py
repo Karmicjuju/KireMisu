@@ -6,7 +6,6 @@ This creates a sample series and chapter directly in the database.
 
 import asyncio
 import sys
-import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -14,7 +13,7 @@ from uuid import uuid4
 sys.path.insert(0, str(Path(__file__).parent / "backend"))
 
 from kiremisu.database.connection import get_db_session_factory
-from kiremisu.database.models import Series, Chapter
+from kiremisu.database.models import Chapter, Series
 
 
 async def create_test_data():
@@ -54,9 +53,9 @@ async def create_test_data():
 
         print(f"✅ Created test series: {series.id}")
         print(f"✅ Created test chapter: {chapter.id}")
-        print(f"\n🔗 Test reader URL:")
+        print("\n🔗 Test reader URL:")
         print(f"   http://localhost:3000/reader/{chapter.id}")
-        print(f"\n📊 API endpoints to test:")
+        print("\n📊 API endpoints to test:")
         print(f"   http://localhost:8000/api/chapters/{chapter.id}")
         print(f"   http://localhost:8000/api/chapters/{chapter.id}/pages")
 
@@ -66,10 +65,10 @@ async def create_test_data():
 if __name__ == "__main__":
     try:
         series_id, chapter_id = asyncio.run(create_test_data())
-        print(f"\n✨ Test data created successfully!")
-        print(f"\nNote: The reader will show 'Page image not found' errors")
-        print(f"because the test files don't actually exist on disk.")
-        print(f"This is expected - you're testing the reader interface, not file reading.")
+        print("\n✨ Test data created successfully!")
+        print("\nNote: The reader will show 'Page image not found' errors")
+        print("because the test files don't actually exist on disk.")
+        print("This is expected - you're testing the reader interface, not file reading.")
     except Exception as e:
         print(f"❌ Error creating test data: {e}")
-        print(f"\nMake sure the backend is running and database is accessible.")
+        print("\nMake sure the backend is running and database is accessible.")

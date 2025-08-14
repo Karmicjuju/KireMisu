@@ -1,6 +1,6 @@
 """Configuration constants for database utilities."""
 
-from typing import Sequence
+from collections.abc import Sequence
 
 
 class DatabaseConfig:

@@ -9,14 +9,14 @@ This module provides comprehensive reading progress functionality including:
 """
 
 import logging
-from typing import Dict, Any
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiremisu.database.connection import get_db
 from kiremisu.core.unified_auth import get_current_user
+from kiremisu.database.connection import get_db
 from kiremisu.database.schemas import (
     ChapterMarkReadResponse,
     ReadingProgressResponse,
@@ -107,8 +107,9 @@ async def toggle_chapter_read_status(
         )
 
         # Get the chapter to find the series_id
-        from kiremisu.database.models import Chapter
         from sqlalchemy import select
+
+        from kiremisu.database.models import Chapter
 
         result = await db.execute(select(Chapter).where(Chapter.id == chapter_id))
         chapter = result.scalar_one_or_none()
@@ -170,8 +171,9 @@ async def mark_chapter_unread(
     """
     try:
         # Check current status and toggle only if currently read
-        from kiremisu.database.models import Chapter
         from sqlalchemy import select
+
+        from kiremisu.database.models import Chapter
 
         result = await db.execute(select(Chapter).where(Chapter.id == chapter_id))
         chapter = result.scalar_one_or_none()
@@ -280,7 +282,7 @@ async def mark_series_read(
     series_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Mark all chapters in a series as read.
 
@@ -334,7 +336,7 @@ async def mark_series_unread(
     series_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Mark all chapters in a series as unread.
 
@@ -440,8 +442,9 @@ async def get_chapter_progress(
         HTTPException: If chapter not found
     """
     try:
-        from kiremisu.database.models import Chapter
         from sqlalchemy import select
+
+        from kiremisu.database.models import Chapter
 
         result = await db.execute(select(Chapter).where(Chapter.id == chapter_id))
         chapter = result.scalar_one_or_none()

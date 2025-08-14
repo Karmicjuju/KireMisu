@@ -3,16 +3,17 @@
 import asyncio
 import logging
 import re
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from functools import wraps
-from typing import Any, AsyncGenerator, Callable, List, Optional
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.exc import DisconnectionError, OperationalError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .connection import get_db_session
 from .config import db_config
+from .connection import get_db_session
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ async def check_db_health() -> bool:
             async with get_db_session() as session:
                 await session.execute(text("SELECT 1"))
                 return True
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.error("Database health check timed out")
         return False
     except Exception as e:
@@ -71,7 +72,7 @@ def with_db_retry(
 
 
 @asynccontextmanager
-async def db_transaction() -> AsyncGenerator[AsyncSession, None]:
+async def db_transaction() -> AsyncGenerator[AsyncSession]:
     """Simple transaction context manager with proper error handling."""
     async with get_db_session() as session:
         try:
@@ -83,7 +84,7 @@ async def db_transaction() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
-async def bulk_create(session: AsyncSession, items: List[Any]) -> None:
+async def bulk_create(session: AsyncSession, items: list[Any]) -> None:
     """Simple bulk insert helper."""
     if not items:
         return
@@ -205,7 +206,7 @@ def validate_query_params(**params) -> dict:
 
             cleaned_params[key] = value.strip()
 
-        elif isinstance(value, (int, float, bool)):
+        elif isinstance(value, int | float | bool):
             cleaned_params[key] = value
 
         elif isinstance(value, list):

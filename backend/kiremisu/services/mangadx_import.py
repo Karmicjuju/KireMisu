@@ -1,14 +1,11 @@
 """MangaDx metadata import and enrichment service."""
 
-import asyncio
 import difflib
 import hashlib
 import logging
-import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
 
 import httpx
@@ -158,7 +155,7 @@ class MangaDxImportService:
 
     def _calculate_match_confidence(
         self, local_series: Series, mangadx_info: MangaDxMangaInfo
-    ) -> Tuple[float, List[str]]:
+    ) -> tuple[float, list[str]]:
         """
         Calculate confidence score for a potential match.
 
@@ -216,8 +213,8 @@ class MangaDxImportService:
 
         # Genre/tag overlap (10% weight)
         if local_series.genres and mangadx_info.genres:
-            local_genres_set = set(g.lower() for g in local_series.genres)
-            mangadx_genres_set = set(g.lower() for g in mangadx_info.genres)
+            local_genres_set = {g.lower() for g in local_series.genres}
+            mangadx_genres_set = {g.lower() for g in mangadx_info.genres}
 
             if local_genres_set and mangadx_genres_set:
                 genre_overlap = len(local_genres_set & mangadx_genres_set) / len(
@@ -230,7 +227,7 @@ class MangaDxImportService:
 
         return min(confidence, 1.0), reasons
 
-    async def _download_cover_art(self, cover_url: str, manga_id: str) -> Optional[str]:
+    async def _download_cover_art(self, cover_url: str, manga_id: str) -> str | None:
         """
         Download cover art from MangaDx.
 
@@ -282,7 +279,7 @@ class MangaDxImportService:
         self,
         db_session: AsyncSession,
         series_id: UUID,
-        search_query: Optional[str] = None,
+        search_query: str | None = None,
         auto_select_best_match: bool = False,
         confidence_threshold: float = 0.8,
     ) -> MangaDxEnrichmentResponse:
@@ -478,7 +475,7 @@ class MangaDxImportService:
                     "last_volume": mangadx_info.last_volume,
                     "last_chapter": mangadx_info.last_chapter,
                     "alternative_titles": mangadx_info.alternative_titles,
-                    "imported_at": datetime.now(timezone.utc).isoformat(),
+                    "imported_at": datetime.now(UTC).isoformat(),
                     "mangadx_created_at": mangadx_info.mangadx_created_at.isoformat()
                     if mangadx_info.mangadx_created_at
                     else None,

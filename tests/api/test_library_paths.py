@@ -1,14 +1,13 @@
 """Test library path API endpoints."""
 
-import os
 import tempfile
-import pytest
 from uuid import uuid4
+
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.database.models import LibraryPath
-from kiremisu.services.library_path import LibraryPathService
 
 
 @pytest.fixture

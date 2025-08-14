@@ -1,26 +1,27 @@
 """Push notification subscription and management API endpoints."""
 
-from typing import Optional, Dict, Any, List
-from uuid import UUID
-import json
+import asyncio
 import base64
+import html
+import json
 import logging
 import re
-import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime
+from typing import Any
 from urllib.parse import urlparse
-import html
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field, HttpUrl, validator
+from pywebpush import WebPushException, webpush
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, and_
-from pywebpush import webpush, WebPushException
-from pydantic import BaseModel, Field, validator, HttpUrl
 
-from kiremisu.database.connection import get_db, get_db_session
-from kiremisu.database.models import PushSubscription, Notification, Series, Chapter, User
 from kiremisu.core.config import get_settings
 from kiremisu.core.unified_auth import get_current_user
+from kiremisu.database.connection import get_db, get_db_session
+from kiremisu.database.models import Chapter, Notification, PushSubscription, Series, User
+
 
 # Simple metrics stub
 def track_api_request(operation: str):
@@ -42,27 +43,27 @@ class PushSubscriptionCreate(BaseModel):
     """Push subscription creation request."""
 
     endpoint: HttpUrl
-    keys: Dict[str, str]
-    expires_at: Optional[datetime] = None
-    user_agent: Optional[str] = Field(None, max_length=500)
+    keys: dict[str, str]
+    expires_at: datetime | None = None
+    user_agent: str | None = Field(None, max_length=500)
 
     @validator('endpoint')
-    def validate_endpoint(cls, v):
+    def validate_endpoint(self, v):
         """Validate push notification endpoint URL."""
         url = str(v)
-        
+
         # Parse URL and validate structure
         parsed = urlparse(url)
-        
+
         # Must use HTTPS (except localhost for development)
         if parsed.scheme != 'https':
             if not (parsed.netloc in ['localhost', '127.0.0.1'] or parsed.netloc.startswith('localhost:')):
                 raise ValueError("Push notification endpoints must use HTTPS")
-        
+
         # Check for valid push service domains (exact match for security)
         valid_domains = {
             'fcm.googleapis.com',
-            'updates.push.services.mozilla.com', 
+            'updates.push.services.mozilla.com',
             'updates-autopush.stage.mozaws.net',  # Mozilla staging
             'updates-autopush.dev.mozaws.net',    # Mozilla dev
             'notify.windows.com',
@@ -72,32 +73,32 @@ class PushSubscriptionCreate(BaseModel):
             'localhost',  # Development only
             '127.0.0.1'   # Development only
         }
-        
+
         # Extract hostname without port
         hostname = parsed.netloc.split(':')[0]
-        
+
         if hostname not in valid_domains:
             raise ValueError(f"Invalid push service endpoint domain: {hostname}. Only trusted push services are allowed.")
-        
+
         # Additional security checks
         if len(url) > 2000:  # Reasonable URL length limit
             raise ValueError("Push notification endpoint URL too long")
-            
+
         # Check for suspicious patterns
         suspicious_patterns = ['javascript:', 'data:', 'vbscript:', 'file:', 'ftp:']
         url_lower = url.lower()
         if any(pattern in url_lower for pattern in suspicious_patterns):
             raise ValueError("Invalid URL scheme detected")
-        
+
         return v
-    
+
     @validator('keys')
-    def validate_keys(cls, v):
+    def validate_keys(self, v):
         """Validate push subscription keys."""
         required_keys = {'p256dh', 'auth'}
         if not required_keys.issubset(v.keys()):
             raise ValueError(f"Missing required keys. Required: {required_keys}")
-        
+
         # Validate base64 format
         for key, value in v.items():
             if key in required_keys:
@@ -106,24 +107,24 @@ class PushSubscriptionCreate(BaseModel):
                     base64.urlsafe_b64decode(value + '==')  # Add padding
                 except Exception:
                     raise ValueError(f"Invalid base64 format for key: {key}")
-        
+
         return v
-    
+
     @validator('user_agent')
-    def sanitize_user_agent(cls, v):
+    def sanitize_user_agent(self, v):
         """Sanitize user agent string to prevent XSS and injection attacks."""
         if not v:
             return None
-            
+
         # Strip whitespace and limit length
         v = v.strip()[:500]
-        
+
         # HTML escape to prevent XSS
         v = html.escape(v)
-        
+
         # Additional sanitization: remove control characters and non-printable chars
         v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
-        
+
         # Remove potentially dangerous patterns
         dangerous_patterns = [
             r'<script[^>]*>',
@@ -132,10 +133,10 @@ class PushSubscriptionCreate(BaseModel):
             r'data:',
             r'on\w+\s*=',  # Event handlers like onclick=
         ]
-        
+
         for pattern in dangerous_patterns:
             v = re.sub(pattern, '', v, flags=re.IGNORECASE)
-        
+
         return v if v else None
 
     class Config:
@@ -155,7 +156,7 @@ class PushSubscriptionResponse(BaseModel):
     endpoint: str
     is_active: bool
     created_at: datetime
-    last_used: Optional[datetime]
+    last_used: datetime | None
     failure_count: int
 
 
@@ -164,27 +165,27 @@ class TestPushRequest(BaseModel):
 
     title: str = "Test Notification"
     body: str = "This is a test notification from KireMisu"
-    icon: Optional[str] = None
-    badge: Optional[str] = None
-    vibrate: Optional[List[int]] = [200, 100, 200]
-    data: Optional[Dict[str, Any]] = None
+    icon: str | None = None
+    badge: str | None = None
+    vibrate: list[int] | None = [200, 100, 200]
+    data: dict[str, Any] | None = None
 
 
 class PushNotificationRequest(BaseModel):
     """Manual push notification request."""
 
-    subscription_ids: Optional[List[UUID]] = Field(
+    subscription_ids: list[UUID] | None = Field(
         None, description="Specific subscriptions to target"
     )
     title: str
     body: str
     type: str = "system_alert"
-    icon: Optional[str] = None
-    badge: Optional[str] = None
-    tag: Optional[str] = None
+    icon: str | None = None
+    badge: str | None = None
+    tag: str | None = None
     require_interaction: bool = False
     silent: bool = False
-    data: Optional[Dict[str, Any]] = None
+    data: dict[str, Any] | None = None
 
 
 @router.get("/vapid-public-key", response_model=VapidKeysResponse)
@@ -193,11 +194,11 @@ async def get_vapid_public_key(
     current_user: User = Depends(get_current_user)
 ):
     """Get the VAPID public key for push subscriptions.
-    
+
     This endpoint can be accessed without authentication but has rate limiting.
     """
     track_api_request("push_get_vapid_key")
-    
+
     # All requests now require JWT authentication
 
     vapid_public_key = settings.vapid_public_key
@@ -219,10 +220,10 @@ async def subscribe_to_push(
 ):
     """Subscribe to push notifications. Requires authentication."""
     track_api_request("push_subscribe")
-    
+
     # Get user ID - handle both User model and dict for backwards compatibility
     user_id = current_user.id if hasattr(current_user, 'id') else current_user.get('id')
-    
+
     # Check if subscription already exists for this user
     endpoint_str = str(subscription.endpoint)
     existing = await db.execute(
@@ -242,7 +243,7 @@ async def subscribe_to_push(
         existing_sub.failure_count = 0
         existing_sub.user_agent = subscription.user_agent
         existing_sub.expires_at = subscription.expires_at
-        
+
         try:
             await db.commit()
         except Exception as e:
@@ -276,7 +277,7 @@ async def subscribe_to_push(
     )
 
     db.add(new_subscription)
-    
+
     try:
         await db.commit()
         await db.refresh(new_subscription)
@@ -308,7 +309,7 @@ async def unsubscribe_from_push(
 ):
     """Unsubscribe from push notifications. Requires authentication."""
     track_api_request("push_unsubscribe")
-    
+
     # Get user ID
     user_id = current_user.id if hasattr(current_user, 'id') else current_user.get('id')
 
@@ -352,7 +353,7 @@ async def unsubscribe_by_endpoint(
 ):
     """Unsubscribe from push notifications by endpoint. Requires authentication."""
     track_api_request("push_unsubscribe_by_endpoint")
-    
+
     # Get user ID
     user_id = current_user.id if hasattr(current_user, 'id') else current_user.get('id')
 
@@ -384,7 +385,7 @@ async def unsubscribe_by_endpoint(
         )
 
 
-@router.get("/subscriptions", response_model=List[PushSubscriptionResponse])
+@router.get("/subscriptions", response_model=list[PushSubscriptionResponse])
 async def list_subscriptions(
     active_only: bool = True,
     db: AsyncSession = Depends(get_db),
@@ -392,13 +393,13 @@ async def list_subscriptions(
 ):
     """List push subscriptions for current user. Requires authentication."""
     track_api_request("push_list_subscriptions")
-    
+
     # Get user ID
     user_id = current_user.id if hasattr(current_user, 'id') else current_user.get('id')
 
     query = select(PushSubscription).where(PushSubscription.user_id == user_id)
     if active_only:
-        query = query.where(PushSubscription.is_active == True)
+        query = query.where(PushSubscription.is_active)
 
     result = await db.execute(query.order_by(PushSubscription.created_at.desc()))
     subscriptions = result.scalars().all()
@@ -425,7 +426,7 @@ async def test_push_notification(
 ):
     """Send a test push notification to a specific subscription. Requires authentication."""
     track_api_request("push_test_notification")
-    
+
     # Get user ID
     user_id = current_user.id if hasattr(current_user, 'id') else current_user.get('id')
 
@@ -435,7 +436,7 @@ async def test_push_notification(
             and_(
                 PushSubscription.id == subscription_id,
                 PushSubscription.user_id == user_id,
-                PushSubscription.is_active == True
+                PushSubscription.is_active
             )
         )
     )
@@ -475,14 +476,14 @@ async def send_manual_push(
 ):
     """Send a manual push notification to user's subscriptions. Requires authentication."""
     track_api_request("push_send_manual")
-    
+
     # Get user ID
     user_id = current_user.id if hasattr(current_user, 'id') else current_user.get('id')
 
     # Get target subscriptions for current user only
     query = select(PushSubscription).where(
         and_(
-            PushSubscription.is_active == True,
+            PushSubscription.is_active,
             PushSubscription.user_id == user_id
         )
     )
@@ -524,12 +525,12 @@ async def send_push_notification(
     subscription: PushSubscription,
     title: str,
     body: str,
-    icon: Optional[str] = None,
-    badge: Optional[str] = None,
-    tag: Optional[str] = None,
-    data: Optional[Dict[str, Any]] = None,
-    actions: Optional[List[Dict[str, str]]] = None,
-    db: Optional[AsyncSession] = None,
+    icon: str | None = None,
+    badge: str | None = None,
+    tag: str | None = None,
+    data: dict[str, Any] | None = None,
+    actions: list[dict[str, str]] | None = None,
+    db: AsyncSession | None = None,
 ) -> bool:
     """Send a push notification to a single subscription."""
     try:
@@ -555,7 +556,7 @@ async def send_push_notification(
             payload["actions"] = actions
 
         # Send the notification
-        response = webpush(
+        webpush(
             subscription_info={"endpoint": subscription.endpoint, "keys": subscription.keys},
             data=json.dumps(payload),
             vapid_private_key=vapid_private_key,
@@ -596,21 +597,21 @@ async def send_push_notification(
 
 
 async def send_push_to_multiple(
-    subscriptions: List[PushSubscription],
+    subscriptions: list[PushSubscription],
     title: str,
     body: str,
     notification_type: str = "system_alert",
-    icon: Optional[str] = None,
-    badge: Optional[str] = None,
-    tag: Optional[str] = None,
+    icon: str | None = None,
+    badge: str | None = None,
+    tag: str | None = None,
     require_interaction: bool = False,
     silent: bool = False,
-    data: Optional[Dict[str, Any]] = None,
+    data: dict[str, Any] | None = None,
     batch_size: int = 10,  # Process in batches to avoid overwhelming the system
-    db: Optional[AsyncSession] = None,  # Pass database session for subscription updates
+    db: AsyncSession | None = None,  # Pass database session for subscription updates
 ):
     """Send push notifications to multiple subscriptions in parallel."""
-    
+
     async def send_single(subscription: PushSubscription) -> bool:
         """Helper to send a single notification."""
         notification_data = data or {}
@@ -628,7 +629,7 @@ async def send_push_to_multiple(
             data=notification_data,
             db=db,  # Pass database session for subscription updates
         )
-    
+
     # Process subscriptions in batches to avoid too many concurrent connections
     results = []
     for i in range(0, len(subscriptions), batch_size):
@@ -637,7 +638,7 @@ async def send_push_to_multiple(
             *[send_single(sub) for sub in batch],
             return_exceptions=True  # Don't fail the whole batch if one fails
         )
-        
+
         # Handle results, counting successes and failures
         for result in batch_results:
             if isinstance(result, Exception):
@@ -645,7 +646,7 @@ async def send_push_to_multiple(
                 results.append(False)
             else:
                 results.append(result)
-    
+
     successful = sum(1 for r in results if r is True)
     failed = len(results) - successful
 
@@ -654,16 +655,16 @@ async def send_push_to_multiple(
 
 
 async def send_push_to_multiple_background(
-    subscription_ids: List[str],
+    subscription_ids: list[str],
     title: str,
     body: str,
     notification_type: str = "system_alert",
-    icon: Optional[str] = None,
-    badge: Optional[str] = None,
-    tag: Optional[str] = None,
+    icon: str | None = None,
+    badge: str | None = None,
+    tag: str | None = None,
     require_interaction: bool = False,
     silent: bool = False,
-    data: Optional[Dict[str, Any]] = None,
+    data: dict[str, Any] | None = None,
 ):
     """Background task-safe version of send_push_to_multiple that creates its own DB session."""
     async with get_db_session() as db:
@@ -671,17 +672,17 @@ async def send_push_to_multiple_background(
             # Fetch subscriptions by IDs
             from uuid import UUID
             subscription_uuids = [UUID(sub_id) for sub_id in subscription_ids]
-            
+
             result = await db.execute(
                 select(PushSubscription).where(
                     and_(
                         PushSubscription.id.in_(subscription_uuids),
-                        PushSubscription.is_active == True
+                        PushSubscription.is_active
                     )
                 )
             )
             subscriptions = result.scalars().all()
-            
+
             if subscriptions:
                 # Use the regular send_push_to_multiple with fresh session
                 await send_push_to_multiple(
@@ -699,7 +700,7 @@ async def send_push_to_multiple_background(
                 )
             else:
                 logger.warning("No active subscriptions found for background push task")
-                
+
         except Exception as e:
             logger.error(f"Error in background push notification task: {e}")
 
@@ -709,7 +710,7 @@ async def send_chapter_notification(
 ):
     """Send push notification for a new chapter."""
     # Get all active push subscriptions
-    result = await db.execute(select(PushSubscription).where(PushSubscription.is_active == True))
+    result = await db.execute(select(PushSubscription).where(PushSubscription.is_active))
     subscriptions = result.scalars().all()
 
     if not subscriptions:
@@ -719,10 +720,6 @@ async def send_chapter_notification(
     title = f"New Chapter: {series.title}"
     body = f"Chapter {chapter.chapter_number}: {chapter.title or 'Untitled'}"
 
-    actions = [
-        {"action": "read", "title": "Read Now", "icon": "/icons/read.png"},
-        {"action": "later", "title": "Read Later", "icon": "/icons/later.png"},
-    ]
 
     data = {
         "type": "new_chapter",

@@ -1,14 +1,12 @@
 """Comprehensive tests for NotificationService functionality."""
 
-import pytest
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
-from unittest.mock import patch
 
-from sqlalchemy import select, func
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiremisu.database.models import Series, Chapter, Notification
+from kiremisu.database.models import Chapter, Notification, Series
 from kiremisu.services.notification_service import NotificationService
 
 
@@ -20,14 +18,14 @@ class TestNotificationService:
     ):
         """Test creating notifications for a single new chapter."""
         new_chapters = [sample_chapter]
-        
+
         notifications = await NotificationService.create_chapter_notifications(
             db=db_session, series=sample_series, new_chapters=new_chapters
         )
-        
+
         assert len(notifications) == 1
         notification = notifications[0]
-        
+
         assert notification.notification_type == "new_chapter"
         assert sample_series.title_primary in notification.title
         assert f"Chapter {sample_chapter.chapter_number}" in notification.message
@@ -35,7 +33,7 @@ class TestNotificationService:
         assert notification.chapter_id == sample_chapter.id
         assert not notification.is_read
         assert notification.read_at is None
-        
+
         # Verify persistence
         db_notification = await db_session.get(Notification, notification.id)
         assert db_notification is not None
@@ -58,15 +56,15 @@ class TestNotificationService:
             )
             db_session.add(chapter)
             chapters.append(chapter)
-        
+
         await db_session.commit()
-        
+
         notifications = await NotificationService.create_chapter_notifications(
             db=db_session, series=sample_series, new_chapters=chapters
         )
-        
+
         assert len(notifications) == 3
-        
+
         # Verify each notification
         for i, notification in enumerate(notifications):
             assert notification.notification_type == "new_chapter"
@@ -89,11 +87,11 @@ class TestNotificationService:
         )
         db_session.add(chapter)
         await db_session.commit()
-        
+
         notifications = await NotificationService.create_chapter_notifications(
             db=db_session, series=sample_series, new_chapters=[chapter]
         )
-        
+
         notification = notifications[0]
         expected_chapter_title = "Vol. 3, Chapter 15.5 - The Great Battle"
         assert expected_chapter_title in notification.message
@@ -105,7 +103,7 @@ class TestNotificationService:
         notifications = await NotificationService.create_chapter_notifications(
             db=db_session, series=sample_series, new_chapters=[]
         )
-        
+
         assert notifications == []
 
     async def test_get_unread_count_empty(
@@ -130,12 +128,12 @@ class TestNotificationService:
                 is_read=i % 2 == 0,  # Alternate read/unread
             )
             if notification.is_read:
-                notification.read_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                notification.read_at = datetime.now(UTC).replace(tzinfo=None)
             db_session.add(notification)
             notifications.append(notification)
-        
+
         await db_session.commit()
-        
+
         unread_count = await NotificationService.get_unread_count(db_session)
         expected_unread = len([n for n in notifications if not n.is_read])
         assert unread_count == expected_unread
@@ -161,12 +159,12 @@ class TestNotificationService:
         )
         db_session.add(notification)
         await db_session.commit()
-        
+
         notifications = await NotificationService.get_notifications(db_session)
-        
+
         assert len(notifications) == 1
         retrieved_notification = notifications[0]
-        
+
         # Verify relationships are loaded
         assert retrieved_notification.series is not None
         assert retrieved_notification.series.id == sample_series.id
@@ -187,21 +185,21 @@ class TestNotificationService:
                 series_id=sample_series.id,
             )
             db_session.add(notification)
-        
+
         await db_session.commit()
-        
+
         # Test first page
         page1 = await NotificationService.get_notifications(
             db_session, skip=0, limit=5
         )
         assert len(page1) == 5
-        
+
         # Test second page
         page2 = await NotificationService.get_notifications(
             db_session, skip=5, limit=5
         )
         assert len(page2) == 5
-        
+
         # Ensure different notifications
         page1_ids = {n.id for n in page1}
         page2_ids = {n.id for n in page2}
@@ -223,18 +221,18 @@ class TestNotificationService:
                 is_read=is_read,
             )
             if is_read:
-                notification.read_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                notification.read_at = datetime.now(UTC).replace(tzinfo=None)
             else:
                 unread_count += 1
-            
+
             db_session.add(notification)
-        
+
         await db_session.commit()
-        
+
         unread_notifications = await NotificationService.get_notifications(
             db_session, unread_only=True
         )
-        
+
         assert len(unread_notifications) == unread_count
         for notification in unread_notifications:
             assert not notification.is_read
@@ -251,15 +249,15 @@ class TestNotificationService:
                 title=f"Notification {i}",
                 message=f"Message {i}",
                 series_id=sample_series.id,
-                created_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=i)
+                created_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=i)
             )
             db_session.add(notification)
             notifications.append(notification)
-        
+
         await db_session.commit()
-        
+
         retrieved_notifications = await NotificationService.get_notifications(db_session)
-        
+
         # Should be ordered by created_at descending (newest first)
         for i in range(len(retrieved_notifications) - 1):
             assert retrieved_notifications[i].created_at >= retrieved_notifications[i + 1].created_at
@@ -279,16 +277,16 @@ class TestNotificationService:
         )
         db_session.add(notification)
         await db_session.commit()
-        
+
         # Mark as read
         updated_notification = await NotificationService.mark_notification_read(
             db_session, notification.id
         )
-        
+
         assert updated_notification is not None
         assert updated_notification.is_read is True
         assert updated_notification.read_at is not None
-        
+
         # Verify persistence
         await db_session.refresh(notification)
         assert notification.is_read is True
@@ -299,9 +297,9 @@ class TestNotificationService:
     ):
         """Test marking non-existent notification as read."""
         fake_id = uuid4()
-        
+
         result = await NotificationService.mark_notification_read(db_session, fake_id)
-        
+
         assert result is None
 
     async def test_mark_notification_read_already_read(
@@ -309,7 +307,7 @@ class TestNotificationService:
     ):
         """Test marking already read notification (idempotent)."""
         # Create read notification
-        original_read_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        original_read_at = datetime.now(UTC).replace(tzinfo=None)
         notification = Notification(
             notification_type="new_chapter",
             title="Test Notification",
@@ -320,12 +318,12 @@ class TestNotificationService:
         )
         db_session.add(notification)
         await db_session.commit()
-        
+
         # Mark as read again
         updated_notification = await NotificationService.mark_notification_read(
             db_session, notification.id
         )
-        
+
         assert updated_notification is not None
         assert updated_notification.is_read is True
         # read_at should remain unchanged
@@ -347,18 +345,18 @@ class TestNotificationService:
                 is_read=is_read,
             )
             if is_read:
-                notification.read_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                notification.read_at = datetime.now(UTC).replace(tzinfo=None)
             else:
                 unread_count += 1
-            
+
             db_session.add(notification)
-        
+
         await db_session.commit()
-        
+
         marked_count = await NotificationService.mark_all_read(db_session)
-        
+
         assert marked_count == unread_count
-        
+
         # Verify all notifications are now read
         all_notifications = await NotificationService.get_notifications(db_session)
         for notification in all_notifications:
@@ -386,14 +384,14 @@ class TestNotificationService:
         )
         db_session.add(notification)
         await db_session.commit()
-        
+
         retrieved_notification = await NotificationService.get_notification_by_id(
             db_session, notification.id
         )
-        
+
         assert retrieved_notification is not None
         assert retrieved_notification.id == notification.id
-        
+
         # Verify relationships are loaded
         assert retrieved_notification.series is not None
         assert retrieved_notification.series.id == sample_series.id
@@ -405,9 +403,9 @@ class TestNotificationService:
     ):
         """Test getting non-existent notification by ID."""
         fake_id = uuid4()
-        
+
         result = await NotificationService.get_notification_by_id(db_session, fake_id)
-        
+
         assert result is None
 
     async def test_create_system_notification_basic(
@@ -416,11 +414,11 @@ class TestNotificationService:
         """Test creating basic system notification."""
         title = "System Alert"
         message = "A system event occurred."
-        
+
         notification = await NotificationService.create_system_notification(
             db=db_session, title=title, message=message
         )
-        
+
         assert notification.notification_type == "system_alert"
         assert notification.title == title
         assert notification.message == message
@@ -434,7 +432,7 @@ class TestNotificationService:
         """Test creating system notification with series/chapter references."""
         title = "Import Complete"
         message = "Chapter import completed successfully."
-        
+
         notification = await NotificationService.create_system_notification(
             db=db_session,
             title=title,
@@ -443,7 +441,7 @@ class TestNotificationService:
             series_id=sample_series.id,
             chapter_id=sample_chapter.id,
         )
-        
+
         assert notification.notification_type == "import_complete"
         assert notification.series_id == sample_series.id
         assert notification.chapter_id == sample_chapter.id
@@ -452,8 +450,8 @@ class TestNotificationService:
         self, db_session: AsyncSession, sample_series: Series
     ):
         """Test cleaning up old read notifications."""
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
-        
+        now = datetime.now(UTC).replace(tzinfo=None)
+
         # Create old read notification
         old_notification = Notification(
             notification_type="new_chapter",
@@ -464,7 +462,7 @@ class TestNotificationService:
             read_at=now - timedelta(days=40),
             created_at=now - timedelta(days=40),
         )
-        
+
         # Create recent read notification
         recent_notification = Notification(
             notification_type="new_chapter",
@@ -475,17 +473,17 @@ class TestNotificationService:
             read_at=now - timedelta(days=10),
             created_at=now - timedelta(days=10),
         )
-        
+
         db_session.add(old_notification)
         db_session.add(recent_notification)
         await db_session.commit()
-        
+
         deleted_count = await NotificationService.cleanup_old_notifications(
             db_session, days=30, keep_unread=True
         )
-        
+
         assert deleted_count == 1  # Only old read notification should be deleted
-        
+
         # Verify only recent notification remains
         remaining_notifications = await NotificationService.get_notifications(db_session)
         assert len(remaining_notifications) == 1
@@ -495,8 +493,8 @@ class TestNotificationService:
         self, db_session: AsyncSession, sample_series: Series
     ):
         """Test cleanup keeps unread notifications regardless of age."""
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
-        
+        now = datetime.now(UTC).replace(tzinfo=None)
+
         # Create old unread notification
         old_unread_notification = Notification(
             notification_type="new_chapter",
@@ -506,7 +504,7 @@ class TestNotificationService:
             is_read=False,
             created_at=now - timedelta(days=60),
         )
-        
+
         # Create old read notification
         old_read_notification = Notification(
             notification_type="new_chapter",
@@ -517,17 +515,17 @@ class TestNotificationService:
             read_at=now - timedelta(days=40),
             created_at=now - timedelta(days=60),
         )
-        
+
         db_session.add(old_unread_notification)
         db_session.add(old_read_notification)
         await db_session.commit()
-        
+
         deleted_count = await NotificationService.cleanup_old_notifications(
             db_session, days=30, keep_unread=True
         )
-        
+
         assert deleted_count == 1  # Only old read notification should be deleted
-        
+
         # Verify unread notification remains
         remaining_notifications = await NotificationService.get_notifications(db_session)
         assert len(remaining_notifications) == 1
@@ -538,8 +536,8 @@ class TestNotificationService:
         self, db_session: AsyncSession, sample_series: Series
     ):
         """Test cleanup deletes all old notifications when keep_unread=False."""
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
-        
+        now = datetime.now(UTC).replace(tzinfo=None)
+
         # Create old notifications with different read status
         old_notifications = []
         for i in range(3):
@@ -553,18 +551,18 @@ class TestNotificationService:
             )
             if notification.is_read:
                 notification.read_at = now - timedelta(days=40)
-            
+
             db_session.add(notification)
             old_notifications.append(notification)
-        
+
         await db_session.commit()
-        
+
         deleted_count = await NotificationService.cleanup_old_notifications(
             db_session, days=30, keep_unread=False
         )
-        
+
         assert deleted_count == len(old_notifications)  # All should be deleted
-        
+
         # Verify no notifications remain
         remaining_notifications = await NotificationService.get_notifications(db_session)
         assert len(remaining_notifications) == 0
@@ -581,7 +579,7 @@ class TestNotificationService:
             ("import_complete", False),
             ("import_complete", False),
         ]
-        
+
         for notification_type, is_read in notification_data:
             notification = Notification(
                 notification_type=notification_type,
@@ -591,18 +589,18 @@ class TestNotificationService:
                 is_read=is_read,
             )
             if is_read:
-                notification.read_at = datetime.now(timezone.utc).replace(tzinfo=None)
-            
+                notification.read_at = datetime.now(UTC).replace(tzinfo=None)
+
             db_session.add(notification)
-        
+
         await db_session.commit()
-        
+
         stats = await NotificationService.get_notification_stats(db_session)
-        
+
         assert stats["total_notifications"] == len(notification_data)
         assert stats["read_notifications"] == 2
         assert stats["unread_notifications"] == 3
-        
+
         # Verify type counts
         expected_type_counts = {"new_chapter": 2, "system_alert": 1, "import_complete": 2}
         assert stats["notifications_by_type"] == expected_type_counts
@@ -612,7 +610,7 @@ class TestNotificationService:
     ):
         """Test getting stats when no notifications exist."""
         stats = await NotificationService.get_notification_stats(db_session)
-        
+
         assert stats["total_notifications"] == 0
         assert stats["read_notifications"] == 0
         assert stats["unread_notifications"] == 0

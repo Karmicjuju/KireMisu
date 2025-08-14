@@ -13,20 +13,19 @@ import os
 import shutil
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
 from uuid import UUID, uuid4
 
 import structlog
-from sqlalchemy import select, and_, or_
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiremisu.database.models import FileOperation, Series, Chapter
+from kiremisu.database.models import Chapter, FileOperation, Series
 from kiremisu.database.schemas import (
-    ValidationResult,
     FileOperationRequest,
     FileOperationResponse,
+    ValidationResult,
 )
 
 logger = structlog.get_logger(__name__)
@@ -36,7 +35,7 @@ class FileOperationError(Exception):
     """Custom exception for file operation errors."""
 
     def __init__(
-        self, message: str, operation_id: Optional[UUID] = None, details: Optional[Dict] = None
+        self, message: str, operation_id: UUID | None = None, details: dict | None = None
     ):
         super().__init__(message)
         self.operation_id = operation_id
@@ -46,7 +45,7 @@ class FileOperationError(Exception):
 class FileOperationService:
     """Service for safe file operations with comprehensive safety mechanisms."""
 
-    def __init__(self, max_workers: int = 2, backup_root: Optional[str] = None):
+    def __init__(self, max_workers: int = 2, backup_root: str | None = None):
         """Initialize the file operation service.
 
         Args:
@@ -166,7 +165,7 @@ class FileOperationService:
 
             # Update operation with validation results
             operation.status = "validated" if validation_result.is_valid else "failed"
-            operation.validated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            operation.validated_at = datetime.now(UTC).replace(tzinfo=None)
             operation.validation_results = validation_result.model_dump()
 
             # Store affected records for tracking
@@ -239,7 +238,7 @@ class FileOperationService:
 
         # Update status to in_progress
         operation.status = "in_progress"
-        operation.started_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        operation.started_at = datetime.now(UTC).replace(tzinfo=None)
         await db.commit()
 
         try:
@@ -258,7 +257,7 @@ class FileOperationService:
 
             # Mark operation as completed
             operation.status = "completed"
-            operation.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            operation.completed_at = datetime.now(UTC).replace(tzinfo=None)
             await db.commit()
 
             operation_logger.info(
@@ -478,7 +477,7 @@ class FileOperationService:
 
     async def _find_affected_records(
         self, db: AsyncSession, operation: FileOperation
-    ) -> Tuple[List[Series], List[Chapter]]:
+    ) -> tuple[list[Series], list[Chapter]]:
         """Find database records affected by the operation."""
         source_path = operation.source_path
 
@@ -643,7 +642,7 @@ class FileOperationService:
 
     async def get_operation(
         self, db: AsyncSession, operation_id: UUID
-    ) -> Optional[FileOperationResponse]:
+    ) -> FileOperationResponse | None:
         """Get a file operation by ID."""
         result = await db.execute(select(FileOperation).where(FileOperation.id == operation_id))
         operation = result.scalar_one_or_none()
@@ -655,11 +654,11 @@ class FileOperationService:
     async def list_operations(
         self,
         db: AsyncSession,
-        status_filter: Optional[str] = None,
-        operation_type_filter: Optional[str] = None,
+        status_filter: str | None = None,
+        operation_type_filter: str | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> List[FileOperationResponse]:
+    ) -> list[FileOperationResponse]:
         """List file operations with optional filtering."""
         query = select(FileOperation)
 
@@ -678,7 +677,7 @@ class FileOperationService:
 
     async def cleanup_old_operations(self, db: AsyncSession, days_old: int = 30) -> int:
         """Clean up old completed operations and their backups."""
-        cutoff_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days_old)
+        cutoff_date = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days_old)
 
         # Find old completed operations
         result = await db.execute(

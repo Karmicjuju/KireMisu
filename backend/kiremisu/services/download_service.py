@@ -4,20 +4,17 @@ import asyncio
 import json
 import logging
 import os
-import shutil
-import time
 import zipfile
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID, uuid4
 
 import httpx
-from sqlalchemy import select, and_, or_, desc
+from sqlalchemy import and_, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiremisu.database.models import JobQueue, Series, Chapter, LibraryPath
-from kiremisu.services.mangadx_client import MangaDxClient, MangaDxError
+from kiremisu.database.models import JobQueue, LibraryPath
+from kiremisu.services.mangadx_client import MangaDxClient
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +28,11 @@ class DownloadError(Exception):
 class DownloadJobData:
     """Container for download job payload data."""
 
-    def __init__(self, payload: Dict[str, Any]):
+    def __init__(self, payload: dict[str, Any]):
         self.payload = payload
 
     @property
-    def job_id(self) -> Optional[str]:
+    def job_id(self) -> str | None:
         """Get job ID from payload."""
         return self.payload.get("job_id")
 
@@ -45,37 +42,37 @@ class DownloadJobData:
         return self.payload.get("download_type", "mangadx")
 
     @property
-    def manga_id(self) -> Optional[str]:
+    def manga_id(self) -> str | None:
         """Get external manga ID."""
         return self.payload.get("manga_id")
 
     @property
-    def series_id(self) -> Optional[str]:
+    def series_id(self) -> str | None:
         """Get local series ID."""
         return self.payload.get("series_id")
 
     @property
-    def chapter_ids(self) -> List[str]:
+    def chapter_ids(self) -> list[str]:
         """Get list of chapter IDs to download."""
         return self.payload.get("chapter_ids", [])
 
     @property
-    def batch_type(self) -> Optional[str]:
+    def batch_type(self) -> str | None:
         """Get batch type (single, volume, series)."""
         return self.payload.get("batch_type")
 
     @property
-    def volume_number(self) -> Optional[str]:
+    def volume_number(self) -> str | None:
         """Get volume number for volume downloads."""
         return self.payload.get("volume_number")
 
     @property
-    def destination_path(self) -> Optional[str]:
+    def destination_path(self) -> str | None:
         """Get destination path for downloaded files."""
         return self.payload.get("destination_path")
 
     @property
-    def progress_data(self) -> Dict[str, Any]:
+    def progress_data(self) -> dict[str, Any]:
         """Get progress tracking data."""
         return self.payload.get("progress", {})
 
@@ -93,7 +90,7 @@ class DownloadProgressTracker:
             "current_chapter_progress": 0.0,
             "error_count": 0,
             "errors": [],
-            "started_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+            "started_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
             "estimated_completion": None,
         }
 
@@ -105,7 +102,7 @@ class DownloadProgressTracker:
     async def start_chapter(self, chapter_id: str, chapter_title: str):
         """Start tracking a chapter download with atomic update."""
         # Update progress atomically to prevent race conditions
-        timestamp = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+        timestamp = datetime.now(UTC).replace(tzinfo=None).isoformat()
 
         self._progress["current_chapter"] = {
             "id": chapter_id,
@@ -122,9 +119,9 @@ class DownloadProgressTracker:
         self._progress["current_chapter_progress"] = progress
         await self._update_job_payload()
 
-    async def complete_chapter(self, success: bool, error_message: Optional[str] = None):
+    async def complete_chapter(self, success: bool, error_message: str | None = None):
         """Complete current chapter download with atomic update."""
-        timestamp = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+        timestamp = datetime.now(UTC).replace(tzinfo=None).isoformat()
 
         if success:
             self._progress["downloaded_chapters"] += 1
@@ -154,12 +151,12 @@ class DownloadProgressTracker:
                 # Simple ETA estimation based on elapsed time and completion rate
                 start_time = datetime.fromisoformat(self._progress["started_at"])
                 elapsed = (
-                    datetime.now(timezone.utc).replace(tzinfo=None) - start_time
+                    datetime.now(UTC).replace(tzinfo=None) - start_time
                 ).total_seconds()
                 estimated_total = elapsed / completion_rate
                 remaining = max(0, estimated_total - elapsed)
                 self._progress["estimated_completion"] = (
-                    datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=remaining)
+                    datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=remaining)
                 ).isoformat()
 
         # Clear current chapter
@@ -171,8 +168,7 @@ class DownloadProgressTracker:
 
     async def _update_job_payload(self):
         """Update job payload with current progress using atomic operation."""
-        from sqlalchemy import update, func
-        import json
+        from sqlalchemy import func, update
 
         # Use atomic JSONB update to prevent race conditions
         # This creates a new progress object and merges it atomically
@@ -204,7 +200,7 @@ class DownloadProgressTracker:
             await self.db.rollback()
             raise
 
-    def get_progress(self) -> Dict[str, Any]:
+    def get_progress(self) -> dict[str, Any]:
         """Get current progress data."""
         return self._progress.copy()
 
@@ -217,7 +213,7 @@ class DownloadService:
         self.download_timeout = 300.0  # 5 minutes per chapter
         self.retry_attempts = 3
 
-    async def _fetch_manga_metadata(self, manga_id: str) -> Dict[str, Optional[str]]:
+    async def _fetch_manga_metadata(self, manga_id: str) -> dict[str, str | None]:
         """Fetch manga metadata from MangaDx API for better UI display."""
         try:
             async with self.mangadx_client:
@@ -256,9 +252,9 @@ class DownloadService:
         db: AsyncSession,
         manga_id: str,
         chapter_id: str,
-        series_id: Optional[UUID] = None,
+        series_id: UUID | None = None,
         priority: int = 3,
-        destination_path: Optional[str] = None,
+        destination_path: str | None = None,
     ) -> UUID:
         """
         Enqueue a single chapter download.
@@ -296,7 +292,7 @@ class DownloadService:
             job_type="download",
             payload=payload,
             priority=priority,
-            scheduled_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            scheduled_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         db.add(job)
@@ -312,12 +308,12 @@ class DownloadService:
         self,
         db: AsyncSession,
         manga_id: str,
-        chapter_ids: List[str],
+        chapter_ids: list[str],
         batch_type: str = "multiple",
-        series_id: Optional[UUID] = None,
-        volume_number: Optional[str] = None,
+        series_id: UUID | None = None,
+        volume_number: str | None = None,
         priority: int = 3,
-        destination_path: Optional[str] = None,
+        destination_path: str | None = None,
     ) -> UUID:
         """
         Enqueue a batch download of multiple chapters.
@@ -358,7 +354,7 @@ class DownloadService:
             job_type="download",
             payload=payload,
             priority=priority,
-            scheduled_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            scheduled_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         db.add(job)
@@ -374,9 +370,9 @@ class DownloadService:
         self,
         db: AsyncSession,
         manga_id: str,
-        series_id: Optional[UUID] = None,
+        series_id: UUID | None = None,
         priority: int = 2,
-        destination_path: Optional[str] = None,
+        destination_path: str | None = None,
     ) -> UUID:
         """
         Enqueue a complete series download.
@@ -410,7 +406,7 @@ class DownloadService:
             destination_path=destination_path,
         )
 
-    async def execute_download_job(self, db: AsyncSession, job: JobQueue) -> Dict[str, Any]:
+    async def execute_download_job(self, db: AsyncSession, job: JobQueue) -> dict[str, Any]:
         """
         Execute a download job with progress tracking.
 
@@ -500,7 +496,7 @@ class DownloadService:
         chapter_id: str,
         destination_path: str,
         quality: str = "data",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Download a single chapter from MangaDx with real implementation.
 
@@ -613,13 +609,13 @@ class DownloadService:
         chapter_id: str,
         base_url: str,
         chapter_hash: str,
-        page_filenames: List[str],
+        page_filenames: list[str],
         quality: str = "data",
         progress_callback=None,
         max_concurrent: int = 3,
         timeout_per_page: float = 30.0,
         max_retries_per_page: int = 3,
-    ) -> List[bytes]:
+    ) -> list[bytes]:
         """
         Download chapter pages with progress tracking and enhanced error handling.
 
@@ -718,7 +714,7 @@ class DownloadService:
     async def _create_cbz_archive(
         self,
         chapter_file_path: str,
-        page_data_list: List[bytes],
+        page_data_list: list[bytes],
         chapter_metadata: "MangaDxChapterResponse",
     ):
         """
@@ -755,7 +751,7 @@ class DownloadService:
                     "pages": len(page_data_list),
                     "language": chapter_metadata.attributes.translated_language,
                     "mangadx_id": chapter_metadata.id,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "created_at": datetime.now(UTC).isoformat(),
                 }
 
                 import json
@@ -840,7 +836,7 @@ class DownloadService:
         # Get first enabled library path as default
         result = await db.execute(
             select(LibraryPath)
-            .where(LibraryPath.enabled == True)
+            .where(LibraryPath.enabled)
             .order_by(LibraryPath.created_at.asc())
             .limit(1)
         )
@@ -854,7 +850,7 @@ class DownloadService:
         return download_path
 
     async def _update_series_with_downloads(
-        self, db: AsyncSession, series_id: str, downloaded_chapters: List[Dict[str, Any]]
+        self, db: AsyncSession, series_id: str, downloaded_chapters: list[dict[str, Any]]
     ):
         """
         Update series database records with downloaded chapters.
@@ -875,8 +871,8 @@ class DownloadService:
             logger.error(f"Failed to update series {series_id} with downloads: {e}")
 
     async def _get_all_chapter_ids(
-        self, manga_id: str, language: List[str] = ["en"], max_chapters: Optional[int] = None
-    ) -> List[str]:
+        self, manga_id: str, language: list[str] = None, max_chapters: int | None = None
+    ) -> list[str]:
         """
         Get all chapter IDs for a manga from MangaDx API.
 
@@ -888,6 +884,8 @@ class DownloadService:
         Returns:
             List of chapter UUIDs
         """
+        if language is None:
+            language = ["en"]
         try:
             logger.info(f"Fetching all chapters for manga {manga_id}")
 
@@ -939,10 +937,10 @@ class DownloadService:
     async def get_download_jobs(
         self,
         db: AsyncSession,
-        status: Optional[str] = None,
+        status: str | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> Tuple[List[JobQueue], int]:
+    ) -> tuple[list[JobQueue], int]:
         """
         Get download jobs with optional filtering.
 
@@ -1003,7 +1001,7 @@ class DownloadService:
             .values(
                 status="failed",
                 error_message="Cancelled by user",
-                completed_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                completed_at=datetime.now(UTC).replace(tzinfo=None),
             )
         )
 
@@ -1044,7 +1042,7 @@ class DownloadService:
                 error_message=None,
                 started_at=None,
                 completed_at=None,
-                scheduled_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                scheduled_at=datetime.now(UTC).replace(tzinfo=None),
             )
         )
 

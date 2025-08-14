@@ -2,31 +2,28 @@
 
 import asyncio
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone, timedelta
-from typing import List, Optional, AsyncGenerator
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-from sqlalchemy import select, and_, func, desc
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiremisu.database.connection import get_db, engine, get_db_session
+from kiremisu.database.connection import engine, get_db, get_db_session
 from kiremisu.database.models import JobQueue
 from kiremisu.database.schemas import (
-    DownloadJobRequest,
-    DownloadJobResponse,
-    DownloadJobListResponse,
-    DownloadJobActionRequest,
-    DownloadJobActionResponse,
-    DownloadStatsResponse,
     BulkDownloadRequest,
     BulkDownloadResponse,
-    PaginationParams,
+    DownloadJobActionRequest,
+    DownloadJobActionResponse,
+    DownloadJobListResponse,
+    DownloadJobRequest,
+    DownloadJobResponse,
+    DownloadStatsResponse,
     PaginationMeta,
+    PaginationParams,
 )
 from kiremisu.services.download_service import DownloadService
 
@@ -41,7 +38,7 @@ download_semaphore = asyncio.Semaphore(CONCURRENT_DOWNLOAD_LIMIT)
 
 
 @asynccontextmanager
-async def get_download_service_context() -> AsyncGenerator[DownloadService, None]:
+async def get_download_service_context() -> AsyncGenerator[DownloadService]:
     """Context manager for download service with automatic cleanup."""
     service = DownloadService()
     try:
@@ -212,7 +209,7 @@ async def download_system_health():
 
         health_data = {
             "status": overall_status,
-            "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+            "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
             "database": {
                 "status": db_status,
                 "connection_pool": {
@@ -238,7 +235,7 @@ async def download_system_health():
             detail={
                 "status": "unhealthy",
                 "error": "Health check failed",
-                "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
             },
         )
 
@@ -246,8 +243,8 @@ async def download_system_health():
 @router.get("/", response_model=DownloadJobListResponse)
 async def list_download_jobs(
     http_request: Request,
-    status_filter: Optional[str] = Query(None, description="Filter by job status"),
-    download_type_filter: Optional[str] = Query(None, description="Filter by download type"),
+    status_filter: str | None = Query(None, description="Filter by job status"),
+    download_type_filter: str | None = Query(None, description="Filter by download type"),
     pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_db),
 ):
@@ -522,7 +519,7 @@ async def create_bulk_downloads(
             job_ids = []
             errors = []
 
-            for index, job_id, error in results:
+            for _index, job_id, error in results:
                 if error:
                     errors.append(error)
                 else:
@@ -600,7 +597,7 @@ async def get_download_stats(
         status_counts = dict(total_result.fetchall())
 
         # Get today's activity (last 24 hours)
-        yesterday = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=24)
+        yesterday = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=24)
 
         today_created_result = await db.execute(
             select(func.count(JobQueue.id)).where(

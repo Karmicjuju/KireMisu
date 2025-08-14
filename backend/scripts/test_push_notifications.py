@@ -9,10 +9,8 @@ This script provides utilities to:
 """
 
 import asyncio
-import json
 import sys
 from pathlib import Path
-from typing import Optional
 from uuid import UUID
 
 # Add backend to path
@@ -22,22 +20,22 @@ from py_vapid import Vapid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiremisu.core.config import settings
-from kiremisu.database.connection import get_db_session
-from kiremisu.database.models import PushSubscription, Series, Chapter, Notification
 from kiremisu.api.push_notifications import (
-    send_push_notification,
     send_chapter_notification,
+    send_push_notification,
     send_push_to_multiple,
 )
+from kiremisu.core.config import settings
+from kiremisu.database.connection import get_db_session
+from kiremisu.database.models import Chapter, Notification, PushSubscription, Series
 
 
 async def generate_vapid_keys():
     """Generate new VAPID keys for development."""
     print("🔑 Generating VAPID keys...")
 
-    import tempfile
     import base64
+
     from cryptography.hazmat.primitives import serialization
 
     vapid = Vapid()
@@ -48,13 +46,13 @@ async def generate_vapid_keys():
         encoding=serialization.Encoding.X962,
         format=serialization.PublicFormat.UncompressedPoint
     )
-    
+
     private_key_bytes = vapid.private_key.private_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption()
     )
-    
+
     public_key = base64.urlsafe_b64encode(public_key_bytes).decode('ascii').strip('=')
     private_key = private_key_bytes.decode('ascii')
 
@@ -62,7 +60,7 @@ async def generate_vapid_keys():
     print("\nAdd these to your .env file:")
     print(f"VAPID_PUBLIC_KEY={public_key}")
     print(f"VAPID_PRIVATE_KEY={private_key}")
-    print(f'VAPID_CLAIMS={{"sub": "mailto:admin@kiremisu.local"}}')
+    print('VAPID_CLAIMS={"sub": "mailto:admin@kiremisu.local"}')
 
     return public_key, private_key
 
@@ -88,7 +86,7 @@ async def create_test_subscription(db: AsyncSession) -> PushSubscription:
     return test_subscription
 
 
-async def send_test_notification(db: AsyncSession, subscription_id: Optional[UUID] = None):
+async def send_test_notification(db: AsyncSession, subscription_id: UUID | None = None):
     """Send a test push notification."""
     print("\n📤 Sending test notification...")
 
@@ -96,7 +94,7 @@ async def send_test_notification(db: AsyncSession, subscription_id: Optional[UUI
     if subscription_id:
         query = select(PushSubscription).where(PushSubscription.id == subscription_id)
     else:
-        query = select(PushSubscription).where(PushSubscription.is_active == True).limit(1)
+        query = select(PushSubscription).where(PushSubscription.is_active).limit(1)
 
     result = await db.execute(query)
     subscription = result.scalar_one_or_none()
@@ -200,7 +198,7 @@ async def broadcast_test(db: AsyncSession):
     """Send a broadcast notification to all active subscriptions."""
     print("\n📢 Broadcasting test notification...")
 
-    result = await db.execute(select(PushSubscription).where(PushSubscription.is_active == True))
+    result = await db.execute(select(PushSubscription).where(PushSubscription.is_active))
     subscriptions = result.scalars().all()
 
     if not subscriptions:

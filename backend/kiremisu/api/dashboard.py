@@ -1,16 +1,15 @@
 """API endpoints for dashboard statistics."""
 
 from datetime import datetime
-from typing import List
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, case
 
-from kiremisu.database.connection import get_db
 from kiremisu.core.unified_auth import get_current_user
-from kiremisu.database.models import Series, Chapter
-from kiremisu.database.schemas import DashboardStatsResponse, ChapterResponse
+from kiremisu.database.connection import get_db
+from kiremisu.database.models import Chapter, Series
+from kiremisu.database.schemas import ChapterResponse, DashboardStatsResponse
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -31,7 +30,7 @@ async def get_dashboard_stats(
     total_chapters = total_chapters_result.scalar() or 0
 
     # Get total read chapters count
-    read_chapters_result = await db.execute(select(func.count()).where(Chapter.is_read == True))
+    read_chapters_result = await db.execute(select(func.count()).where(Chapter.is_read))
     read_chapters = read_chapters_result.scalar() or 0
 
     # Calculate overall reading progress percentage
@@ -42,7 +41,7 @@ async def get_dashboard_stats(
     # Get recent activity (recently read chapters, up to 10)
     recent_activity_result = await db.execute(
         select(Chapter)
-        .where(Chapter.is_read == True)
+        .where(Chapter.is_read)
         .order_by(Chapter.read_at.desc().nulls_last())
         .limit(10)
     )

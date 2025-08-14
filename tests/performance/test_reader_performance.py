@@ -2,14 +2,13 @@
 
 import asyncio
 import time
-import tempfile
 from unittest.mock import patch
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiremisu.database.models import Series, Chapter
-from tests.fixtures.reader_fixtures import create_test_cbz, create_large_chapter_files
+from kiremisu.database.models import Chapter, Series
 
 
 @pytest.fixture
@@ -229,8 +228,9 @@ class TestReaderPerformance:
     @pytest.mark.asyncio
     async def test_memory_usage_large_pages(self, client: AsyncClient, large_chapter: Chapter):
         """Test memory usage with large page images."""
-        import psutil
         import os
+
+        import psutil
 
         process = psutil.Process(os.getpid())
         initial_memory = process.memory_info().rss
@@ -245,7 +245,7 @@ class TestReaderPerformance:
                 mock_zip_instance.read.return_value = very_large_image
 
                 # Request the same large page multiple times
-                for i in range(10):
+                for _i in range(10):
                     response = await client.get(f"/api/reader/chapter/{large_chapter.id}/page/0")
                     assert response.status_code == 200
 

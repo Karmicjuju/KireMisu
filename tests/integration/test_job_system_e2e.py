@@ -10,9 +10,8 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.database.models import JobQueue, LibraryPath
-from kiremisu.services.job_scheduler import JobScheduler
-from kiremisu.services.job_worker import JobWorker, JobWorkerRunner
 from kiremisu.services.importer import ImportStats
+from kiremisu.services.job_worker import JobWorker, JobWorkerRunner
 
 
 @pytest.mark.integration

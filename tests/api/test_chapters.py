@@ -1,18 +1,15 @@
 """Tests for chapters API endpoints."""
 
-import asyncio
 import tempfile
 import zipfile
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.database.models import Chapter, Series
-from kiremisu.main import app
 
 
 class TestChaptersAPI:

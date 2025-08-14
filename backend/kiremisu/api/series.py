@@ -1,29 +1,28 @@
 """API endpoints for manga series."""
 
 import logging
-from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
-from kiremisu.database.connection import get_db
 from kiremisu.core.unified_auth import get_current_user
-from kiremisu.database.models import Series, Chapter, Tag, series_tags
+from kiremisu.database.connection import get_db
+from kiremisu.database.models import Chapter, Series, Tag, series_tags
 from kiremisu.database.schemas import (
-    SeriesResponse,
     ChapterResponse,
     SeriesProgressResponse,
+    SeriesResponse,
     WatchToggleRequest,
     WatchToggleResponse,
 )
 from kiremisu.database.utils import (
-    with_db_retry,
     log_slow_query,
     safe_like_pattern,
     validate_query_params,
+    with_db_retry,
 )
 from kiremisu.services.watching_service import WatchingService
 
@@ -31,7 +30,7 @@ router = APIRouter(prefix="/api/series", tags=["series"])
 logger = logging.getLogger(__name__)
 
 
-@router.get("/", response_model=List[SeriesResponse])
+@router.get("/", response_model=list[SeriesResponse])
 @with_db_retry(max_attempts=2)
 @log_slow_query("get_series_list", 2.0)
 async def get_series_list(
@@ -39,10 +38,10 @@ async def get_series_list(
     current_user: dict = Depends(get_current_user),
     skip: int = Query(0, ge=0, description="Number of series to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of series to return"),
-    search: Optional[str] = Query(None, description="Search term for series title"),
-    tag_ids: Optional[List[UUID]] = Query(None, description="Filter by tag IDs (AND logic)"),
-    tag_names: Optional[List[str]] = Query(None, description="Filter by tag names (AND logic)"),
-) -> List[SeriesResponse]:
+    search: str | None = Query(None, description="Search term for series title"),
+    tag_ids: list[UUID] | None = Query(None, description="Filter by tag IDs (AND logic)"),
+    tag_names: list[str] | None = Query(None, description="Filter by tag names (AND logic)"),
+) -> list[SeriesResponse]:
     """Get list of all series with optional tag filtering."""
     # Validate input parameters
     try:
@@ -109,14 +108,14 @@ async def get_series(
     return SeriesResponse.from_model(series)
 
 
-@router.get("/{series_id}/chapters", response_model=List[ChapterResponse])
+@router.get("/{series_id}/chapters", response_model=list[ChapterResponse])
 async def get_series_chapters(
     series_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
     skip: int = Query(0, ge=0, description="Number of chapters to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of chapters to return"),
-) -> List[ChapterResponse]:
+) -> list[ChapterResponse]:
     """Get all chapters for a series."""
     # First verify series exists
     series_result = await db.execute(select(Series).where(Series.id == series_id))
@@ -155,7 +154,7 @@ async def get_series_progress(
     # Get recent read chapters (up to 5, ordered by read_at desc)
     recent_chapters_result = await db.execute(
         select(Chapter)
-        .where(Chapter.series_id == series_id, Chapter.is_read == True)
+        .where(Chapter.series_id == series_id, Chapter.is_read)
         .order_by(Chapter.read_at.desc().nulls_last())
         .limit(5)
     )
@@ -164,7 +163,7 @@ async def get_series_progress(
     # Get most recent read timestamp
     last_read_result = await db.execute(
         select(func.max(Chapter.read_at)).where(
-            Chapter.series_id == series_id, Chapter.is_read == True
+            Chapter.series_id == series_id, Chapter.is_read
         )
     )
     last_read_at = last_read_result.scalar()

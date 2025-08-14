@@ -1,16 +1,17 @@
 """Test importer service layer."""
 
-import tempfile
 import os
-import pytest
+import tempfile
 from datetime import datetime, timedelta
-from uuid import uuid4, UUID
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import AsyncMock, patch
+from uuid import uuid4
+
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiremisu.database.models import LibraryPath, Series, Chapter
+from kiremisu.database.models import Chapter, LibraryPath, Series
+from kiremisu.services.filesystem_parser import ChapterInfo, SeriesInfo
 from kiremisu.services.importer import ImporterService, ImportStats
-from kiremisu.services.filesystem_parser import SeriesInfo, ChapterInfo
 
 
 @pytest.fixture
@@ -698,7 +699,7 @@ class TestImporterService:
         assert execution_time < 10.0
 
         # Verify database state
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
 
         result = await db_session.execute(select(func.count(Series.id)))
         series_count = result.scalar()

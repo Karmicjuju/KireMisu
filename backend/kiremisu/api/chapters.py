@@ -3,9 +3,9 @@
 import asyncio
 import os
 import zipfile
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import List, Optional, Iterator
 from uuid import UUID
 
 import fitz  # PyMuPDF
@@ -13,19 +13,18 @@ import rarfile
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, func
 from sqlalchemy.orm import selectinload
 
-from kiremisu.database.connection import get_db
 from kiremisu.core.unified_auth import get_current_user
+from kiremisu.database.connection import get_db
 from kiremisu.database.models import Chapter, Series
 from kiremisu.database.schemas import (
-    ChapterResponse,
-    SeriesResponse,
-    ChapterPagesInfoResponse,
-    PageInfoResponse,
     ChapterMarkReadResponse,
+    ChapterPagesInfoResponse,
+    ChapterResponse,
+    PageInfoResponse,
 )
 
 logger = structlog.get_logger(__name__)
@@ -177,10 +176,10 @@ async def get_chapter_pages_info(
     )
 
 
-async def _get_page_from_directory_async(chapter_path: Path, page_number: int) -> Optional[dict]:
+async def _get_page_from_directory_async(chapter_path: Path, page_number: int) -> dict | None:
     """Get page image from a directory of loose files."""
 
-    def _scan_directory(path: Path) -> List[Path]:
+    def _scan_directory(path: Path) -> list[Path]:
         """Scan directory for image files."""
         image_files = []
         try:
@@ -211,17 +210,17 @@ async def _get_page_from_directory_async(chapter_path: Path, page_number: int) -
                     if not chunk:
                         break
                     yield chunk
-        except (IOError, OSError) as e:
+        except OSError as e:
             logger.error("Error reading image file", file_path=str(target_file), error=str(e))
             return
 
     return {"filename": target_file.name, "data": file_generator()}
 
 
-async def _get_page_from_zip_async(archive_path: Path, page_number: int) -> Optional[dict]:
+async def _get_page_from_zip_async(archive_path: Path, page_number: int) -> dict | None:
     """Get page image from a CBZ/ZIP archive."""
 
-    def _extract_zip_page(path: Path, page_num: int) -> Optional[dict]:
+    def _extract_zip_page(path: Path, page_num: int) -> dict | None:
         """Extract page from ZIP archive."""
         try:
             with zipfile.ZipFile(path, "r") as zf:
@@ -254,7 +253,7 @@ async def _get_page_from_zip_async(archive_path: Path, page_number: int) -> Opti
                                     if not chunk:
                                         break
                                     yield chunk
-                    except (zipfile.BadZipFile, KeyError, IOError) as e:
+                    except (OSError, zipfile.BadZipFile, KeyError) as e:
                         logger.error(
                             "Error reading from ZIP archive",
                             archive_path=str(path),
@@ -265,7 +264,7 @@ async def _get_page_from_zip_async(archive_path: Path, page_number: int) -> Opti
 
                 return {"filename": os.path.basename(target_file), "data": file_generator()}
 
-        except (zipfile.BadZipFile, IOError, OSError):
+        except (zipfile.BadZipFile, OSError):
             return None
 
     # Use thread pool for CPU-bound operation
@@ -273,10 +272,10 @@ async def _get_page_from_zip_async(archive_path: Path, page_number: int) -> Opti
     return await loop.run_in_executor(_cpu_pool, _extract_zip_page, archive_path, page_number)
 
 
-async def _get_page_from_rar_async(archive_path: Path, page_number: int) -> Optional[dict]:
+async def _get_page_from_rar_async(archive_path: Path, page_number: int) -> dict | None:
     """Get page image from a CBR/RAR archive."""
 
-    def _extract_rar_page(path: Path, page_num: int) -> Optional[dict]:
+    def _extract_rar_page(path: Path, page_num: int) -> dict | None:
         """Extract page from RAR archive."""
         try:
             with rarfile.RarFile(path, "r") as rf:
@@ -309,7 +308,7 @@ async def _get_page_from_rar_async(archive_path: Path, page_number: int) -> Opti
                                     if not chunk:
                                         break
                                     yield chunk
-                    except (rarfile.Error, IOError) as e:
+                    except (OSError, rarfile.Error) as e:
                         logger.error(
                             "Error reading from RAR archive",
                             archive_path=str(path),
@@ -320,7 +319,7 @@ async def _get_page_from_rar_async(archive_path: Path, page_number: int) -> Opti
 
                 return {"filename": os.path.basename(target_file), "data": file_generator()}
 
-        except (rarfile.Error, IOError, OSError):
+        except (rarfile.Error, OSError):
             return None
 
     # Use thread pool for CPU-bound operation
@@ -328,10 +327,10 @@ async def _get_page_from_rar_async(archive_path: Path, page_number: int) -> Opti
     return await loop.run_in_executor(_cpu_pool, _extract_rar_page, archive_path, page_number)
 
 
-async def _get_page_from_pdf_async(pdf_path: Path, page_number: int) -> Optional[dict]:
+async def _get_page_from_pdf_async(pdf_path: Path, page_number: int) -> dict | None:
     """Get page image from a PDF file."""
 
-    def _extract_pdf_page(path: Path, page_num: int) -> Optional[dict]:
+    def _extract_pdf_page(path: Path, page_num: int) -> dict | None:
         """Extract page from PDF as image."""
         try:
             doc = fitz.open(str(path))
@@ -356,7 +355,6 @@ async def _get_page_from_pdf_async(pdf_path: Path, page_number: int) -> Optional
                     for i in range(0, len(png_data), chunk_size):
                         yield png_data[i : i + chunk_size]
                 finally:
-                    pix = None  # Free memory
                     doc.close()
 
             return {"filename": f"page_{page_num:03d}.png", "data": file_generator()}
@@ -372,7 +370,7 @@ async def _get_page_from_pdf_async(pdf_path: Path, page_number: int) -> Optional
     return await loop.run_in_executor(_cpu_pool, _extract_pdf_page, pdf_path, page_number)
 
 
-def _natural_sort_key(filename: str) -> List:
+def _natural_sort_key(filename: str) -> list:
     """Generate a natural sort key for filename sorting."""
     import re
 
@@ -397,13 +395,13 @@ def _get_content_type(filename: str) -> str:
     return content_types.get(ext, "application/octet-stream")
 
 
-@router.get("/series/{series_id}/chapters", response_model=List[ChapterResponse])
+@router.get("/series/{series_id}/chapters", response_model=list[ChapterResponse])
 async def get_series_chapters(
     series_id: UUID,
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0, description="Number of chapters to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of chapters to return"),
-) -> List[ChapterResponse]:
+) -> list[ChapterResponse]:
     """Get all chapters for a series."""
     # First verify series exists
     series_result = await db.execute(select(Series).where(Series.id == series_id))
@@ -458,7 +456,7 @@ async def toggle_chapter_read_status(
 
     # Update series read_chapters count by recalculating from all chapters
     read_chapters_count = await db.execute(
-        select(func.count()).where(Chapter.series_id == chapter.series_id, Chapter.is_read == True)
+        select(func.count()).where(Chapter.series_id == chapter.series_id, Chapter.is_read)
     )
     new_read_count = read_chapters_count.scalar()
 

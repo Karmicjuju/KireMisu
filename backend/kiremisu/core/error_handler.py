@@ -2,10 +2,10 @@
 
 import logging
 import re
-from typing import Dict, Any
+from typing import Any
 from uuid import uuid4
 
-from fastapi import Request, HTTPException
+from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
 
@@ -86,7 +86,7 @@ class SecureErrorHandler:
     @staticmethod
     def create_secure_error_response(
         status_code: int, error_message: str, request_id: str = None, include_details: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Create a secure error response with sanitized information.
 

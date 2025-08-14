@@ -1,23 +1,20 @@
 """API endpoints for notifications management."""
 
-from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiremisu.database.connection import get_db
 from kiremisu.core.unified_auth import get_current_user
-from kiremisu.database.models import Notification
+from kiremisu.database.connection import get_db
 from kiremisu.database.schemas import (
-    NotificationResponse,
-    NotificationListResponse,
-    NotificationStatsResponse,
-    NotificationMarkReadRequest,
-    NotificationMarkReadResponse,
     NotificationBulkMarkReadResponse,
+    NotificationListResponse,
+    NotificationMarkReadResponse,
+    NotificationResponse,
+    NotificationStatsResponse,
 )
-from kiremisu.database.utils import with_db_retry, log_slow_query, validate_query_params
+from kiremisu.database.utils import log_slow_query, with_db_retry
 from kiremisu.services.notification_service import NotificationService
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])

@@ -9,8 +9,9 @@ This script demonstrates all the implemented reading progress features:
 - Mark read/unread functionality
 """
 
-import requests
 import json
+
+import requests
 
 BASE_URL = "http://localhost:8000"
 
@@ -24,7 +25,7 @@ def test_endpoint(endpoint, method="GET", data=None):
             response = requests.post(url, json=data)
         elif method == "PUT":
             response = requests.put(url, json=data)
-        
+
         print(f"{method} {endpoint}")
         print(f"Status: {response.status_code}")
         if response.status_code < 300:
@@ -41,39 +42,39 @@ def main():
     """Run the reading progress API demo."""
     print("=== KireMisu R-2 Reading Progress API Demo ===")
     print()
-    
+
     # Test 1: Check if backend is healthy
     print("1. Testing backend health:")
     test_endpoint("/health")
-    
+
     # Test 2: Get user reading statistics (should work with empty database)
     print("2. Getting user reading statistics (empty database):")
     test_endpoint("/reading-progress/user/stats")
-    
+
     # Test 3: Try to get progress for non-existent chapter (should return 404)
     print("3. Testing chapter progress for non-existent chapter:")
     fake_chapter_id = "12345678-1234-1234-1234-123456789abc"
     test_endpoint(f"/reading-progress/chapters/{fake_chapter_id}/progress")
-    
+
     # Test 4: Try to update progress for non-existent chapter (should return 404)
     print("4. Testing progress update for non-existent chapter:")
-    test_endpoint(f"/reading-progress/chapters/{fake_chapter_id}/progress", 
-                 method="PUT", 
+    test_endpoint(f"/reading-progress/chapters/{fake_chapter_id}/progress",
+                 method="PUT",
                  data={"current_page": 5, "is_complete": None})
-    
+
     # Test 5: Try to toggle read status for non-existent chapter (should return 404)
     print("5. Testing mark-read for non-existent chapter:")
     test_endpoint(f"/reading-progress/chapters/{fake_chapter_id}/mark-read", method="POST")
-    
+
     # Test 6: Try series stats for non-existent series (should return 404)
     print("6. Testing series stats for non-existent series:")
     fake_series_id = "87654321-4321-4321-4321-123456789abc"
     test_endpoint(f"/reading-progress/series/{fake_series_id}/stats")
-    
+
     # Test 7: Try series mark-read for non-existent series (should return 404)
     print("7. Testing series mark-read for non-existent series:")
     test_endpoint(f"/reading-progress/series/{fake_series_id}/mark-read", method="POST")
-    
+
     # Test 8: Check API endpoints are documented
     print("8. Checking OpenAPI documentation includes reading progress endpoints:")
     response = test_endpoint("/api/openapi.json")
@@ -83,27 +84,27 @@ def main():
         for path in openapi_data.get("paths", {}):
             if "/reading-progress/" in path:
                 reading_progress_endpoints.append(path)
-        
+
         print("Found reading progress endpoints:")
         for endpoint in sorted(reading_progress_endpoints):
             print(f"  - {endpoint}")
         print()
-    
+
     # Test 9: Validate request schemas
     print("9. Testing invalid request data:")
-    test_endpoint(f"/reading-progress/chapters/{fake_chapter_id}/progress", 
-                 method="PUT", 
+    test_endpoint(f"/reading-progress/chapters/{fake_chapter_id}/progress",
+                 method="PUT",
                  data={"current_page": -1, "is_complete": None})  # Invalid negative page
-    
+
     # Test 10: Check API is properly integrated
     print("10. Verifying API integration (should list all available routes):")
     test_endpoint("/api/docs")
-    
+
     print("=== Demo Complete ===")
     print()
     print("✅ The R-2 Reading Progress API is successfully implemented with:")
     print("   - User reading statistics endpoint")
-    print("   - Chapter progress tracking endpoints") 
+    print("   - Chapter progress tracking endpoints")
     print("   - Series progress statistics endpoints")
     print("   - Mark read/unread functionality")
     print("   - Proper error handling and validation")

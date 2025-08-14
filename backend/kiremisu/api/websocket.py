@@ -5,15 +5,14 @@ Currently experimental and disabled by default.
 """
 
 import logging
-from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
-from kiremisu.websocket.connection_manager import connection_manager
-from kiremisu.database.schemas import ErrorResponse
 from kiremisu.core.error_handler import create_standardized_error_response
+from kiremisu.database.schemas import ErrorResponse
+from kiremisu.websocket.connection_manager import connection_manager
 
 router = APIRouter(prefix="/api/ws", tags=["websocket"])
 logger = logging.getLogger(__name__)
@@ -62,7 +61,7 @@ async def websocket_notifications(
         connection_manager.disconnect(websocket)
 
 
-async def handle_websocket_message(websocket: WebSocket, data: dict, user_id: Optional[UUID]):
+async def handle_websocket_message(websocket: WebSocket, data: dict, user_id: UUID | None):
     """Handle incoming WebSocket messages from clients.
 
     Args:

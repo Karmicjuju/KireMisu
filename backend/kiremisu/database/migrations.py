@@ -1,21 +1,18 @@
 """Simple migration utilities for safer database changes."""
 
 import logging
-from typing import Dict, List, Optional
 
 from alembic import command
 from alembic.config import Config
-from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from .connection import get_db_session
 
 logger = logging.getLogger(__name__)
 
 
-async def get_current_revision() -> Optional[str]:
+async def get_current_revision() -> str | None:
     """Get the current database revision."""
     try:
         async with get_db_session() as session:
@@ -27,7 +24,7 @@ async def get_current_revision() -> Optional[str]:
         return None
 
 
-async def validate_migration_safety() -> Dict[str, bool]:
+async def validate_migration_safety() -> dict[str, bool]:
     """Basic validation checks before running migrations."""
     checks = {
         "database_accessible": False,
@@ -78,7 +75,7 @@ def create_migration_with_template(name: str, message: str = "") -> str:
         raise
 
 
-async def run_migration_with_checks(target_revision: str = "head") -> Dict[str, any]:
+async def run_migration_with_checks(target_revision: str = "head") -> dict[str, any]:
     """Run migration with basic safety checks."""
     result = {
         "success": False,
@@ -116,7 +113,7 @@ async def run_migration_with_checks(target_revision: str = "head") -> Dict[str, 
     return result
 
 
-async def get_migration_history() -> List[Dict[str, str]]:
+async def get_migration_history() -> list[dict[str, str]]:
     """Get a simple migration history."""
     try:
         config = Config("alembic.ini")
@@ -159,7 +156,7 @@ def downgrade() -> None:
     op.drop_column('table_name', 'column_name')
 """,
     "add_index": """
-# Add index migration template  
+# Add index migration template
 def upgrade() -> None:
     op.create_index('ix_table_column', 'table_name', ['column_name'])
 

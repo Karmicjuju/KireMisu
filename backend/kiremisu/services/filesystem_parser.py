@@ -15,19 +15,16 @@ for CPU-bound file processing operations.
 """
 
 import asyncio
-import logging
 import os
 import re
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple, Union
 
 import fitz  # PyMuPDF
 import rarfile
 import structlog
-from PIL import Image
 
 logger = structlog.get_logger(__name__)
 
@@ -52,13 +49,13 @@ class ChapterInfo:
 
     file_path: str
     chapter_number: float
-    volume_number: Optional[int] = None
-    title: Optional[str] = None
+    volume_number: int | None = None
+    title: str | None = None
     file_size: int = 0
     page_count: int = 0
 
     # Metadata from parsing
-    source_metadata: Dict = field(default_factory=dict)
+    source_metadata: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -67,17 +64,17 @@ class SeriesInfo:
 
     title_primary: str
     file_path: str
-    chapters: List[ChapterInfo] = field(default_factory=list)
+    chapters: list[ChapterInfo] = field(default_factory=list)
 
     # Optional metadata
-    title_alternative: Optional[str] = None
-    author: Optional[str] = None
-    artist: Optional[str] = None
-    description: Optional[str] = None
-    cover_image_path: Optional[str] = None
+    title_alternative: str | None = None
+    author: str | None = None
+    artist: str | None = None
+    description: str | None = None
+    cover_image_path: str | None = None
 
     # Metadata from parsing
-    source_metadata: Dict = field(default_factory=dict)
+    source_metadata: dict = field(default_factory=dict)
 
     @property
     def total_chapters(self) -> int:
@@ -121,7 +118,7 @@ class FilesystemParser:
             re.compile(r"(?:volume|vol\.?|v)\s*(\d+)", re.IGNORECASE),
         ]
 
-    async def scan_library_path(self, path: str) -> List[SeriesInfo]:
+    async def scan_library_path(self, path: str) -> list[SeriesInfo]:
         """Scan a library path and extract all series information.
 
         Args:
@@ -179,11 +176,11 @@ class FilesystemParser:
 
         return series_list
 
-    async def _find_series_candidates(self, root_path: Path) -> List[Path]:
+    async def _find_series_candidates(self, root_path: Path) -> list[Path]:
         """Find potential series directories and files in the root path."""
         candidates = []
 
-        def _scan_directory(directory: Path) -> List[Path]:
+        def _scan_directory(directory: Path) -> list[Path]:
             """Synchronous directory scanning for thread pool."""
             local_candidates = []
 
@@ -196,7 +193,7 @@ class FilesystemParser:
                             for f in item.iterdir()
                             if f.is_file()
                         )
-                        
+
                         # Check if directory contains subdirectories with manga files (chapter directories)
                         has_chapter_directories = False
                         if not has_manga_files_directly:
@@ -213,11 +210,11 @@ class FilesystemParser:
                                             break
                             except (PermissionError, OSError):
                                 pass
-                        
+
                         # Add directory as candidate if it has manga files directly or chapter subdirectories
                         if has_manga_files_directly or has_chapter_directories:
                             local_candidates.append(item)
-                            
+
                     elif (
                         item.is_file()
                         and item.suffix.lower()
@@ -237,7 +234,7 @@ class FilesystemParser:
 
         return candidates
 
-    async def parse_series(self, series_path: str) -> Optional[SeriesInfo]:
+    async def parse_series(self, series_path: str) -> SeriesInfo | None:
         """Parse a series from a directory or file path.
 
         Args:
@@ -287,11 +284,11 @@ class FilesystemParser:
 
         return series_info if series_info.chapters else None
 
-    async def _parse_directory_chapters(self, directory: Path) -> List[ChapterInfo]:
+    async def _parse_directory_chapters(self, directory: Path) -> list[ChapterInfo]:
         """Parse all chapters from a directory."""
         chapters = []
 
-        def _scan_chapter_files(dir_path: Path) -> List[Path]:
+        def _scan_chapter_files(dir_path: Path) -> list[Path]:
             """Find all potential chapter files in directory."""
             chapter_files = []
 
@@ -337,7 +334,7 @@ class FilesystemParser:
 
         return chapters
 
-    async def parse_chapter(self, file_path: str) -> Optional[ChapterInfo]:
+    async def parse_chapter(self, file_path: str) -> ChapterInfo | None:
         """Parse chapter information from a file or directory.
 
         Args:
@@ -415,7 +412,7 @@ class FilesystemParser:
 
         return title or "Unknown Series"
 
-    def _extract_chapter_title(self, name: str) -> Optional[str]:
+    def _extract_chapter_title(self, name: str) -> str | None:
         """Extract chapter title from filename, if present."""
         # Look for patterns like "Chapter 01 - Title" or "01 - Title"
         patterns = [
@@ -435,7 +432,7 @@ class FilesystemParser:
 
         return None
 
-    def _extract_chapter_volume_numbers(self, name: str) -> Tuple[Optional[float], Optional[int]]:
+    def _extract_chapter_volume_numbers(self, name: str) -> tuple[float | None, int | None]:
         """Extract chapter and volume numbers from filename."""
         chapter_number = None
         volume_number = None
@@ -556,10 +553,10 @@ class FilesystemParser:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(self.io_pool, _calculate_size, directory)
 
-    async def _find_cover_image(self, directory: Path) -> Optional[Path]:
+    async def _find_cover_image(self, directory: Path) -> Path | None:
         """Find cover image in series directory."""
 
-        def _find_cover(path: Path) -> Optional[Path]:
+        def _find_cover(path: Path) -> Path | None:
             # Look for common cover image names
             cover_names = {
                 "cover",
@@ -609,7 +606,7 @@ class FilesystemParser:
 
 
 # Convenience function for simple usage
-async def parse_library_path(path: str) -> List[SeriesInfo]:
+async def parse_library_path(path: str) -> list[SeriesInfo]:
     """Convenience function to parse a library path.
 
     Args:
