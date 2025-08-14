@@ -3,6 +3,7 @@
 import { useCallback } from 'react';
 import useSWR, { mutate } from 'swr';
 import { notificationsApi, type NotificationResponse } from '@/lib/api';
+import { useAuth } from '@/contexts/auth-context';
 
 export interface UseNotificationsReturn {
   data: NotificationResponse[] | undefined;
@@ -12,13 +13,18 @@ export interface UseNotificationsReturn {
 }
 
 export function useNotifications(limit?: number): UseNotificationsReturn {
+  const { isAuthenticated } = useAuth();
+  
   const {
     data,
     error,
     isLoading,
     mutate: swrMutate,
   } = useSWR<NotificationResponse[]>(
-    limit ? `/api/notifications?limit=${limit}` : '/api/notifications',
+    // Only fetch notifications if user is authenticated
+    isAuthenticated 
+      ? (limit ? `/api/notifications?limit=${limit}` : '/api/notifications')
+      : null,
     () => notificationsApi.getNotifications({ limit }),
     {
       refreshInterval: 60000, // Refresh every 60 seconds (reduced from 30)

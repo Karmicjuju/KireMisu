@@ -33,6 +33,10 @@ export function ServiceWorkerRegistration() {
   };
 
   useEffect(() => {
+    // DISABLE SERVICE WORKER - causing infinite reload loops
+    console.log('Service Worker disabled to fix authentication flow');
+    return;
+
     // Only register service worker in browser environment and if supported
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
       console.log('Service Worker not supported');
@@ -90,9 +94,9 @@ export function ServiceWorkerRegistration() {
 
         // Listen for controlling service worker change (when new SW takes control)
         const handleControllerChange = () => {
-          console.log('Service worker controller changed, reloading page');
+          console.log('Service worker controller changed');
           setSwState(prev => ({ ...prev, isUpdating: false }));
-          window.location.reload();
+          // Service worker controller changed - ready for use
         };
 
         navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.database.connection import get_db
-from kiremisu.core.auth import get_current_user
+from kiremisu.core.unified_auth import get_current_user
 from kiremisu.database.models import Notification
 from kiremisu.database.schemas import (
     NotificationResponse,

@@ -69,6 +69,7 @@ export function WatchToggle({
         )}
         onClick={!isLoading ? handleToggle : undefined}
         aria-label={localWatchingState ? 'Stop watching' : 'Start watching'}
+        data-testid={`watch-toggle-${seriesId}`}
       >
         {localWatchingState ? (
           <BellRing className="h-2.5 w-2.5 mr-1" />
@@ -93,6 +94,7 @@ export function WatchToggle({
           className
         )}
         aria-label={localWatchingState ? 'Stop watching' : 'Start watching'}
+        data-testid={`watch-toggle-${seriesId}`}
       >
         {localWatchingState ? (
           <BellRing className="h-3 w-3" />
@@ -116,6 +118,7 @@ export function WatchToggle({
         className
       )}
       aria-label={localWatchingState ? 'Stop watching' : 'Start watching'}
+      data-testid={`watch-toggle-${seriesId}`}
     >
       {localWatchingState ? (
         <BellRing className="h-3 w-3 mr-1" />

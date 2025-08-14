@@ -140,9 +140,9 @@ app.add_middleware(SlowAPIMiddleware)
 
 # Rate limiting middleware (add before CORS)
 rate_limiter = RateLimiter(
-    requests_per_minute=120,  # Reasonable limit for general usage
-    requests_per_hour=3600,  # Hourly limit
-    burst_limit=20,  # Allow reasonable bursts for UI interactions
+    requests_per_minute=settings.general_rate_limit_per_minute,
+    requests_per_hour=settings.general_rate_limit_per_hour,
+    burst_limit=settings.general_rate_limit_burst,
 )
 app.add_middleware(RateLimitMiddleware, rate_limiter=rate_limiter)
 

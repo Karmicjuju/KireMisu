@@ -4,6 +4,7 @@
 
 import { test, expect, Page, BrowserContext } from '@playwright/test';
 import { v4 as uuidv4 } from 'uuid';
+import { createTestHelpers, TEST_CONFIG } from './utils/test-helpers';
 
 // Test data setup
 const TEST_SERIES_DATA = [
@@ -26,59 +27,56 @@ const TEST_SERIES_DATA = [
 
 // Helper functions
 class WatchingSystemPage {
-  constructor(private page: Page) {}
+  private helpers: ReturnType<typeof createTestHelpers>;
+
+  constructor(private page: Page) {
+    this.helpers = createTestHelpers(page);
+  }
 
   async navigateToLibrary() {
     await this.page.goto('/library');
-    await this.page.waitForLoadState('networkidle');
+    await this.helpers.waitForPageStable();
   }
 
   async navigateToWatchingPage() {
     await this.page.goto('/library/watching');
-    await this.page.waitForLoadState('networkidle');
+    await this.helpers.waitForPageStable();
   }
 
   async getNotificationBell() {
-    return this.page.locator('[aria-label*="Notifications"]');
+    return this.helpers.waitForNotificationBell();
   }
 
   async getNotificationBadge() {
-    return this.page.locator('[aria-label*="Notifications"] .badge');
+    return this.page.locator('[data-testid="notification-badge"]');
   }
 
   async getWatchToggleForSeries(seriesTitle: string) {
-    const seriesCard = this.page.locator(`[data-testid="series-card"]:has-text("${seriesTitle}")`);
+    const seriesCard = await this.helpers.waitForSeriesCard(seriesTitle);
     return seriesCard.locator('[aria-label*="watching"]');
   }
 
   async clickNotificationBell() {
     const bell = await this.getNotificationBell();
-    await bell.click();
-    // Wait for dropdown to appear
-    await this.page.waitForSelector('[role="dialog"], .notification-dropdown', { state: 'visible' });
+    await this.helpers.safeClick(bell);
+    // Wait for dropdown to appear using helper
+    await this.helpers.waitForNotificationDropdown();
   }
 
   async getNotificationDropdown() {
-    return this.page.locator('[role="dialog"], .notification-dropdown');
+    return this.page.locator('[data-testid="notification-dropdown"]');
   }
 
   async getNotificationItems() {
-    return this.page.locator('.notification-item, [data-testid="notification-item"]');
+    return this.page.locator('[data-testid="notification-item"]');
   }
 
   async waitForToast(message: string) {
-    await this.page.waitForSelector(`.toast:has-text("${message}")`, { 
-      state: 'visible',
-      timeout: 10000 
-    });
+    return this.helpers.waitForToast(message);
   }
 
   async dismissToast() {
-    const toast = this.page.locator('.toast').first();
-    if (await toast.isVisible()) {
-      await toast.click();
-      await this.page.waitForSelector('.toast', { state: 'hidden' });
-    }
+    await this.helpers.dismissAllToasts();
   }
 
   async searchWatchedSeries(query: string) {
@@ -98,7 +96,9 @@ class WatchingSystemPage {
 test.beforeEach(async ({ page }) => {
   // Ensure clean state - might need API calls to clean up test data
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
+  // Wait for basic content to load instead of network idle
+  await page.waitForTimeout(2000);
 });
 
 test.describe('Watching System - User Workflows', () => {
@@ -106,27 +106,23 @@ test.describe('Watching System - User Workflows', () => {
     const watchingPage = new WatchingSystemPage(page);
     await watchingPage.navigateToLibrary();
 
-    // Find first series and toggle watch
-    const firstSeriesCard = page.locator('[data-testid="series-card"]').first();
-    const seriesTitle = await firstSeriesCard.locator('.series-title').textContent();
+    // Use helper to get the first available watch toggle
+    const helpers = createTestHelpers(page);
+    const { toggle: watchToggle, seriesId } = await helpers.getFirstAvailableWatchToggle();
     
-    const watchToggle = await watchingPage.getWatchToggleForSeries(seriesTitle!);
-    const isCurrentlyWatching = await watchToggle.getAttribute('aria-label') === 'Stop watching';
+    const currentLabel = await watchToggle.getAttribute('aria-label');
+    const isCurrentlyWatching = currentLabel === 'Stop watching';
 
-    // Toggle watch status
-    await watchToggle.click();
+    // Toggle watch status using safe click
+    await helpers.safeClick(watchToggle);
 
     // Wait for success toast
     const expectedMessage = isCurrentlyWatching ? 'No longer watching' : 'Now watching';
     await watchingPage.waitForToast(expectedMessage);
 
-    // Verify button state changed
-    const newLabel = await watchToggle.getAttribute('aria-label');
-    if (isCurrentlyWatching) {
-      expect(newLabel).toBe('Start watching');
-    } else {
-      expect(newLabel).toBe('Stop watching');
-    }
+    // Wait for button state to change using helper
+    const expectedNewLabel = isCurrentlyWatching ? 'Start watching' : 'Stop watching';
+    await helpers.waitForWatchToggleUpdate(seriesId, expectedNewLabel);
 
     await watchingPage.dismissToast();
   });
@@ -176,16 +172,23 @@ test.describe('Watching System - User Workflows', () => {
 
   test('should navigate to watching page and display watched series', async ({ page }) => {
     const watchingPage = new WatchingSystemPage(page);
+    const helpers = createTestHelpers(page);
 
     // First, ensure we have some watched series
     await watchingPage.navigateToLibrary();
     
-    // Watch at least one series
-    const watchToggle = page.locator('[aria-label="Start watching"]').first();
-    if (await watchToggle.isVisible()) {
-      await watchToggle.click();
-      await watchingPage.waitForToast('Now watching');
-      await watchingPage.dismissToast();
+    // Try to watch at least one series
+    try {
+      const { toggle: watchToggle } = await helpers.getFirstAvailableWatchToggle();
+      const currentLabel = await watchToggle.getAttribute('aria-label');
+      
+      if (currentLabel === 'Start watching') {
+        await helpers.safeClick(watchToggle);
+        await watchingPage.waitForToast('Now watching');
+        await watchingPage.dismissToast();
+      }
+    } catch (error) {
+      console.log('No available series to watch:', error);
     }
 
     // Navigate to watching page
@@ -195,9 +198,9 @@ test.describe('Watching System - User Workflows', () => {
     await expect(page.locator('h1, h2')).toContainText(/watching/i);
 
     // Check if watched series are displayed
-    const watchedSeriesList = page.locator('[data-testid="watched-series-list"], .watched-series');
+    const watchedSeriesList = page.locator('[data-testid="watched-series-list"]');
     if (await watchedSeriesList.isVisible()) {
-      const seriesItems = page.locator('[data-testid="series-card"], .series-item');
+      const seriesItems = page.locator('[data-testid="watched-series-card"]');
       const count = await seriesItems.count();
       expect(count).toBeGreaterThan(0);
     } else {

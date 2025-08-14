@@ -280,21 +280,32 @@ export interface ChapterAnnotationsResponse {
   annotations_by_page: Record<number, AnnotationResponse[]>;
 }
 
+// Helper function to get the correct API URL based on context
+const getApiUrl = (): string => {
+  // Server-side (SSR, API routes): use internal Docker network URL
+  if (typeof window === 'undefined') {
+    return process.env.BACKEND_URL || 'http://backend:8000';
+  }
+  
+  // Client-side (browser): use public URL
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+};
+
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
+  baseURL: getApiUrl(),
   timeout: 60000, // Increased timeout for library scanning operations
+  withCredentials: true, // Include cookies in requests
 });
 
-// Auth token getter function - will be set by auth context
-let getAuthToken: () => string | null = () => null;
+// Auth header getter function - will be set by auth context
+let getAuthHeaders: () => Record<string, string> = () => ({});
 
 // Request interceptor to add auth headers
 api.interceptors.request.use(
   (config) => {
-    const token = getAuthToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+    const authHeaders = getAuthHeaders();
+    // Add auth headers (including CSRF token if available)
+    Object.assign(config.headers, authHeaders);
     return config;
   },
   (error) => Promise.reject(error)
@@ -316,8 +327,8 @@ api.interceptors.response.use(
 );
 
 // Function to configure auth for the API client
-export const configureApiAuth = (tokenGetter: () => string | null) => {
-  getAuthToken = tokenGetter;
+export const configureApiAuth = (headerGetter: () => Record<string, string>) => {
+  getAuthHeaders = headerGetter;
 };
 
 export const libraryApi = {
@@ -471,7 +482,7 @@ export const seriesApi = {
     }
 
     const response = await api.get<SeriesResponse[]>(
-      `/api/series${params.toString() ? `?${params.toString()}` : ''}`
+      `/api/series/${params.toString() ? `?${params.toString()}` : ''}`
     );
     return response.data;
   },
@@ -1006,7 +1017,7 @@ export const notificationsApi = {
     if (options?.unread_only) params.append('unread_only', 'true');
 
     const response = await api.get<NotificationListResponse>(
-      `/api/notifications${params.toString() ? `?${params.toString()}` : ''}`
+      `/api/notifications/${params.toString() ? `?${params.toString()}` : ''}`
     );
     return response.data.notifications;
   },

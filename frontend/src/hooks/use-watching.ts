@@ -26,6 +26,7 @@ export function useWatching(): UseWatchingReturn {
         mutate(`/api/series/${seriesId}`),
         mutate((key) => typeof key === 'string' && key.includes('/api/series')),
         mutate((key) => typeof key === 'string' && key.includes('/api/watching')),
+        mutate('all-series-for-watching'), // Invalidate the watching page cache
       ]);
 
       return response.watching_enabled;

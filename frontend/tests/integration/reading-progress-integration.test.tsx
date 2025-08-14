@@ -13,6 +13,8 @@ import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import React from 'react';
 
+import { setupFetchMock, setupKireMisuApiMocks, cleanupFetchMock } from '../setup/integration-fetch-mock';
+
 // Mock Next.js dependencies
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -27,6 +29,19 @@ jest.mock('@/hooks/use-toast', () => ({
     toast: jest.fn(),
   }),
 }));
+
+// Setup fetch mocking for HTTP-level API testing in integration tests
+beforeAll(() => {
+  setupFetchMock();
+});
+
+afterAll(() => {
+  cleanupFetchMock();
+});
+
+beforeEach(() => {
+  setupKireMisuApiMocks();
+});
 
 // Mock SWR with more realistic behavior
 const mockMutate = jest.fn();
@@ -129,9 +144,9 @@ const IntegratedProgressApp = () => {
   const [selectedSeries, setSelectedSeries] = React.useState<string | null>(null);
   const [stats, setStats] = React.useState({
     total_series: 10,
-    total_chapters: 150,
-    chapters_read: 75,
-    overall_progress_percentage: 50.0,
+    total_chapters: 3, // Match the actual number of chapters in test data
+    chapters_read: 1, // Only chapter-1 is initially read
+    overall_progress_percentage: 33.0, // 1/3 chapters read
     series_stats: { completed: 3, in_progress: 5, unread: 2 },
     recent_reads: [],
     reading_streak_days: 7,
@@ -143,8 +158,8 @@ const IntegratedProgressApp = () => {
     {
       id: 'series-1',
       title_primary: 'Test Manga Series',
-      total_chapters: 15,
-      read_chapters: 8,
+      total_chapters: 3, // Match actual chapter count
+      read_chapters: 1, // Only chapter-1 is initially read
     },
     {
       id: 'series-2',
@@ -215,7 +230,7 @@ const IntegratedProgressApp = () => {
 
     // Update overall stats
     const totalRead = updatedChapters.filter(ch => ch.is_read).length;
-    const newOverallPercentage = (totalRead / chapters.length) * 100;
+    const newOverallPercentage = (totalRead / stats.total_chapters) * 100;
     
     setStats(prev => ({
       ...prev,
@@ -424,8 +439,8 @@ describe('Reading Progress Integration Tests', () => {
       render(<IntegratedProgressApp />);
       
       // Verify initial dashboard state
-      expect(screen.getByTestId('overall-progress')).toHaveTextContent('50%');
-      expect(screen.getByTestId('read-chapters')).toHaveTextContent('75');
+      expect(screen.getByTestId('overall-progress')).toHaveTextContent('33%');
+      expect(screen.getByTestId('read-chapters')).toHaveTextContent('1');
       
       // Navigate to library
       fireEvent.click(screen.getByTestId('nav-library'));
@@ -436,8 +451,8 @@ describe('Reading Progress Integration Tests', () => {
       });
       
       const firstSeriesCard = screen.getByTestId('series-card-series-1');
-      expect(firstSeriesCard).toHaveTextContent('8 / 15 chapters');
-      expect(firstSeriesCard).toHaveTextContent('53%'); // 8/15 = ~53%
+      expect(firstSeriesCard).toHaveTextContent('1 / 3 chapters');
+      expect(firstSeriesCard).toHaveTextContent('33%'); // 1/3 = ~33%
     });
 
     it('updates dashboard when returning from chapter interactions', async () => {
@@ -467,7 +482,7 @@ describe('Reading Progress Integration Tests', () => {
       await waitFor(() => {
         const updatedProgress = screen.getByTestId('overall-progress').textContent;
         expect(updatedProgress).not.toBe(initialProgress);
-        expect(screen.getByTestId('read-chapters')).toHaveTextContent('76'); // Increased by 1
+        expect(screen.getByTestId('read-chapters')).toHaveTextContent('2'); // Increased by 1
       });
     });
   });
@@ -483,7 +498,8 @@ describe('Reading Progress Integration Tests', () => {
       // Get initial states
       const seriesReadChapters = screen.getByTestId('series-read-chapters').textContent;
       const chapter3Button = screen.getByTestId('mark-read-chapter-3');
-      const chapter3Progress = screen.getByTestId('chapter-progress-text');
+      const chapter3 = screen.getByTestId('chapter-chapter-3');
+      const chapter3Progress = chapter3.querySelector('[data-testid="chapter-progress-text"]');
       
       expect(chapter3Progress).toHaveTextContent('6%'); // (0+1)/18 ≈ 6%
       expect(chapter3Button).toHaveTextContent('Mark Read');
@@ -499,7 +515,7 @@ describe('Reading Progress Integration Tests', () => {
         expect(chapter3Progress).toHaveTextContent('Complete');
         
         // Series stats should update
-        expect(screen.getByTestId('series-read-chapters')).toHaveTextContent('9');
+        expect(screen.getByTestId('series-read-chapters')).toHaveTextContent('2');
       });
       
       // Navigate back to library to check series card
@@ -507,8 +523,8 @@ describe('Reading Progress Integration Tests', () => {
       
       await waitFor(() => {
         const seriesCard = screen.getByTestId('series-card-series-1');
-        expect(seriesCard).toHaveTextContent('9 / 15 chapters');
-        expect(seriesCard).toHaveTextContent('60%'); // 9/15 = 60%
+        expect(seriesCard).toHaveTextContent('2 / 3 chapters');
+        expect(seriesCard).toHaveTextContent('67%'); // 2/3 = ~67%
       });
     });
 
@@ -541,8 +557,8 @@ describe('Reading Progress Integration Tests', () => {
       fireEvent.click(screen.getByTestId('nav-dashboard'));
       
       await waitFor(() => {
-        expect(screen.getByTestId('read-chapters')).toHaveTextContent('77'); // 75 + 2
-        expect(screen.getByTestId('overall-progress')).toHaveTextContent('51%'); // 77/150 ≈ 51%
+        expect(screen.getByTestId('read-chapters')).toHaveTextContent('3'); // 1 + 2
+        expect(screen.getByTestId('overall-progress')).toHaveTextContent('100%'); // 3/3 = 100%
       });
     });
   });
@@ -565,7 +581,8 @@ describe('Reading Progress Integration Tests', () => {
       // 3. Series Detail: Verify chapter-level data
       fireEvent.click(series1Card);
       
-      const chapterItems = screen.getAllByTestId(/^chapter-/);
+      // Only count chapters from series-1 that we're currently viewing
+      const chapterItems = screen.getAllByTestId(/^chapter-chapter-/);
       let readChaptersCount = 0;
       let totalChapters = chapterItems.length;
       

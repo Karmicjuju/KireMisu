@@ -522,8 +522,9 @@ export function MangaReader({ chapterId, initialPage = 1, className }: MangaRead
               isSelected={selectedAnnotation?.id === annotation.id}
               onClick={() => setSelectedAnnotation(annotation)}
               onEdit={() => {
-                // TODO: Implement edit functionality
-                console.log('Edit annotation:', annotation);
+                setSelectedAnnotation(annotation);
+                setAnnotationFormPosition({ x: annotation.position_x, y: annotation.position_y });
+                setShowAnnotationForm(true);
               }}
               onDelete={() => handleDeleteAnnotation(annotation.id)}
             />
@@ -611,10 +612,15 @@ export function MangaReader({ chapterId, initialPage = 1, className }: MangaRead
             chapterId={chapterId}
             pageNumber={currentPage}
             position={annotationFormPosition}
-            onSubmit={handleCreateAnnotation}
+            annotation={selectedAnnotation}
+            onSubmit={selectedAnnotation ? 
+              (data) => handleUpdateAnnotation(selectedAnnotation.id, data) : 
+              handleCreateAnnotation
+            }
             onCancel={() => {
               setShowAnnotationForm(false);
               setAnnotationFormPosition(null);
+              setSelectedAnnotation(null);
             }}
           />
         </div>

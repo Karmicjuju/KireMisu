@@ -10,7 +10,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
 from kiremisu.database.connection import get_db
-from kiremisu.core.auth import get_current_user
+from kiremisu.core.unified_auth import get_current_user
 from kiremisu.database.models import Series, Chapter, Tag, series_tags
 from kiremisu.database.schemas import (
     SeriesResponse,

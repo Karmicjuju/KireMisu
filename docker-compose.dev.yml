@@ -39,8 +39,14 @@ services:
       - ENVIRONMENT=development
       # Default admin user configuration
       - DEFAULT_ADMIN_USERNAME=admin
-      - DEFAULT_ADMIN_PASSWORD=KireMisu2025
+      - DEFAULT_ADMIN_PASSWORD=KireMisu2025!
       - DEFAULT_ADMIN_EMAIL=admin@kiremisu.local
+      # Development-friendly rate limiting
+      - AUTH_RATE_LIMIT_ATTEMPTS=20
+      - AUTH_RATE_LIMIT_WINDOW_MINUTES=5
+      - GENERAL_RATE_LIMIT_PER_MINUTE=300
+      - GENERAL_RATE_LIMIT_PER_HOUR=10000
+      - GENERAL_RATE_LIMIT_BURST=50
     ports:
       - "8000:8000"
     volumes:

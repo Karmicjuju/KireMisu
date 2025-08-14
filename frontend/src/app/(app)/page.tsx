@@ -17,7 +17,7 @@ import {
 } from '@/lib/api';
 import useSWR from 'swr';
 import Link from 'next/link';
-// import { formatDistanceToNow } from 'date-fns'; // Temporarily disabled to prevent build errors
+import { formatDistanceToNow } from 'date-fns';
 
 export default function Dashboard() {
   // Use the new hook for dashboard stats

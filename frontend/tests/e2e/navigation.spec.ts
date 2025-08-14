@@ -1,14 +1,14 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Navigation', () => {
-  test('should display standalone welcome page and navigate to settings', async ({ page }) => {
-    // Go to the root page (standalone welcome page)
+  test('should display authenticated dashboard and navigate to settings', async ({ page }) => {
+    // Go to the root page (authenticated users see dashboard)
     await page.goto('/');
 
-    // Check that we're on the standalone welcome page
-    await expect(page.getByRole('heading', { name: 'Welcome to KireMisu!' })).toBeVisible();
+    // Check that we're on the authenticated dashboard page
+    await expect(page.getByRole('heading', { name: 'Welcome back!' })).toBeVisible();
     await expect(
-      page.getByText('Your self-hosted manga reader and library management system')
+      page.getByText('Continue your manga journey where you left off')
     ).toBeVisible();
 
     // Navigate directly to settings (which has the app layout with sidebar)
@@ -16,7 +16,7 @@ test.describe('Navigation', () => {
 
     // Should navigate to settings page
     await expect(page).toHaveURL('/settings');
-    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Library Paths' })).toBeVisible();
   });
 
@@ -41,34 +41,33 @@ test.describe('Navigation', () => {
     await expect(page).toHaveURL('/');
   });
 
-  test('should display welcome page content', async ({ page }) => {
+  test('should display authenticated dashboard content', async ({ page }) => {
     await page.goto('/');
 
-    // Check for welcome page content (standalone page)
-    await expect(page.getByRole('heading', { name: 'Welcome to KireMisu!' })).toBeVisible();
+    // Check for dashboard content (authenticated users)
+    await expect(page.getByRole('heading', { name: 'Welcome back!' })).toBeVisible();
     await expect(
-      page.getByText('Your self-hosted manga reader and library management system')
+      page.getByText('Continue your manga journey where you left off')
     ).toBeVisible();
 
-    // Check for stats cards on welcome page
+    // Check for progress stats section (should be visible even with no data)
     await expect(page.getByText('Total Series')).toBeVisible();
     await expect(page.getByText('Chapters Read')).toBeVisible();
     await expect(page.getByText('Reading Time')).toBeVisible();
-    await expect(page.getByText('Favorites')).toBeVisible();
 
-    // Check for getting started section
-    await expect(page.getByRole('heading', { name: 'Getting Started' })).toBeVisible();
-    await expect(
-      page.getByText('Navigate to Settings to configure your library paths')
-    ).toBeVisible();
+    // Check for continue reading section
+    await expect(page.getByRole('heading', { name: 'Continue Reading' })).toBeVisible();
+
+    // Check for quick actions section
+    await expect(page.getByRole('heading', { name: 'Quick Actions' })).toBeVisible();
   });
 
   test('should display sidebar elements', async ({ page }) => {
     // Navigate to settings (which has sidebar)
     await page.goto('/settings');
 
-    // Check sidebar elements - KireMisu is in sidebar header, links are in nav
-    await expect(page.getByText('KireMisu')).toBeVisible();
+    // Check sidebar elements - use more specific selectors to avoid document title conflicts
+    await expect(page.locator('[data-testid="sidebar"] span').filter({ hasText: 'KireMisu' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Library' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Downloads' })).toBeVisible();
@@ -85,7 +84,7 @@ test.describe('Navigation', () => {
   test('should navigate between app pages via sidebar', async ({ page }) => {
     // Start with settings (has sidebar)
     await page.goto('/settings');
-    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
 
     // Navigate to Library
     await page.getByRole('link', { name: 'Library' }).click();
@@ -100,11 +99,11 @@ test.describe('Navigation', () => {
     // Navigate back to Settings
     await page.getByRole('link', { name: 'Settings' }).click();
     await expect(page).toHaveURL('/settings');
-    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
 
-    // Test Dashboard link (goes to standalone welcome page)
+    // Test Dashboard link (goes to authenticated dashboard)
     await page.getByRole('link', { name: 'Dashboard' }).click();
     await expect(page).toHaveURL('/');
-    await expect(page.getByRole('heading', { name: 'Welcome to KireMisu!' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Welcome back!' })).toBeVisible();
   });
 });

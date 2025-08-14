@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field, validator, HttpUrl
 from kiremisu.database.connection import get_db, get_db_session
 from kiremisu.database.models import PushSubscription, Notification, Series, Chapter, User
 from kiremisu.core.config import get_settings
-from kiremisu.core.auth import get_current_user
+from kiremisu.core.unified_auth import get_current_user
 
 # Simple metrics stub
 def track_api_request(operation: str):

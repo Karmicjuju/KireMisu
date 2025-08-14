@@ -1,7 +1,17 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode } from 'react';
 import { configureApiAuth } from '@/lib/api';
+import { featureFlags } from '@/lib/feature-flags';
+
+interface LoginResponse {
+  access_token?: string | null;
+  token_type: string;
+  expires_in: number;
+  user: any;
+  auth_method: string;
+  csrf_token?: string;
+}
 
 export interface User {
   id: string;
@@ -35,191 +45,200 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = React.useState<User | null>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [csrfToken, setCsrfToken] = React.useState<string | null>(null);
 
-  // Initialize authentication state
-  useEffect(() => {
-    initializeAuth();
-  }, []);
+  console.log('AUTH PROVIDER MOUNTED');
+  console.log('Feature flags:', {
+    useTestAuth: featureFlags.useTestAuth,
+    useSecureAuth: featureFlags.useSecureAuth,
+    environment: featureFlags.environment,
+    authMethod: featureFlags.authMethod
+  });
 
-  // Configure API client with auth token whenever user state changes
-  useEffect(() => {
-    configureApiAuth(getApiKey);
-  }, [user]);
+  const getApiUrl = (): string => {
+    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  };
 
-  const initializeAuth = async () => {
+  const getAuthHeaders = (): Record<string, string> => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    // Add CSRF token for cookie-based auth
+    if (csrfToken) {
+      headers['X-CSRF-Token'] = csrfToken;
+    }
+
+    return headers;
+  };
+
+  const checkAuthentication = async (): Promise<User | null> => {
     try {
-      // Check if user is already authenticated (e.g., from localStorage, session, etc.)
-      const storedAuth = localStorage.getItem('kiremisu_auth');
-      if (storedAuth) {
-        const authData = JSON.parse(storedAuth);
+      const apiUrl = getApiUrl();
+      const headers = getAuthHeaders();
+      
+      const response = await fetch(`${apiUrl}/api/auth/me`, {
+        headers,
+        credentials: 'include', // Include cookies
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
         
-        // Check if token is expired
-        if (authData.token && authData.expiresAt > Date.now()) {
-          // Verify token with server
-          try {
-            const response = await fetch('/api/auth/me', {
-              headers: {
-                'Authorization': `Bearer ${authData.token}`,
-              },
-            });
-            
-            if (response.ok) {
-              const userData = await response.json();
-              setUser({
-                id: userData.id,
-                username: userData.username,
-                email: userData.email,
-                isAuthenticated: true,
-              });
-            } else {
-              // Token is invalid, clear it
-              localStorage.removeItem('kiremisu_auth');
-              localStorage.removeItem('kiremisu_push_subscription');
-            }
-          } catch (error) {
-            console.warn('Failed to verify token with server:', error);
-            // Clear auth on verification failure
-            localStorage.removeItem('kiremisu_auth');
-            localStorage.removeItem('kiremisu_push_subscription');
-          }
-        } else {
-          // Clear expired auth
-          localStorage.removeItem('kiremisu_auth');
-          localStorage.removeItem('kiremisu_push_subscription');
-        }
+        const authUser: User = {
+          id: userData.id,
+          username: userData.username,
+          email: userData.email,
+          isAuthenticated: true,
+        };
+        setUser(authUser);
+        return authUser;
+      } else {
+        // Not authenticated
+        setUser(null);
+        return null;
       }
-      // If no stored auth, user starts unauthenticated and needs to log in
     } catch (error) {
-      console.error('Failed to initialize auth:', error);
-      // Clear potentially corrupted auth data
-      localStorage.removeItem('kiremisu_auth');
-      localStorage.removeItem('kiremisu_push_subscription');
-    } finally {
-      setIsLoading(false);
+      console.warn('Failed to verify session with server:', error);
+      setUser(null);
+      return null;
     }
   };
+
+  // Initialize authentication on mount
+  React.useEffect(() => {
+    let mounted = true;
+    
+    const initializeAuth = async () => {
+      try {
+        console.log('Auth: Starting initialization');
+        
+        // Check for stored CSRF token from previous login
+        const storedAuth = localStorage.getItem('kiremisu_auth');
+        
+        if (storedAuth) {
+          try {
+            const authData = JSON.parse(storedAuth);
+            console.log('Auth: Found stored auth data');
+            
+            if (authData.authMethod === 'secure_cookies' && authData.csrfToken) {
+              setCsrfToken(authData.csrfToken);
+              console.log('Auth: Set CSRF token');
+            }
+          } catch (parseError) {
+            console.warn('Auth: Failed to parse stored auth data:', parseError);
+            localStorage.removeItem('kiremisu_auth');
+          }
+        }
+
+        // Check authentication with server
+        console.log('Auth: Checking with server');
+        const result = await checkAuthentication();
+        console.log('Auth: Server check result:', result ? 'authenticated' : 'not authenticated');
+      } catch (error) {
+        console.error('Auth: Failed to initialize:', error);
+        if (mounted) {
+          setUser(null);
+        }
+      } finally {
+        if (mounted) {
+          console.log('Auth: Setting loading to false');
+          setIsLoading(false);
+        }
+      }
+    };
+
+    initializeAuth();
+    
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const login = async (username: string, password: string): Promise<void> => {
     setIsLoading(true);
     try {
-      // Call authentication API
-      const response = await fetch('/api/auth/login', {
+      const apiUrl = getApiUrl();
+      const requestPayload = { username_or_email: username, password };
+
+      const response = await fetch(`${apiUrl}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ username_or_email: username, password }),
+        body: JSON.stringify(requestPayload),
+        credentials: 'include', // Include cookies
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Login failed');
+        
+        // Handle specific HTTP status codes
+        if (response.status === 429) {
+          throw new Error(errorData.message || errorData.detail || 'Too many login attempts. Please try again later.');
+        } else if (response.status === 401) {
+          throw new Error(errorData.detail || 'Invalid username or password.');
+        } else if (response.status >= 500) {
+          throw new Error('Authentication service temporarily unavailable. Please try again later.');
+        }
+        
+        throw new Error(errorData.detail || errorData.message || 'Login failed');
       }
 
       const loginData = await response.json();
-      
-      const userData = {
+
+      // Store CSRF token if provided
+      if (loginData.csrf_token) {
+        setCsrfToken(loginData.csrf_token);
+        
+        // Store auth data for future sessions
+        localStorage.setItem('kiremisu_auth', JSON.stringify({
+          authMethod: 'secure_cookies',
+          csrfToken: loginData.csrf_token,
+          user: loginData.user
+        }));
+      }
+
+      const userData: User = {
         id: loginData.user.id,
         username: loginData.user.username,
         email: loginData.user.email,
         isAuthenticated: true,
       };
 
-      const authData = {
-        userId: userData.id,
-        username: userData.username,
-        email: userData.email,
-        token: loginData.access_token,
-        expiresAt: Date.now() + (loginData.expires_in * 1000), // Convert to milliseconds
-      };
-
-      localStorage.setItem('kiremisu_auth', JSON.stringify(authData));
       setUser(userData);
-    } catch (error) {
-      console.error('Login failed:', error);
-      throw error;
     } finally {
       setIsLoading(false);
     }
   };
 
   const logout = async (): Promise<void> => {
-    setIsLoading(true);
     try {
-      // Call logout API if we have a valid token
-      const storedAuth = localStorage.getItem('kiremisu_auth');
-      if (storedAuth) {
-        try {
-          const authData = JSON.parse(storedAuth);
-          if (authData.token && authData.expiresAt > Date.now()) {
-            await fetch('/api/auth/logout', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${authData.token}`,
-                'Content-Type': 'application/json',
-              },
-            });
-          }
-        } catch (error) {
-          console.warn('Logout API call failed:', error);
-          // Continue with local logout even if API fails
-        }
-      }
-      
-      // Clear local storage
-      localStorage.removeItem('kiremisu_auth');
-      localStorage.removeItem('kiremisu_push_subscription');
-      
-      // Clear user state
-      setUser(null);
+      const apiUrl = getApiUrl();
+      await fetch(`${apiUrl}/api/auth/logout`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        credentials: 'include', // Include cookies
+      });
     } catch (error) {
-      console.error('Logout failed:', error);
-    } finally {
-      setIsLoading(false);
+      console.warn('Logout API call failed:', error);
+      // Continue with local logout even if API fails
     }
-  };
 
-  const getAuthHeaders = (): Record<string, string> => {
-    const storedAuth = localStorage.getItem('kiremisu_auth');
-    if (storedAuth) {
-      try {
-        const authData = JSON.parse(storedAuth);
-        if (authData.token && authData.expiresAt > Date.now()) {
-          return {
-            'Authorization': `Bearer ${authData.token}`,
-            'Content-Type': 'application/json',
-          };
-        }
-      } catch (error) {
-        console.error('Failed to get auth headers:', error);
-      }
-    }
-    
-    // Return default headers if no valid auth
-    return {
-      'Content-Type': 'application/json',
-    };
+    // Clear state and stored data
+    setCsrfToken(null);
+    setUser(null);
+    localStorage.removeItem('kiremisu_auth');
+    localStorage.removeItem('kiremisu_push_subscription');
   };
 
   const getApiKey = (): string | null => {
-    const storedAuth = localStorage.getItem('kiremisu_auth');
-    if (storedAuth) {
-      try {
-        const authData = JSON.parse(storedAuth);
-        if (authData.token && authData.expiresAt > Date.now()) {
-          return authData.token;
-        }
-      } catch (error) {
-        console.error('Failed to get API key:', error);
-      }
-    }
-    return null;
+    return null; // Cookie auth doesn't use API keys
   };
 
-
-  const value: AuthContextType = {
+  const authContextValue: AuthContextType = {
     user,
     isLoading,
     isAuthenticated: !!user?.isAuthenticated,
@@ -229,5 +248,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     getApiKey,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  // Configure API client with auth headers whenever user state changes
+  React.useEffect(() => {
+    configureApiAuth(getAuthHeaders);
+  }, [user, csrfToken]);
+
+  return (
+    <AuthContext.Provider value={authContextValue}>
+      {children}
+    </AuthContext.Provider>
+  );
 };

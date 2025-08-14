@@ -3,26 +3,43 @@
 import logging
 from typing import Dict, Any, Optional
 
-from fastapi import APIRouter, HTTPException, status, Depends, Request
+from fastapi import APIRouter, HTTPException, status, Depends, Request, Response
 from pydantic import BaseModel, Field, field_validator, validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.database.connection import get_db
 from kiremisu.core.auth import (
     create_jwt_token, 
-    get_current_user,
     verify_user_db,
     create_user_db,
     get_user_by_id_db,
     initialize_admin_user,
     check_auth_rate_limit,
+    clear_auth_rate_limits,
     validate_password_complexity,
     extract_bearer_token,
     logout_user,
     cleanup_auth_attempts,
-    require_admin,
     update_user_password,
     pwd_context,
+)
+from kiremisu.core.unified_auth import (
+    get_current_user,
+    require_admin,
+)
+from kiremisu.core.session_auth import (
+    create_session,
+    destroy_session,
+    set_session_cookie,
+    clear_session_cookie,
+    get_current_user_from_session,
+    create_csrf_token,
+    verify_csrf_token,
+    get_csrf_token,
+    is_test_mode,
+    TestAuthSession,
+    get_session_stats,
+    cleanup_expired_sessions,
 )
 
 logger = logging.getLogger(__name__)
@@ -112,10 +129,12 @@ class UserRegistrationRequest(BaseModel):
 
 class LoginResponse(BaseModel):
     """Login response model."""
-    access_token: str = Field(..., description="JWT access token")
+    access_token: Optional[str] = Field(None, description="JWT access token (legacy mode)")
     token_type: str = Field(default="bearer", description="Token type")
     expires_in: int = Field(default=24 * 60 * 60, description="Token expiration in seconds")
     user: Dict[str, Any] = Field(..., description="User information")
+    auth_method: str = Field(..., description="Authentication method used")
+    csrf_token: Optional[str] = Field(None, description="CSRF token for cookie auth")
 
 
 class UserResponse(BaseModel):
@@ -189,15 +208,16 @@ def _get_client_ip(request: Request) -> str:
 async def login(
     request: LoginRequest, 
     http_request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db)
 ):
-    """Authenticate user and return JWT token.
+    """Authenticate user with environment-based auth method.
     
     Implements secure login with:
     - Rate limiting per IP
     - Account lockout after failed attempts  
     - Secure password verification
-    - JWT token generation
+    - Environment-based authentication (cookies vs JWT)
     """
     client_ip = _get_client_ip(http_request)
     
@@ -213,16 +233,6 @@ async def login(
             detail="Invalid credentials",
         )
     
-    # Generate secure JWT token
-    try:
-        access_token = create_jwt_token(user)
-    except ValueError as e:
-        logger.error(f"JWT token creation failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Authentication service temporarily unavailable",
-        )
-    
     # Return user information (excluding sensitive data)
     user_dict = {
         "id": str(user.id),
@@ -236,12 +246,59 @@ async def login(
         "last_login": user.last_login.isoformat() if user.last_login else None,
     }
     
-    logger.info(f"Successful login: {user.username}")
+    # Determine authentication method based on environment
+    import os
+    auth_method = os.getenv('AUTH_METHOD', 'secure_cookies')
     
-    return LoginResponse(
-        access_token=access_token,
-        user=user_dict
-    )
+    if is_test_mode():
+        # Test mode - simplified authentication
+        test_session_id = TestAuthSession.create_test_session(user, response)
+        logger.info(f"Test login successful: {user.username}")
+        
+        return LoginResponse(
+            access_token=None,
+            auth_method="test_bypass",
+            csrf_token=None,
+            user=user_dict
+        )
+    
+    elif auth_method == 'secure_cookies':
+        # Production mode - secure session cookies
+        session_id, session_data = create_session(user)
+        csrf_token = create_csrf_token(session_id)
+        
+        # Set secure HttpOnly cookie
+        is_secure = os.getenv('NODE_ENV') == 'production'
+        set_session_cookie(response, session_id, secure=is_secure)
+        
+        logger.info(f"Cookie-based login successful: {user.username}")
+        
+        return LoginResponse(
+            access_token=None,
+            auth_method="secure_cookies",
+            csrf_token=csrf_token,
+            user=user_dict
+        )
+    
+    else:
+        # Legacy mode - JWT tokens (for backward compatibility)
+        try:
+            access_token = create_jwt_token(user)
+        except ValueError as e:
+            logger.error(f"JWT token creation failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Authentication service temporarily unavailable",
+            )
+        
+        logger.info(f"JWT login successful: {user.username}")
+        
+        return LoginResponse(
+            access_token=access_token,
+            auth_method="jwt_bearer",
+            csrf_token=None,
+            user=user_dict
+        )
 
 
 @router.post("/register", response_model=UserRegistrationResponse)
@@ -319,8 +376,12 @@ async def register_user(
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info(user = Depends(get_current_user)):
+async def get_current_user_info(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
     """Get current authenticated user information."""
+    user = await get_current_user(request, db)
     return UserResponse(
         id=str(user.id),
         username=user.username,
@@ -335,30 +396,61 @@ async def get_current_user_info(user = Depends(get_current_user)):
 
 
 @router.post("/logout")
-async def logout(request: Request, user = Depends(get_current_user)):
-    """Logout user by blacklisting their JWT token."""
-    # Extract token for blacklisting
-    authorization = request.headers.get("authorization")
-    if authorization:
-        try:
-            token = extract_bearer_token(authorization)
-            await logout_user(token)
-            logger.info(f"User logged out: {user.username}")
-        except Exception as e:
-            logger.warning(f"Error during logout for {user.username}: {e}")
+async def logout(
+    request: Request, 
+    response: Response,
+    db: AsyncSession = Depends(get_db)
+):
+    """Logout user using environment-appropriate method."""
+    import os
+    auth_method = os.getenv('AUTH_METHOD', 'secure_cookies')
+    
+    # Get current user first
+    try:
+        user = await get_current_user(request, db)
+        username = user.username if user else 'unknown'
+    except Exception:
+        username = 'unknown'
+    
+    if is_test_mode():
+        # Test mode - clear test cookie
+        response.delete_cookie("test_session", path="/")
+        logger.info(f"Test logout: {username}")
+    
+    elif auth_method == 'secure_cookies':
+        # Cookie-based auth - destroy session and clear cookies
+        from kiremisu.core.session_auth import get_session_from_request
+        session_id = get_session_from_request(request)
+        if session_id:
+            destroy_session(session_id)
+            clear_session_cookie(response)
+        logger.info(f"Cookie logout: {username}")
+    
+    else:
+        # JWT-based auth - blacklist token
+        authorization = request.headers.get("authorization")
+        if authorization:
+            try:
+                token = extract_bearer_token(authorization)
+                await logout_user(token)
+                logger.info(f"JWT logout: {username}")
+            except Exception as e:
+                logger.warning(f"Error during JWT logout for {username}: {e}")
     
     return {"message": "Successfully logged out"}
 
 
 @router.post("/change-password")
 async def change_password(
-    request: ChangePasswordRequest,
-    user = Depends(get_current_user),
+    change_request: ChangePasswordRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """Change user password."""
+    user = await get_current_user(request, db)
+    
     # Verify current password
-    if not pwd_context.verify(request.current_password, user.password_hash):
+    if not pwd_context.verify(change_request.current_password, user.password_hash):
         logger.warning(f"Invalid current password for password change: {user.username}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -366,7 +458,7 @@ async def change_password(
         )
     
     # Validate new password complexity
-    password_errors = validate_password_complexity(request.new_password)
+    password_errors = validate_password_complexity(change_request.new_password)
     if password_errors:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -374,7 +466,7 @@ async def change_password(
         )
     
     # Ensure new password is different from current
-    if pwd_context.verify(request.new_password, user.password_hash):
+    if pwd_context.verify(change_request.new_password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="New password must be different from current password",
@@ -382,7 +474,7 @@ async def change_password(
     
     try:
         # Update password
-        await update_user_password(db, user, request.new_password)
+        await update_user_password(db, user, change_request.new_password)
         logger.info(f"Password changed for user: {user.username}")
         
         return {"message": "Password changed successfully"}
@@ -406,9 +498,13 @@ async def validate_password(request: PasswordValidationRequest):
 
 
 @router.post("/cleanup")
-async def cleanup_auth_data(user = Depends(require_admin)):
+async def cleanup_auth_data(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
     """Clean up old authentication data (admin only)."""
     try:
+        user = await require_admin(request, db)
         cleanup_auth_attempts()
         logger.info(f"Authentication data cleanup performed by: {user.username}")
         return {"message": "Authentication data cleaned up successfully"}
@@ -417,4 +513,29 @@ async def cleanup_auth_data(user = Depends(require_admin)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Cleanup service temporarily unavailable",
+        )
+
+
+@router.post("/clear-rate-limits")
+async def clear_rate_limits(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    client_ip: Optional[str] = None
+):
+    """Clear authentication rate limits (admin only, for development/testing)."""
+    try:
+        user = await require_admin(request, db)
+        clear_auth_rate_limits(client_ip)
+        if client_ip:
+            message = f"Rate limits cleared for IP: {client_ip}"
+        else:
+            message = "All rate limits cleared"
+        
+        logger.info(f"Rate limits cleared by admin: {user.username} - {message}")
+        return {"message": message}
+    except Exception as e:
+        logger.error(f"Rate limit clear error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Rate limit service temporarily unavailable",
         )

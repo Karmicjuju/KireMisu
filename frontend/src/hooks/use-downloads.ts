@@ -330,6 +330,5 @@ export function useDownloads(options: UseDownloadsOptions = {}): UseDownloadsRet
     adaptivePolling.stopPolling,
     adaptivePolling.pollNow,
     adaptivePolling.resetPolling,
-    pollingSettings, // React to polling settings changes
   ]);
 }

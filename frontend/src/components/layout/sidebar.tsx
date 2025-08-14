@@ -34,6 +34,7 @@ export function Sidebar() {
         'relative flex h-full flex-col border-r border-border bg-gradient-to-b from-card to-background transition-all duration-300',
         sidebarCollapsed ? 'w-16' : 'w-64'
       )}
+      data-testid="sidebar"
     >
       {/* Header */}
       <div className="flex h-16 items-center border-b border-border px-4">
