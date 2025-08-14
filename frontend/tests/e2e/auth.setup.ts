@@ -10,11 +10,30 @@ import path from 'path';
 // Path to store authenticated state
 const authFile = path.join(__dirname, '../../.auth/user.json');
 
-// Test credentials
-const TEST_CREDENTIALS = {
-  username: 'admin',
-  password: 'KireMisu2025!'
+// Get test credentials from environment variables
+const getTestCredentials = () => {
+  const username = process.env.E2E_TEST_USERNAME || process.env.KIREMISU_TEST_USERNAME;
+  const password = process.env.E2E_TEST_PASSWORD || process.env.KIREMISU_TEST_PASSWORD;
+  
+  if (!username) {
+    throw new Error(
+      'E2E_TEST_USERNAME environment variable is required for authentication setup. ' +
+      'Set it before running tests: E2E_TEST_USERNAME=your_username'
+    );
+  }
+  
+  if (!password) {
+    throw new Error(
+      'E2E_TEST_PASSWORD environment variable is required for authentication setup. ' +
+      'Set it before running tests: E2E_TEST_PASSWORD=your_password'
+    );
+  }
+  
+  console.log(`🔐 Authentication setup using credentials for user: ${username}`);
+  return { username, password };
 };
+
+const TEST_CREDENTIALS = getTestCredentials();
 
 /**
  * Wait for React hydration to complete and page to be fully interactive
@@ -340,8 +359,8 @@ setup('authenticate', async ({ page }) => {
         // Try to verify if we can bypass login
         const response = await page.request.post('http://localhost:8000/api/auth/login', {
           data: {
-            username_or_email: 'admin',
-            password: 'KireMisu2025!'
+            username_or_email: TEST_CREDENTIALS.username,
+            password: TEST_CREDENTIALS.password
           }
         });
         
