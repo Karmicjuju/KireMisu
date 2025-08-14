@@ -19,9 +19,12 @@ async function globalSetup(config: FullConfig) {
     console.log(`📡 Checking application availability at ${baseURL}`);
     
     await page.goto(baseURL, { 
-      waitUntil: 'networkidle',
-      timeout: 60000 
+      waitUntil: 'domcontentloaded',
+      timeout: 30000 
     });
+    
+    // Wait for initial content to load instead of network idle
+    await page.waitForTimeout(2000);
     
     // Verify the app is responding
     await page.waitForSelector('body', { timeout: 10000 });

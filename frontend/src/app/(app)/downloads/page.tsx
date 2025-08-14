@@ -193,7 +193,7 @@ export default function Downloads() {
               </div>
               <div>
                 <div className="text-2xl font-bold">{systemStats.chapters_downloaded_today}</div>
-                <div className="text-xs text-muted-foreground">Today's Chapters</div>
+                <div className="text-xs text-muted-foreground">Today&apos;s Chapters</div>
               </div>
             </div>
           </GlassCard>

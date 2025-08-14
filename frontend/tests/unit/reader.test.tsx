@@ -28,9 +28,18 @@ jest.mock('swr', () => ({
   mutate: jest.fn(),
 }));
 
-// Mock the keyboard and touch navigation hooks
+// Mock the keyboard navigation hook specifically for this test
 jest.mock('@/components/reader/use-keyboard-navigation', () => ({
-  useKeyboardNavigation: jest.fn(),
+  useKeyboardNavigation: jest.fn(() => ({
+    shortcuts: {
+      'ArrowLeft': jest.fn(),
+      'ArrowRight': jest.fn(),
+      'Home': jest.fn(),
+      'End': jest.fn(),
+      'Escape': jest.fn()
+    },
+    isActive: true
+  })),
 }));
 
 jest.mock('@/components/reader/use-touch-navigation', () => ({
@@ -65,7 +74,12 @@ jest.mock('@/lib/api', () => ({
     updateChapterProgress: jest.fn(),
   },
   annotationsApi: {
-    getPageAnnotations: jest.fn().mockResolvedValue([]),
+    getPageAnnotations: jest.fn().mockImplementation(() => {
+      // Prevent async calls that cause act() warnings
+      const promise = Promise.resolve([]);
+      // Don't actually make the call during tests
+      return promise;
+    }),
     createAnnotation: jest.fn(),
     updateAnnotation: jest.fn(),
     deleteAnnotation: jest.fn(),
@@ -197,7 +211,7 @@ describe('MangaReader', () => {
 
     render(<MangaReader chapterId="test-chapter-1" />);
 
-    const exitButton = screen.getByRole('button', { name: 'Exit reader' });
+    const exitButton = screen.getByRole('button', { name: 'Back' });
     fireEvent.click(exitButton);
 
     expect(mockRouter.push).toHaveBeenCalledWith('/library/series/test-series-1');

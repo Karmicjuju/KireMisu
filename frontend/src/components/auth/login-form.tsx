@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '../../contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +16,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const { login, isLoading } = useAuth();
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,7 +29,12 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
 
     try {
       await login(username, password);
+      
+      // Call onSuccess callback if provided
       onSuccess?.();
+      
+      // Navigate to dashboard after successful login
+      router.push('/');
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Login failed');
     }
@@ -52,7 +59,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
 
         {/* Login Form */}
         <div className="rounded-lg border bg-card p-8 shadow-lg shadow-black/5">
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6" data-testid="login-form">
             <div className="space-y-2">
               <label 
                 htmlFor="username" 
@@ -68,6 +75,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
                 placeholder="Enter your username"
                 disabled={isLoading}
                 className="transition-all focus:ring-primary/20"
+                data-testid="username-input"
               />
             </div>
 
@@ -86,6 +94,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
                 placeholder="Enter your password"
                 disabled={isLoading}
                 className="transition-all focus:ring-primary/20"
+                data-testid="password-input"
               />
             </div>
 
@@ -99,6 +108,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
               type="submit" 
               className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-medium transition-all shadow-md hover:shadow-lg disabled:opacity-50"
               disabled={isLoading}
+              data-testid="login-button"
             >
               {isLoading ? (
                 <div className="flex items-center gap-2">

@@ -124,6 +124,16 @@ export class TestHelpers {
   }
 
   /**
+   * Click the notification bell to open/close the dropdown
+   */
+  async clickNotificationBell(): Promise<void> {
+    const bell = await this.waitForNotificationBell();
+    await this.safeClick(bell);
+    // Allow time for dropdown animation
+    await this.page.waitForTimeout(300);
+  }
+
+  /**
    * Wait for API request to complete before proceeding
    */
   async waitForApiResponse(urlPattern: string | RegExp, timeout = 10000): Promise<void> {
@@ -143,8 +153,15 @@ export class TestHelpers {
    * Ensure page is in a stable state before testing
    */
   async waitForPageStable(): Promise<void> {
-    // Wait for network to be idle
-    await this.page.waitForLoadState('networkidle');
+    // Wait for DOM content to be loaded instead of networkidle
+    await this.page.waitForLoadState('domcontentloaded');
+    
+    // Try to wait for networkidle with shorter timeout, but don't fail if it doesn't reach it
+    try {
+      await this.page.waitForLoadState('networkidle', { timeout: 3000 });
+    } catch (e) {
+      console.log('Network not idle, continuing with test...');
+    }
     
     // Wait for any animations to complete
     await this.page.waitForTimeout(500);

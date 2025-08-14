@@ -6,7 +6,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './tests/e2e',
+  testDir: './',
   
   // Run tests in files in parallel
   fullyParallel: true,
@@ -63,10 +63,18 @@ export default defineConfig({
 
   // Configure projects for major browsers
   projects: [
+    // Setup project for authentication
+    {
+      name: 'setup',
+      testMatch: '**/auth.setup.ts',
+    },
+    
     {
       name: 'chromium',
       use: { 
         ...devices['Desktop Chrome'],
+        // Use authenticated state from setup
+        storageState: '../../.auth/user.json',
         // Disable web security for testing
         launchOptions: {
           args: [
@@ -82,16 +90,25 @@ export default defineConfig({
           ]
         }
       },
+      // dependencies: ['setup'], // Temporarily disable auth dependency
     },
 
     {
       name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
+      use: { 
+        ...devices['Desktop Firefox'],
+        storageState: '.auth/user.json',
+      },
+      dependencies: ['setup'],
     },
 
     {
       name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
+      use: { 
+        ...devices['Desktop Safari'],
+        storageState: '.auth/user.json',
+      },
+      dependencies: ['setup'],
     },
 
     // Test against mobile viewports

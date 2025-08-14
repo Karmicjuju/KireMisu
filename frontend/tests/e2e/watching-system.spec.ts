@@ -96,7 +96,9 @@ class WatchingSystemPage {
 test.beforeEach(async ({ page }) => {
   // Ensure clean state - might need API calls to clean up test data
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
+  // Wait for basic content to load instead of network idle
+  await page.waitForTimeout(2000);
 });
 
 test.describe('Watching System - User Workflows', () => {

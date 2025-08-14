@@ -11,7 +11,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.database.connection import get_db
-from kiremisu.core.auth import get_current_user
+from kiremisu.core.unified_auth import get_current_user
 from kiremisu.database.schemas import WatchingResponse, WatchingContextRequest, ErrorResponse
 from kiremisu.services.watching_service import WatchingService
 from kiremisu.core.error_handler import create_not_found_error, create_standardized_error_response

@@ -1,25 +1,23 @@
 /**
- * Jest Setup for KireMisu Unit Tests
- * Configures testing environment and MSW
+ * Jest Setup for KireMisu Tests
+ * Configures testing environment for unit and integration tests
  */
 
 import '@testing-library/jest-dom';
-import { startMswServer, stopMswServer, resetMswHandlers } from './msw-setup';
 
-// Start MSW server for all tests
-beforeAll(() => {
-  startMswServer();
-});
-
-// Reset handlers between tests to ensure test isolation
-afterEach(() => {
-  resetMswHandlers();
-});
-
-// Stop MSW server after all tests
-afterAll(() => {
-  stopMswServer();
-});
+// Mock useKeyboardNavigation hook
+jest.mock('@/components/reader/use-keyboard-navigation', () => ({
+  useKeyboardNavigation: jest.fn(() => ({
+    shortcuts: {
+      'ArrowLeft': jest.fn(),
+      'ArrowRight': jest.fn(), 
+      'Home': jest.fn(),
+      'End': jest.fn(),
+      'Escape': jest.fn()
+    },
+    isActive: true
+  }))
+}));
 
 // Mock Next.js router
 jest.mock('next/navigation', () => ({
