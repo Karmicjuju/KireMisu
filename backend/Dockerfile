@@ -2,6 +2,12 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
+# Build arguments for admin user (will be passed to startup script)
+ARG ADMIN_USERNAME
+ARG ADMIN_PASSWORD
+ENV ADMIN_USERNAME=${ADMIN_USERNAME}
+ENV ADMIN_PASSWORD=${ADMIN_PASSWORD}
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
