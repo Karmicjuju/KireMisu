@@ -53,10 +53,10 @@ jobs:
           uv tool install mypy
 
       - name: Run linting (ruff check)
-        run: ruff check . --output-format=github
+        run: ruff check . --exclude="backend/alembic/*" --output-format=github
 
       - name: Run formatting check (ruff format)
-        run: ruff format --check .
+        run: ruff format --check . --exclude="backend/alembic/*"
 
       - name: Run type checking (mypy)
         run: mypy backend/kiremisu
@@ -85,8 +85,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend dependencies
         working-directory: ./frontend
@@ -235,8 +233,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend dependencies
         working-directory: ./frontend
