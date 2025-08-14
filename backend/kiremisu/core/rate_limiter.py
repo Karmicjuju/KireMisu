@@ -1,12 +1,11 @@
 """Rate limiting middleware for the KireMisu API."""
 
-import time
 import logging
+import time
 from collections import defaultdict, deque
-from typing import Dict, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from fastapi import Request, HTTPException, status
+from fastapi import Request, status
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
@@ -42,7 +41,7 @@ class RateLimiter:
         self.cleanup_interval = cleanup_interval
 
         # Track requests per IP: {ip: deque of timestamps}
-        self.request_times: Dict[str, deque] = defaultdict(deque)
+        self.request_times: dict[str, deque] = defaultdict(deque)
         self.last_cleanup = time.time()
 
     def _cleanup_old_entries(self) -> None:
@@ -66,7 +65,7 @@ class RateLimiter:
         self.last_cleanup = current_time
         logger.debug(f"Rate limiter cleanup completed. Tracking {len(self.request_times)} IPs")
 
-    def is_allowed(self, client_ip: str) -> Tuple[bool, Optional[str]]:
+    def is_allowed(self, client_ip: str) -> tuple[bool, str | None]:
         """
         Check if request is allowed for given IP.
 
@@ -116,7 +115,7 @@ class RateLimiter:
         timestamps.append(current_time)
         return True, None
 
-    def get_rate_limit_headers(self, client_ip: str) -> Dict[str, str]:
+    def get_rate_limit_headers(self, client_ip: str) -> dict[str, str]:
         """
         Get rate limit headers for response.
 

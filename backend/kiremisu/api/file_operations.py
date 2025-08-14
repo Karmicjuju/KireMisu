@@ -1,20 +1,19 @@
 """API endpoints for safe file operations."""
 
-from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.database.connection import get_db
 from kiremisu.database.schemas import (
-    FileOperationRequest,
-    FileOperationResponse,
     FileOperationConfirmationRequest,
     FileOperationListResponse,
+    FileOperationRequest,
+    FileOperationResponse,
     ValidationResult,
 )
-from kiremisu.services.file_operations import FileOperationService, FileOperationError
+from kiremisu.services.file_operations import FileOperationError, FileOperationService
 
 router = APIRouter(prefix="/api/file-operations", tags=["file-operations"])
 
@@ -127,8 +126,8 @@ async def get_file_operation(
 @router.get("/", response_model=FileOperationListResponse)
 async def list_file_operations(
     db: AsyncSession = Depends(get_db),
-    status_filter: Optional[str] = Query(None, description="Filter by operation status"),
-    operation_type_filter: Optional[str] = Query(None, description="Filter by operation type"),
+    status_filter: str | None = Query(None, description="Filter by operation status"),
+    operation_type_filter: str | None = Query(None, description="Filter by operation type"),
     limit: int = Query(100, ge=1, le=1000, description="Number of operations to return"),
     offset: int = Query(0, ge=0, description="Number of operations to skip"),
 ) -> FileOperationListResponse:

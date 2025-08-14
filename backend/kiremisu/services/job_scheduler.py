@@ -2,11 +2,10 @@
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import select, and_, String
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.database.models import JobQueue, LibraryPath
@@ -18,7 +17,7 @@ class JobScheduler:
     """Service for scheduling background jobs based on library path intervals."""
 
     @staticmethod
-    async def schedule_library_scans(db: AsyncSession) -> Dict[str, int]:
+    async def schedule_library_scans(db: AsyncSession) -> dict[str, int]:
         """Schedule library scan jobs for all enabled paths that need scanning.
 
         Args:
@@ -30,7 +29,7 @@ class JobScheduler:
         logger.info("Starting library scan job scheduling")
 
         # Get all enabled library paths
-        result = await db.execute(select(LibraryPath).where(LibraryPath.enabled == True))
+        result = await db.execute(select(LibraryPath).where(LibraryPath.enabled))
         library_paths = result.scalars().all()
 
         scheduled_count = 0
@@ -52,7 +51,7 @@ class JobScheduler:
                     job_type="library_scan",
                     payload={"library_path_id": str(path.id), "library_path": path.path},
                     priority=1,  # Normal priority for scheduled scans
-                    scheduled_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                    scheduled_at=datetime.now(UTC).replace(tzinfo=None),
                 )
 
                 db.add(job)
@@ -76,7 +75,7 @@ class JobScheduler:
     @staticmethod
     async def schedule_manual_scan(
         db: AsyncSession,
-        library_path_id: Optional[UUID] = None,
+        library_path_id: UUID | None = None,
         priority: int = 5,  # Higher priority for manual scans
     ) -> UUID:
         """Schedule a manual library scan job with high priority.
@@ -104,7 +103,7 @@ class JobScheduler:
             job_type="library_scan",
             payload=payload,
             priority=priority,
-            scheduled_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            scheduled_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         db.add(job)
@@ -120,7 +119,7 @@ class JobScheduler:
         db: AsyncSession,
         manga_id: str,
         download_type: str = "mangadx",
-        series_id: Optional[UUID] = None,
+        series_id: UUID | None = None,
         priority: int = 3,
     ) -> UUID:
         """Schedule a manga download job from external sources.
@@ -147,7 +146,7 @@ class JobScheduler:
             job_type="download",
             payload=payload,
             priority=priority,
-            scheduled_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            scheduled_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         db.add(job)
@@ -157,7 +156,7 @@ class JobScheduler:
         return job.id
 
     @staticmethod
-    async def get_job_status(db: AsyncSession, job_id: UUID) -> Optional[JobQueue]:
+    async def get_job_status(db: AsyncSession, job_id: UUID) -> JobQueue | None:
         """Get the status of a specific job.
 
         Args:
@@ -172,8 +171,8 @@ class JobScheduler:
 
     @staticmethod
     async def get_recent_jobs(
-        db: AsyncSession, job_type: Optional[str] = None, limit: int = 50
-    ) -> List[JobQueue]:
+        db: AsyncSession, job_type: str | None = None, limit: int = 50
+    ) -> list[JobQueue]:
         """Get recent jobs, optionally filtered by type.
 
         Args:
@@ -195,7 +194,7 @@ class JobScheduler:
         return result.scalars().all()
 
     @staticmethod
-    async def get_queue_stats(db: AsyncSession) -> Dict[str, int]:
+    async def get_queue_stats(db: AsyncSession) -> dict[str, int]:
         """Get statistics about the job queue.
 
         Args:
@@ -248,7 +247,7 @@ class JobScheduler:
         """
         from sqlalchemy import delete
 
-        cutoff_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
+        cutoff_date = datetime.now(UTC).replace(tzinfo=None) - timedelta(
             days=older_than_days
         )
 
@@ -288,10 +287,10 @@ class JobScheduler:
 
         # Check if enough time has passed since last scan
         next_scan_time = library_path.last_scan + timedelta(hours=library_path.scan_interval_hours)
-        return datetime.now(timezone.utc).replace(tzinfo=None) >= next_scan_time
+        return datetime.now(UTC).replace(tzinfo=None) >= next_scan_time
 
     @staticmethod
-    async def _get_existing_job(db: AsyncSession, library_path_id: UUID) -> Optional[JobQueue]:
+    async def _get_existing_job(db: AsyncSession, library_path_id: UUID) -> JobQueue | None:
         """Check if there's already a pending or running job for this library path.
 
         Args:

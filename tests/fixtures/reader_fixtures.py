@@ -1,11 +1,9 @@
 """Test fixtures and utilities for reader functionality."""
 
 import os
+import shutil
 import tempfile
 import zipfile
-import shutil
-from pathlib import Path
-from typing import List, Tuple
 from io import BytesIO
 
 import pytest
@@ -37,7 +35,7 @@ def create_test_image(width: int = 800, height: int = 1200, color: str = "white"
         font = ImageFont.load_default()
 
     # Add page number
-    draw.text((width // 2 - 50, height // 2), f"Page Content", fill="black", font=font)
+    draw.text((width // 2 - 50, height // 2), "Page Content", fill="black", font=font)
 
     # Add some decorative elements
     draw.rectangle([50, 50, width - 50, 150], outline="black", width=3)
@@ -175,8 +173,8 @@ class ReaderTestFixtures:
     """Helper class for managing reader test fixtures."""
 
     def __init__(self):
-        self.temp_dirs: List[str] = []
-        self.temp_files: List[str] = []
+        self.temp_dirs: list[str] = []
+        self.temp_files: list[str] = []
 
     def create_test_library(self, base_dir: str = None) -> str:
         """Create a complete test library with multiple series and formats.
@@ -246,7 +244,7 @@ class ReaderTestFixtures:
 
         return base_dir
 
-    def create_edge_case_files(self, base_dir: str) -> List[Tuple[str, str]]:
+    def create_edge_case_files(self, base_dir: str) -> list[tuple[str, str]]:
         """Create files with edge cases for testing error handling.
 
         Args:
@@ -416,7 +414,7 @@ def create_mock_image_response(width: int = 800, height: int = 1200) -> bytes:
 
 
 # Performance test helpers
-def create_large_chapter_files(base_dir: str, pages: int = 100) -> List[str]:
+def create_large_chapter_files(base_dir: str, pages: int = 100) -> list[str]:
     """Create large chapter files for performance testing.
 
     Args:
@@ -448,6 +446,7 @@ def benchmark_page_extraction(file_path: str, iterations: int = 10) -> float:
         Average time per extraction in seconds
     """
     import time
+
     from kiremisu.api.reader import _extract_page_from_archive, _extract_page_from_pdf
 
     _, ext = os.path.splitext(file_path.lower())
@@ -457,9 +456,9 @@ def benchmark_page_extraction(file_path: str, iterations: int = 10) -> float:
         start_time = time.time()
 
         if ext in {".cbz", ".zip"}:
-            result = _extract_page_from_archive(file_path, 0, ext)
+            _extract_page_from_archive(file_path, 0, ext)
         elif ext == ".pdf":
-            result = _extract_page_from_pdf(file_path, 0)
+            _extract_page_from_pdf(file_path, 0)
 
         end_time = time.time()
         total_time += end_time - start_time

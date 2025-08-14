@@ -1,11 +1,12 @@
 """Extended reader API tests covering progress update flows and integration."""
 
-import pytest
-from datetime import datetime, timedelta
+from datetime import datetime
 from uuid import uuid4
+
+import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.database.models import Chapter, Series
 

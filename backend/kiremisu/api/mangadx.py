@@ -2,8 +2,7 @@
 
 import logging
 import time
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -11,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.database.connection import get_db
 from kiremisu.database.schemas import (
+    DownloadJobRequest,
+    DownloadJobResponse,
     MangaDxBulkImportRequest,
     MangaDxBulkImportResponse,
     MangaDxEnrichmentRequest,
@@ -21,9 +22,8 @@ from kiremisu.database.schemas import (
     MangaDxMangaInfo,
     MangaDxSearchRequest,
     MangaDxSearchResponse,
-    DownloadJobRequest,
-    DownloadJobResponse,
 )
+from kiremisu.services.download_service import DownloadService
 from kiremisu.services.mangadx_client import (
     MangaDxClient,
     MangaDxError,
@@ -31,8 +31,7 @@ from kiremisu.services.mangadx_client import (
     MangaDxRateLimitError,
     MangaDxServerError,
 )
-from kiremisu.services.mangadx_import import MangaDxImportService, MangaDxImportError
-from kiremisu.services.download_service import DownloadService
+from kiremisu.services.mangadx_import import MangaDxImportError, MangaDxImportService
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +39,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/mangadx", tags=["mangadx"])
 
 # Global instances (will be initialized in dependency)
-_mangadx_client: Optional[MangaDxClient] = None
-_import_service: Optional[MangaDxImportService] = None
-_download_service: Optional[DownloadService] = None
+_mangadx_client: MangaDxClient | None = None
+_import_service: MangaDxImportService | None = None
+_download_service: DownloadService | None = None
 
 
 async def get_mangadx_client() -> MangaDxClient:
@@ -173,7 +172,7 @@ async def mangadx_health_check(
         return MangaDxHealthResponse(
             api_accessible=is_healthy,
             response_time_ms=response_time_ms,
-            last_check=datetime.now(timezone.utc).replace(tzinfo=None),
+            last_check=datetime.now(UTC).replace(tzinfo=None),
             error_message=None if is_healthy else "API health check failed",
         )
 
@@ -183,7 +182,7 @@ async def mangadx_health_check(
         return MangaDxHealthResponse(
             api_accessible=False,
             response_time_ms=response_time_ms,
-            last_check=datetime.now(timezone.utc).replace(tzinfo=None),
+            last_check=datetime.now(UTC).replace(tzinfo=None),
             error_message=str(e),
         )
 
@@ -573,6 +572,7 @@ async def download_manga_series(
 
         # Get the created job to return
         from sqlalchemy import select
+
         from kiremisu.database.models import JobQueue
 
         result = await db_session.execute(select(JobQueue).where(JobQueue.id == job_id))
@@ -665,6 +665,7 @@ async def import_and_download_manga(
 
                 # Get the created download job
                 from sqlalchemy import select
+
                 from kiremisu.database.models import JobQueue
 
                 job_result = await db_session.execute(

@@ -11,9 +11,8 @@ This service provides comprehensive reading progress functionality including:
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import and_, desc, func, select, update
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -136,7 +135,7 @@ class ReadingProgressService:
     @staticmethod
     async def toggle_chapter_read_status(
         db: AsyncSession, chapter_id: str
-    ) -> Tuple[bool, datetime]:
+    ) -> tuple[bool, datetime]:
         """
         Toggle the read status of a chapter.
 
@@ -250,7 +249,7 @@ class ReadingProgressService:
         # Get recent read chapters (up to 5)
         recent_chapters_result = await db.execute(
             select(Chapter)
-            .where(Chapter.series_id == series_id, Chapter.is_read == True)
+            .where(Chapter.series_id == series_id, Chapter.is_read)
             .order_by(Chapter.read_at.desc().nulls_last())
             .limit(5)
         )
@@ -259,7 +258,7 @@ class ReadingProgressService:
         # Get most recent read timestamp
         last_read_result = await db.execute(
             select(func.max(Chapter.read_at)).where(
-                Chapter.series_id == series_id, Chapter.is_read == True
+                Chapter.series_id == series_id, Chapter.is_read
             )
         )
         last_read_at = last_read_result.scalar()
@@ -297,7 +296,7 @@ class ReadingProgressService:
         total_chapters = total_chapters_result.scalar() or 0
 
         read_chapters_result = await db.execute(
-            select(func.count(Chapter.id)).where(Chapter.is_read == True)
+            select(func.count(Chapter.id)).where(Chapter.is_read)
         )
         read_chapters = read_chapters_result.scalar() or 0
 
@@ -307,7 +306,7 @@ class ReadingProgressService:
             select(func.count(Chapter.id)).where(
                 and_(
                     Chapter.last_read_page > 0,
-                    Chapter.is_read == False,
+                    not Chapter.is_read,
                 )
             )
         )
@@ -326,14 +325,14 @@ class ReadingProgressService:
 
         chapters_this_week_result = await db.execute(
             select(func.count(Chapter.id)).where(
-                and_(Chapter.is_read == True, Chapter.read_at >= week_start)
+                and_(Chapter.is_read, Chapter.read_at >= week_start)
             )
         )
         chapters_this_week = chapters_this_week_result.scalar() or 0
 
         chapters_this_month_result = await db.execute(
             select(func.count(Chapter.id)).where(
-                and_(Chapter.is_read == True, Chapter.read_at >= month_start)
+                and_(Chapter.is_read, Chapter.read_at >= month_start)
             )
         )
         chapters_this_month = chapters_this_month_result.scalar() or 0
@@ -345,7 +344,7 @@ class ReadingProgressService:
         recent_activity_result = await db.execute(
             select(Chapter)
             .options(selectinload(Chapter.series))
-            .where(Chapter.is_read == True)
+            .where(Chapter.is_read)
             .order_by(Chapter.read_at.desc().nulls_last())
             .limit(10)
         )
@@ -394,7 +393,7 @@ class ReadingProgressService:
         # Update all unread chapters in the series
         result = await db.execute(
             update(Chapter)
-            .where(and_(Chapter.series_id == series_id, Chapter.is_read == False))
+            .where(and_(Chapter.series_id == series_id, not Chapter.is_read))
             .values(
                 is_read=True,
                 read_at=now,
@@ -452,7 +451,7 @@ class ReadingProgressService:
         # Update all read chapters in the series
         result = await db.execute(
             update(Chapter)
-            .where(and_(Chapter.series_id == series_id, Chapter.is_read == True))
+            .where(and_(Chapter.series_id == series_id, Chapter.is_read))
             .values(
                 is_read=False,
                 read_at=None,
@@ -484,7 +483,7 @@ class ReadingProgressService:
         return chapters_updated
 
     @staticmethod
-    async def reconcile_series_counts(db: AsyncSession, series_id: str = None) -> Dict[str, int]:
+    async def reconcile_series_counts(db: AsyncSession, series_id: str = None) -> dict[str, int]:
         """
         Reconcile series read counts with actual chapter counts.
 
@@ -512,7 +511,7 @@ class ReadingProgressService:
             # Count actual read chapters
             actual_count_result = await db.execute(
                 select(func.count(Chapter.id)).where(
-                    and_(Chapter.series_id == series.id, Chapter.is_read == True)
+                    and_(Chapter.series_id == series.id, Chapter.is_read)
                 )
             )
             actual_count = actual_count_result.scalar() or 0
@@ -564,7 +563,7 @@ class ReadingProgressService:
         # Count actual read chapters
         actual_count_result = await db.execute(
             select(func.count(Chapter.id)).where(
-                and_(Chapter.series_id == series_id, Chapter.is_read == True)
+                and_(Chapter.series_id == series_id, Chapter.is_read)
             )
         )
         actual_count = actual_count_result.scalar() or 0
@@ -605,7 +604,7 @@ class ReadingProgressService:
             result = await db.execute(
                 select(func.count(Chapter.id)).where(
                     and_(
-                        Chapter.is_read == True,
+                        Chapter.is_read,
                         Chapter.read_at >= check_date,
                         Chapter.read_at < next_date,
                     )
@@ -623,7 +622,7 @@ class ReadingProgressService:
         return streak
 
     @staticmethod
-    async def _get_favorite_genres(db: AsyncSession, limit: int = 5) -> List[str]:
+    async def _get_favorite_genres(db: AsyncSession, limit: int = 5) -> list[str]:
         """
         Get the user's favorite genres based on read chapters.
 
@@ -638,12 +637,12 @@ class ReadingProgressService:
         result = await db.execute(
             select(Chapter, Series.genres)
             .join(Series, Chapter.series_id == Series.id)
-            .where(Chapter.is_read == True)
+            .where(Chapter.is_read)
         )
 
         # Count genre occurrences
         genre_counts = defaultdict(int)
-        for chapter, genres in result.fetchall():
+        for _chapter, genres in result.fetchall():
             for genre in genres or []:
                 genre_counts[genre] += 1
 

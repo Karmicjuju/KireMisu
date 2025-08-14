@@ -8,20 +8,21 @@ import asyncio
 import os
 import shutil
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
+
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiremisu.database.models import FileOperation, Series, Chapter
+from kiremisu.database.models import Chapter, FileOperation, Series
 from kiremisu.database.schemas import (
     FileOperationRequest,
     FileOperationResponse,
     ValidationResult,
 )
-from kiremisu.services.file_operations import FileOperationService, FileOperationError
+from kiremisu.services.file_operations import FileOperationError, FileOperationService
 
 
 class TestFileOperationService:
@@ -43,12 +44,12 @@ class TestFileOperationService:
     def sample_files(self, temp_directory):
         """Create sample files for testing."""
         files = {}
-        
+
         # Create test manga file
         manga_file = temp_directory / "test_manga.cbz"
         manga_file.write_bytes(b"fake cbz content")
         files["manga_file"] = str(manga_file)
-        
+
         # Create test directory with images
         manga_dir = temp_directory / "test_series"
         manga_dir.mkdir()
@@ -58,12 +59,12 @@ class TestFileOperationService:
         (chapter_dir / "page_002.jpg").write_bytes(b"fake image")
         files["manga_dir"] = str(manga_dir)
         files["chapter_dir"] = str(chapter_dir)
-        
+
         # Create target directory
         target_dir = temp_directory / "target"
         target_dir.mkdir()
         files["target_dir"] = str(target_dir)
-        
+
         return files
 
     @pytest.fixture
@@ -102,14 +103,14 @@ class TestFileOperationService:
 
         with pytest.raises(FileOperationError) as exc_info:
             await service.create_operation(mock_db, request)
-        
+
         assert "does not exist" in str(exc_info.value)
 
     async def test_create_operation_source_not_readable(self, service, mock_db, sample_files):
         """Test operation creation with unreadable source."""
         # Make file unreadable
         os.chmod(sample_files["manga_file"], 0o000)
-        
+
         try:
             request = FileOperationRequest(
                 operation_type="delete",
@@ -118,9 +119,9 @@ class TestFileOperationService:
 
             with pytest.raises(FileOperationError) as exc_info:
                 await service.create_operation(mock_db, request)
-            
+
             assert "not readable" in str(exc_info.value)
-        
+
         finally:
             # Restore permissions for cleanup
             os.chmod(sample_files["manga_file"], 0o644)
@@ -135,7 +136,7 @@ class TestFileOperationService:
 
         with pytest.raises(FileOperationError) as exc_info:
             await service.create_operation(mock_db, request)
-        
+
         assert "does not exist" in str(exc_info.value)
 
     async def test_validate_operation_success(self, service, mock_db, sample_files):
@@ -159,7 +160,7 @@ class TestFileOperationService:
         mock_series_result.scalars.return_value.all.return_value = []
         mock_chapters_result = AsyncMock()
         mock_chapters_result.scalars.return_value.all.return_value = []
-        
+
         mock_db.execute.side_effect = [
             mock_result,  # Get operation
             mock_series_result,  # Find affected series
@@ -196,7 +197,7 @@ class TestFileOperationService:
         mock_series_result.scalars.return_value.all.return_value = []
         mock_chapters_result = AsyncMock()
         mock_chapters_result.scalars.return_value.all.return_value = []
-        
+
         mock_db.execute.side_effect = [
             mock_result,  # Get operation
             mock_series_result,  # Find affected series
@@ -223,7 +224,7 @@ class TestFileOperationService:
         # Mock database queries
         mock_result = AsyncMock()
         mock_result.scalar_one_or_none.return_value = operation
-        
+
         # Mock affected series with reading progress
         affected_series = [
             Series(
@@ -234,7 +235,7 @@ class TestFileOperationService:
                 custom_tags=["favorite"]
             )
         ]
-        
+
         # Mock affected chapters with reading progress
         affected_chapters = [
             Chapter(
@@ -251,7 +252,7 @@ class TestFileOperationService:
         mock_series_result.scalars.return_value.all.return_value = affected_series
         mock_chapters_result = AsyncMock()
         mock_chapters_result.scalars.return_value.all.return_value = affected_chapters
-        
+
         mock_db.execute.side_effect = [
             mock_result,  # Get operation
             mock_series_result,  # Find affected series
@@ -303,13 +304,13 @@ class TestFileOperationService:
         # Mock database queries
         mock_result = AsyncMock()
         mock_result.scalar_one_or_none.return_value = operation
-        
+
         # Mock affected records queries for database updates
         mock_series_result = AsyncMock()
         mock_series_result.scalars.return_value.all.return_value = []
         mock_chapters_result = AsyncMock()
         mock_chapters_result.scalars.return_value.all.return_value = []
-        
+
         mock_db.execute.side_effect = [
             mock_result,  # Get operation
             mock_series_result,  # Find affected series for update
@@ -330,7 +331,7 @@ class TestFileOperationService:
     async def test_execute_operation_rename_success(self, service, mock_db, sample_files):
         """Test successful rename operation execution."""
         target_path = str(Path(sample_files["target_dir"]) / "renamed.cbz")
-        
+
         operation = FileOperation(
             id=uuid4(),
             operation_type="rename",
@@ -345,13 +346,13 @@ class TestFileOperationService:
         # Mock database queries
         mock_result = AsyncMock()
         mock_result.scalar_one_or_none.return_value = operation
-        
+
         # Mock affected records queries
         mock_series_result = AsyncMock()
         mock_series_result.scalars.return_value.all.return_value = []
         mock_chapters_result = AsyncMock()
         mock_chapters_result.scalars.return_value.all.return_value = []
-        
+
         mock_db.execute.side_effect = [
             mock_result,  # Get operation
             mock_series_result,  # Find affected series for update
@@ -386,7 +387,7 @@ class TestFileOperationService:
 
         with pytest.raises(FileOperationError) as exc_info:
             await service.execute_operation(mock_db, operation.id)
-        
+
         assert "must be validated" in str(exc_info.value)
 
     async def test_execute_operation_failed_validation(self, service, mock_db, sample_files):
@@ -406,14 +407,14 @@ class TestFileOperationService:
 
         with pytest.raises(FileOperationError) as exc_info:
             await service.execute_operation(mock_db, operation.id)
-        
+
         assert "Cannot execute failed operation" in str(exc_info.value)
 
     @patch('shutil.move', side_effect=PermissionError("Access denied"))
     async def test_execute_operation_file_error_with_rollback(self, mock_move, service, mock_db, sample_files):
         """Test operation execution failure with automatic rollback."""
         target_path = str(Path(sample_files["target_dir"]) / "renamed.cbz")
-        
+
         operation = FileOperation(
             id=uuid4(),
             operation_type="rename",
@@ -428,12 +429,12 @@ class TestFileOperationService:
         # Mock database queries
         mock_result = AsyncMock()
         mock_result.scalar_one_or_none.return_value = operation
-        
+
         mock_series_result = AsyncMock()
         mock_series_result.scalars.return_value.all.return_value = []
         mock_chapters_result = AsyncMock()
         mock_chapters_result.scalars.return_value.all.return_value = []
-        
+
         mock_db.execute.side_effect = [
             mock_result,  # Get operation
             mock_series_result,  # Find affected series for update
@@ -442,7 +443,7 @@ class TestFileOperationService:
 
         with pytest.raises(FileOperationError) as exc_info:
             await service.execute_operation(mock_db, operation.id)
-        
+
         assert "Access denied" in str(exc_info.value)
         # Verify original file still exists (rollback successful)
         assert Path(operation.source_path).exists()
@@ -502,7 +503,7 @@ class TestFileOperationService:
 
         with pytest.raises(FileOperationError) as exc_info:
             await service.rollback_operation(mock_db, operation.id)
-        
+
         assert "Cannot rollback operation without backup" in str(exc_info.value)
 
     async def test_get_operation_success(self, service, mock_db):
@@ -597,14 +598,14 @@ class TestFileOperationService:
             backup_dir = temp_directory / f"backup_{op_id}"
             backup_dir.mkdir()
             (backup_dir / "test.file").write_text("test")
-            
+
             operation = FileOperation(
                 id=op_id,
                 operation_type="delete",
                 source_path=f"/test/path{i}",
                 status="completed",
                 backup_path=str(backup_dir / "test.file"),
-                created_at=datetime(2020, 1, 1, tzinfo=timezone.utc)
+                created_at=datetime(2020, 1, 1, tzinfo=UTC)
             )
             old_operations.append(operation)
 
@@ -621,7 +622,7 @@ class TestFileOperationService:
         cleaned_count = await service.cleanup_old_operations(mock_db, days_old=30)
 
         assert cleaned_count == 3
-        
+
         # Verify backup directories were cleaned up
         for op in old_operations:
             backup_dir = Path(op.backup_path).parent
@@ -636,7 +637,7 @@ class TestFileOperationService:
         test_file = temp_directory / "test.txt"
         test_content = b"A" * 1024  # 1KB
         test_file.write_bytes(test_content)
-        
+
         size = await service._estimate_path_size(str(test_file))
         assert size == 1024
 
@@ -645,12 +646,12 @@ class TestFileOperationService:
         # Create test directory with multiple files
         sub_dir = temp_directory / "subdir"
         sub_dir.mkdir()
-        
+
         file1 = sub_dir / "file1.txt"
         file2 = sub_dir / "file2.txt"
         file1.write_bytes(b"A" * 512)  # 512 bytes
         file2.write_bytes(b"B" * 256)  # 256 bytes
-        
+
         size = await service._estimate_path_size(str(sub_dir))
         assert size == 768  # 512 + 256
 
@@ -700,33 +701,33 @@ class TestFileOperationService:
     async def test_concurrent_operations_safety(self, sample_files):
         """Test that concurrent operations are handled safely."""
         services = [FileOperationService(max_workers=1) for _ in range(3)]
-        
+
         async def create_and_execute_operation(service_idx):
             service = services[service_idx]
             mock_db = AsyncMock(spec=AsyncSession)
             mock_db.commit = AsyncMock()
             mock_db.add = MagicMock()
-            
+
             # Create test file for this operation
             test_file = Path(sample_files["target_dir"]) / f"test_{service_idx}.txt"
             test_file.write_text(f"content_{service_idx}")
-            
+
             request = FileOperationRequest(
                 operation_type="delete",
                 source_path=str(test_file)
             )
-            
+
             return await service.create_operation(mock_db, request)
 
         # Run concurrent operations
         tasks = [create_and_execute_operation(i) for i in range(3)]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         # All operations should succeed without conflicts
         for result in results:
             assert isinstance(result, FileOperationResponse)
             assert result.operation_type == "delete"
-        
+
         # Cleanup services
         for service in services:
             await service.__aexit__(None, None, None)
@@ -770,7 +771,7 @@ class TestFileOperationErrorHandling:
         # Service should clean up thread pool on exit
         async with service:
             assert service.executor is not None
-        
+
         # After context exit, executor should be shut down
         # Note: We can't directly test this without implementation details
 
@@ -781,20 +782,20 @@ class TestFileOperationErrorHandling:
         readonly_dir.mkdir()
         test_file = readonly_dir / "test.txt"
         test_file.write_text("content")
-        
+
         # Make directory read-only
         os.chmod(str(readonly_dir), 0o444)
-        
+
         try:
             operation = FileOperation(
                 id=uuid4(),
                 operation_type="delete",
                 source_path=str(test_file)
             )
-            
+
             with pytest.raises(PermissionError):
                 await service._create_backup(operation)
-        
+
         finally:
             # Restore permissions for cleanup
             os.chmod(str(readonly_dir), 0o755)
@@ -802,7 +803,7 @@ class TestFileOperationErrorHandling:
     async def test_database_consistency_with_orphaned_records(self, service):
         """Test handling of orphaned database records."""
         mock_db = AsyncMock(spec=AsyncSession)
-        
+
         # Create operation targeting non-existent file
         operation = FileOperation(
             id=uuid4(),
@@ -810,7 +811,7 @@ class TestFileOperationErrorHandling:
             source_path="/non/existent/path",
             operation_metadata={"validate_database_consistency": True}
         )
-        
+
         # Mock finding orphaned records in database
         orphaned_series = [
             Series(
@@ -819,20 +820,20 @@ class TestFileOperationErrorHandling:
                 file_path="/non/existent/path"
             )
         ]
-        
+
         mock_series_result = AsyncMock()
         mock_series_result.scalars.return_value.all.return_value = orphaned_series
         mock_chapters_result = AsyncMock()
         mock_chapters_result.scalars.return_value.all.return_value = []
-        
+
         mock_db.execute.side_effect = [
             mock_series_result,  # Find affected series
             mock_chapters_result,  # Find affected chapters
         ]
-        
+
         validation_result = ValidationResult(is_valid=True)
         await service._validate_database_consistency(mock_db, operation, validation_result)
-        
+
         # Should handle orphaned records gracefully
         assert validation_result.is_valid
         assert validation_result.affected_series_count == 1

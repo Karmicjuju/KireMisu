@@ -1,17 +1,15 @@
 """Test reader API endpoints."""
 
-import os
-import tempfile
 import zipfile
-from uuid import uuid4
-from unittest.mock import patch, AsyncMock, MagicMock
 from io import BytesIO
+from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiremisu.database.models import Series, Chapter
+from kiremisu.database.models import Chapter, Series
 
 
 @pytest.fixture
@@ -190,12 +188,12 @@ class TestReaderAPI:
 
         assert data["id"] == str(sample_chapter.id)
         assert data["last_read_page"] == 2
-        assert data["is_read"] == False
+        assert not data["is_read"]
 
         # Verify database was updated
         await db_session.refresh(sample_chapter)
         assert sample_chapter.last_read_page == 2
-        assert sample_chapter.is_read == False
+        assert not sample_chapter.is_read
 
     @pytest.mark.asyncio
     async def test_update_reading_progress_mark_as_read(
@@ -217,12 +215,12 @@ class TestReaderAPI:
         assert response.status_code == 200
         data = response.json()
 
-        assert data["is_read"] == True
+        assert data["is_read"]
         assert data["read_at"] is not None
 
         # Verify database was updated
         await db_session.refresh(sample_chapter)
-        assert sample_chapter.is_read == True
+        assert sample_chapter.is_read
         assert sample_chapter.read_at is not None
 
     @pytest.mark.asyncio
@@ -245,7 +243,7 @@ class TestReaderAPI:
         data = response.json()
 
         # Should automatically mark as read when on last page
-        assert data["is_read"] == True
+        assert data["is_read"]
         assert data["read_at"] is not None
 
     @pytest.mark.asyncio
@@ -329,10 +327,10 @@ class TestReaderAPI:
             assert chapter_data["title"] == f"Chapter {i + 1}"
             assert chapter_data["page_count"] == 20
             if i == 0:
-                assert chapter_data["is_read"] == True
+                assert chapter_data["is_read"]
                 assert chapter_data["last_read_page"] == 19
             else:
-                assert chapter_data["is_read"] == False
+                assert not chapter_data["is_read"]
                 assert chapter_data["last_read_page"] == 0
 
     @pytest.mark.asyncio
@@ -403,8 +401,8 @@ class TestReaderAPI:
         with patch("os.path.exists", return_value=True):
             with patch("os.path.isdir") as mock_isdir:
                 with patch("zipfile.ZipFile") as mock_zip:
-                    with patch("fitz.open") as mock_fitz:
-                        with patch("os.listdir") as mock_listdir:
+                    with patch("fitz.open"):
+                        with patch("os.listdir"):
                             # Setup mocks for different file types
                             mock_isdir.side_effect = lambda path: path.endswith("_folder")
 
@@ -415,7 +413,7 @@ class TestReaderAPI:
                             mock_zip.return_value.__enter__.return_value = mock_zip_instance
 
                             # Test CBZ format
-                            response = await client.get(
+                            await client.get(
                                 f"/api/reader/chapter/{cbz_chapter.id}/page/0"
                             )
                             # Note: This will fail because we need actual file operations

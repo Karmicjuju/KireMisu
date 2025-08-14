@@ -1,7 +1,7 @@
 """Tests for annotation API endpoints."""
 
-import pytest
 from uuid import UUID
+
 from httpx import AsyncClient
 
 
@@ -190,7 +190,7 @@ class TestAnnotationAPI:
 
         data = response.json()
         page_annotations = [
-            a for a in annotations 
+            a for a in annotations
             if a.chapter_id == chapter_id and a.page_number == page_number
         ]
         assert len(data) == len(page_annotations)

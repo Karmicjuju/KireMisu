@@ -3,8 +3,7 @@
 import asyncio
 import logging
 import time
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 from urllib.parse import urljoin
 
 import httpx
@@ -17,7 +16,7 @@ class MangaDxError(Exception):
     """Base exception for MangaDx API errors."""
 
     def __init__(
-        self, message: str, status_code: Optional[int] = None, response_data: Optional[Dict] = None
+        self, message: str, status_code: int | None = None, response_data: dict | None = None
     ):
         super().__init__(message)
         self.status_code = status_code
@@ -27,7 +26,7 @@ class MangaDxError(Exception):
 class MangaDxRateLimitError(MangaDxError):
     """Raised when MangaDx API rate limit is exceeded."""
 
-    def __init__(self, retry_after: Optional[int] = None):
+    def __init__(self, retry_after: int | None = None):
         super().__init__(f"MangaDx API rate limit exceeded. Retry after: {retry_after} seconds")
         self.retry_after = retry_after
 
@@ -76,15 +75,15 @@ class MangaDxRateLimiter:
 class MangaDxTitle(BaseModel):
     """MangaDx title information."""
 
-    en: Optional[str] = None
-    ja: Optional[str] = None
-    ja_ro: Optional[str] = None
+    en: str | None = None
+    ja: str | None = None
+    ja_ro: str | None = None
 
     def get_primary_title(self) -> str:
         """Get the primary title, preferring English."""
         return self.en or self.ja_ro or self.ja or "Unknown Title"
 
-    def get_alternative_titles(self) -> List[str]:
+    def get_alternative_titles(self) -> list[str]:
         """Get alternative titles as a list."""
         titles = []
         if self.en and self.ja_ro and self.en != self.ja_ro:
@@ -101,18 +100,18 @@ class MangaDxMangaResponse(BaseModel):
     type: str = Field(default="manga")
 
     # Attributes
-    title: Dict[str, str] = Field(default_factory=dict)
-    alt_titles: List[Dict[str, str]] = Field(default_factory=list, alias="altTitles")
-    description: Dict[str, str] = Field(default_factory=dict)
+    title: dict[str, str] = Field(default_factory=dict)
+    alt_titles: list[dict[str, str]] = Field(default_factory=list, alias="altTitles")
+    description: dict[str, str] = Field(default_factory=dict)
     is_locked: bool = Field(default=False, alias="isLocked")
     original_language: str = Field(default="ja", alias="originalLanguage")
-    last_volume: Optional[str] = Field(None, alias="lastVolume")
-    last_chapter: Optional[str] = Field(None, alias="lastChapter")
-    publication_demographic: Optional[str] = Field(None, alias="publicationDemographic")
+    last_volume: str | None = Field(None, alias="lastVolume")
+    last_chapter: str | None = Field(None, alias="lastChapter")
+    publication_demographic: str | None = Field(None, alias="publicationDemographic")
     status: str = Field(default="ongoing")
-    year: Optional[int] = None
+    year: int | None = None
     content_rating: str = Field(default="safe", alias="contentRating")
-    tags: List[Dict[str, Any]] = Field(default_factory=list)
+    tags: list[dict[str, Any]] = Field(default_factory=list)
     state: str = Field(default="published")
     chapter_numbers_reset_on_new_volume: bool = Field(
         default=False, alias="chapterNumbersResetOnNewVolume"
@@ -122,7 +121,7 @@ class MangaDxMangaResponse(BaseModel):
     version: int = Field(default=1)
 
     # Relationships
-    relationships: List[Dict[str, Any]] = Field(default_factory=list)
+    relationships: list[dict[str, Any]] = Field(default_factory=list)
 
     def get_title_info(self) -> MangaDxTitle:
         """Extract title information."""
@@ -130,11 +129,11 @@ class MangaDxMangaResponse(BaseModel):
             en=self.title.get("en"), ja=self.title.get("ja"), ja_ro=self.title.get("ja-ro")
         )
 
-    def get_description(self) -> Optional[str]:
+    def get_description(self) -> str | None:
         """Get description, preferring English."""
         return self.description.get("en") or self.description.get("ja") or None
 
-    def get_genres_and_tags(self) -> Tuple[List[str], List[str]]:
+    def get_genres_and_tags(self) -> tuple[list[str], list[str]]:
         """Extract genres and tags from MangaDx tags."""
         genres = []
         tags = []
@@ -151,7 +150,7 @@ class MangaDxMangaResponse(BaseModel):
 
         return genres, tags
 
-    def get_author_info(self) -> Tuple[Optional[str], Optional[str]]:
+    def get_author_info(self) -> tuple[str | None, str | None]:
         """Extract author and artist information from relationships."""
         author = None
         artist = None
@@ -170,7 +169,7 @@ class MangaDxSearchResponse(BaseModel):
 
     result: str = Field(default="ok")
     response: str = Field(default="collection")
-    data: List[MangaDxMangaResponse] = Field(default_factory=list)
+    data: list[MangaDxMangaResponse] = Field(default_factory=list)
     limit: int = Field(default=10)
     offset: int = Field(default=0)
     total: int = Field(default=0)
@@ -237,9 +236,9 @@ class MangaDxClient:
         self,
         method: str,
         endpoint: str,
-        params: Optional[Dict[str, Any]] = None,
-        json_data: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        params: dict[str, Any] | None = None,
+        json_data: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         Make HTTP request with rate limiting and retry logic.
 
@@ -340,16 +339,16 @@ class MangaDxClient:
 
     async def search_manga(
         self,
-        title: Optional[str] = None,
-        author: Optional[str] = None,
-        artist: Optional[str] = None,
-        year: Optional[int] = None,
-        included_tags: Optional[List[str]] = None,
-        excluded_tags: Optional[List[str]] = None,
-        status: Optional[List[str]] = None,
-        original_language: Optional[List[str]] = None,
-        publication_demographic: Optional[List[str]] = None,
-        content_rating: Optional[List[str]] = None,
+        title: str | None = None,
+        author: str | None = None,
+        artist: str | None = None,
+        year: int | None = None,
+        included_tags: list[str] | None = None,
+        excluded_tags: list[str] | None = None,
+        status: list[str] | None = None,
+        original_language: list[str] | None = None,
+        publication_demographic: list[str] | None = None,
+        content_rating: list[str] | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> MangaDxSearchResponse:
@@ -505,7 +504,7 @@ class MangaDxClient:
     async def get_manga_chapters(
         self,
         manga_id: str,
-        translated_language: List[str] = ["en"],
+        translated_language: list[str] = None,
         limit: int = 100,
         offset: int = 0,
         order_by: str = "chapter",
@@ -529,6 +528,8 @@ class MangaDxClient:
             MangaDxError: For API errors
             MangaDxNotFoundError: If manga not found
         """
+        if translated_language is None:
+            translated_language = ["en"]
         params = {
             "manga": manga_id,
             "limit": min(limit, 100),  # Reduced limit to avoid 400 Bad Request errors
@@ -588,11 +589,11 @@ class MangaDxClient:
         chapter_id: str,
         base_url: str,
         chapter_hash: str,
-        page_filenames: List[str],
+        page_filenames: list[str],
         quality: str = "data",
         max_concurrent: int = 3,
         timeout_per_page: float = 30.0,
-    ) -> List[bytes]:
+    ) -> list[bytes]:
         """
         Download all pages for a chapter from MangaDx @Home network.
 

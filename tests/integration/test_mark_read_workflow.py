@@ -1,11 +1,12 @@
 """Integration tests for mark-read workflow end-to-end functionality."""
 
-import pytest
 from datetime import datetime, timedelta
 from uuid import uuid4
+
+import pytest
 from httpx import AsyncClient
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
 
 from kiremisu.database.models import Chapter, Series
 
@@ -151,7 +152,7 @@ class TestMarkReadWorkflowIntegration:
         self, client: AsyncClient, test_series_with_chapters: dict, db_session: AsyncSession
     ):
         """Test that dashboard stats update correctly during reading workflow."""
-        series = test_series_with_chapters["series"]
+        test_series_with_chapters["series"]
         chapters = test_series_with_chapters["chapters"]
 
         # Create additional series for more comprehensive stats
@@ -303,7 +304,7 @@ class TestMarkReadWorkflowIntegration:
         # Verify database consistency
         result = await db_session.execute(
             select(func.count(Chapter.id)).where(
-                Chapter.series_id == series.id, Chapter.is_read == True
+                Chapter.series_id == series.id, Chapter.is_read
             )
         )
         actual_read_count = result.scalar()

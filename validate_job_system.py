@@ -4,8 +4,6 @@
 import asyncio
 import os
 import sys
-from datetime import datetime, timedelta
-from uuid import uuid4
 
 # Set environment variables BEFORE any imports
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-validation")
@@ -16,7 +14,7 @@ os.environ.setdefault(
 # Add backend to Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
 
-from kiremisu.database.models import JobQueue, LibraryPath
+from kiremisu.database.models import JobQueue
 from kiremisu.services.job_scheduler import JobScheduler
 from kiremisu.services.job_worker import JobWorker
 

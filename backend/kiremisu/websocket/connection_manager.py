@@ -4,12 +4,10 @@ This module provides WebSocket infrastructure for real-time notifications.
 Currently experimental and disabled by default until authentication is implemented.
 """
 
-import json
 import logging
-from typing import Dict, List, Optional, Set
 from uuid import UUID
 
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -20,8 +18,8 @@ class WebSocketMessage(BaseModel):
 
     type: str = Field(..., description="Message type")
     data: dict = Field(default_factory=dict, description="Message payload")
-    timestamp: Optional[str] = Field(None, description="Message timestamp")
-    user_id: Optional[UUID] = Field(None, description="User ID (future implementation)")
+    timestamp: str | None = Field(None, description="Message timestamp")
+    user_id: UUID | None = Field(None, description="User ID (future implementation)")
 
 
 class NotificationMessage(WebSocketMessage):
@@ -32,8 +30,8 @@ class NotificationMessage(WebSocketMessage):
     notification_type: str = Field(..., description="Notification type")
     title: str = Field(..., description="Notification title")
     message: str = Field(..., description="Notification message")
-    series_id: Optional[UUID] = Field(None, description="Related series ID")
-    chapter_id: Optional[UUID] = Field(None, description="Related chapter ID")
+    series_id: UUID | None = Field(None, description="Related series ID")
+    chapter_id: UUID | None = Field(None, description="Related chapter ID")
 
 
 class WatchingUpdateMessage(WebSocketMessage):
@@ -43,7 +41,7 @@ class WatchingUpdateMessage(WebSocketMessage):
     series_id: UUID = Field(..., description="Series ID")
     series_title: str = Field(..., description="Series title")
     update_type: str = Field(..., description="Update type (new_chapter, status_change)")
-    chapter_count: Optional[int] = Field(None, description="New chapter count")
+    chapter_count: int | None = Field(None, description="New chapter count")
 
 
 class ConnectionManager:
@@ -55,13 +53,13 @@ class ConnectionManager:
 
     def __init__(self):
         # Active WebSocket connections
-        self.active_connections: List[WebSocket] = []
+        self.active_connections: list[WebSocket] = []
 
         # TODO: User-specific connections for multi-user support
-        self.user_connections: Dict[UUID, Set[WebSocket]] = {}
+        self.user_connections: dict[UUID, set[WebSocket]] = {}
 
         # Connection metadata
-        self.connection_metadata: Dict[WebSocket, dict] = {}
+        self.connection_metadata: dict[WebSocket, dict] = {}
 
         # Feature flag - disabled by default until authentication is ready
         self.enabled = False
@@ -73,7 +71,7 @@ class ConnectionManager:
         self.enabled = enabled
         logger.info(f"WebSocket functionality {'enabled' if enabled else 'disabled'}")
 
-    async def connect(self, websocket: WebSocket, user_id: Optional[UUID] = None):
+    async def connect(self, websocket: WebSocket, user_id: UUID | None = None):
         """Accept a WebSocket connection.
 
         Args:

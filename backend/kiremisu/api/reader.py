@@ -1,34 +1,30 @@
 """Reader API endpoints for chapter page streaming and reading progress."""
 
 import asyncio
-import logging
 import mimetypes
 import os
-import tempfile
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional
 from uuid import UUID
 
 import fitz  # PyMuPDF
 import rarfile
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from PIL import Image
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
 
-from kiremisu.database.connection import get_db
 from kiremisu.core.unified_auth import get_current_user
+from kiremisu.database.connection import get_db
 from kiremisu.database.models import Chapter, Series
-from kiremisu.database.schemas import ChapterProgressUpdate, ChapterProgressResponse
+from kiremisu.database.schemas import ChapterProgressResponse, ChapterProgressUpdate
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/api/reader", tags=["reader"])
 
 # Thread pool for CPU-bound image operations
-_thread_pool: Optional[ThreadPoolExecutor] = None
+_thread_pool: ThreadPoolExecutor | None = None
 
 
 def get_thread_pool() -> ThreadPoolExecutor:
@@ -41,7 +37,7 @@ def get_thread_pool() -> ThreadPoolExecutor:
 
 def _extract_page_from_archive(
     archive_path: str, page_index: int, file_format: str
-) -> Optional[bytes]:
+) -> bytes | None:
     """Extract a specific page from archive file synchronously."""
     try:
         if file_format in {".cbz", ".zip"}:
@@ -78,7 +74,7 @@ def _extract_page_from_archive(
     return None
 
 
-def _extract_page_from_pdf(pdf_path: str, page_index: int) -> Optional[bytes]:
+def _extract_page_from_pdf(pdf_path: str, page_index: int) -> bytes | None:
     """Extract a specific page from PDF file synchronously."""
     try:
         doc = fitz.open(pdf_path)
@@ -94,7 +90,7 @@ def _extract_page_from_pdf(pdf_path: str, page_index: int) -> Optional[bytes]:
     return None
 
 
-def _get_folder_page(folder_path: str, page_index: int) -> Optional[bytes]:
+def _get_folder_page(folder_path: str, page_index: int) -> bytes | None:
     """Get a specific page from folder structure synchronously."""
     try:
         # Get list of image files in folder, sorted
@@ -116,7 +112,7 @@ def _get_folder_page(folder_path: str, page_index: int) -> Optional[bytes]:
     return None
 
 
-async def _extract_chapter_page(chapter: Chapter, page_index: int) -> Optional[tuple[bytes, str]]:
+async def _extract_chapter_page(chapter: Chapter, page_index: int) -> tuple[bytes, str] | None:
     """Extract a specific page from chapter file."""
     file_path = chapter.file_path
 
@@ -301,8 +297,8 @@ async def update_reading_progress(
 
     # Use the enhanced reading progress service for comprehensive tracking
     try:
-        from kiremisu.services.reading_progress import ReadingProgressService
         from kiremisu.database.schemas import ReadingProgressUpdateRequest
+        from kiremisu.services.reading_progress import ReadingProgressService
 
         # Convert from ChapterProgressUpdate to ReadingProgressUpdateRequest
         progress_request = ReadingProgressUpdateRequest(

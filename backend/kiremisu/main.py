@@ -1,40 +1,41 @@
 """FastAPI application entry point."""
 
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
 
-from kiremisu.api.library import router as library_router
-from kiremisu.api.jobs import router as jobs_router, set_worker_runner
-from kiremisu.api.chapters import router as chapters_router
-from kiremisu.api.reader import router as reader_router
-from kiremisu.api.series import router as series_router
-from kiremisu.api.dashboard import router as dashboard_router
 from kiremisu.api.annotations import router as annotations_router
-from kiremisu.api.mangadx import router as mangadx_router, cleanup_mangadx_services
+from kiremisu.api.auth import router as auth_router
+from kiremisu.api.chapters import router as chapters_router
+from kiremisu.api.dashboard import router as dashboard_router
 from kiremisu.api.downloads import router as downloads_router
-from kiremisu.api.tags import router as tags_router
 from kiremisu.api.file_operations import router as file_operations_router
 from kiremisu.api.filesystem import router as filesystem_router
+from kiremisu.api.jobs import router as jobs_router
+from kiremisu.api.jobs import set_worker_runner
+from kiremisu.api.library import router as library_router
+from kiremisu.api.mangadx import cleanup_mangadx_services
+from kiremisu.api.mangadx import router as mangadx_router
+from kiremisu.api.metrics import router as metrics_router
 from kiremisu.api.notifications import router as notifications_router
+from kiremisu.api.push_notifications import router as push_router
+from kiremisu.api.reader import router as reader_router
+from kiremisu.api.series import router as series_router
+from kiremisu.api.tags import router as tags_router
 from kiremisu.api.watching import router as watching_router
 from kiremisu.api.websocket import router as websocket_router
-from kiremisu.api.metrics import router as metrics_router
-from kiremisu.api.push_notifications import router as push_router
-from kiremisu.api.auth import router as auth_router
 from kiremisu.core.config import settings
 from kiremisu.core.error_handler import global_exception_handler
 from kiremisu.core.rate_limiter import RateLimiter, RateLimitMiddleware
 from kiremisu.database.connection import get_db_session_factory
-from kiremisu.services.job_worker import JobWorkerRunner
 from kiremisu.services.job_scheduler import SchedulerRunner
+from kiremisu.services.job_worker import JobWorkerRunner
 
 logger = logging.getLogger(__name__)
 
@@ -54,12 +55,12 @@ async def lifespan(app: FastAPI):
     # Initialize security and authentication
     try:
         logger.info("Initializing security and authentication...")
-        
+
         # Initialize admin user if needed
         async with db_session_factory() as db:
             from kiremisu.core.auth import initialize_admin_user
             await initialize_admin_user(db)
-        
+
         # Validate JWT configuration
         if not settings.secret_key or len(settings.secret_key) < 32:
             logger.error("JWT SECRET_KEY not properly configured")
@@ -67,9 +68,9 @@ async def lifespan(app: FastAPI):
             from kiremisu.core.auth import generate_secure_secret_key
             logger.info(f"Generated secure key example: {generate_secure_secret_key()}")
             raise ValueError("JWT SECRET_KEY configuration required")
-        
+
         logger.info("Security initialization completed")
-    
+
     except Exception as e:
         logger.error(f"Security initialization failed: {e}")
         raise
@@ -151,19 +152,19 @@ app.add_middleware(RateLimitMiddleware, rate_limiter=rate_limiter)
 async def add_security_headers(request: Request, call_next):
     """Add security headers to all responses."""
     response = await call_next(request)
-    
+
     # Security headers
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    
+
     # Don't cache sensitive endpoints
     if request.url.path.startswith("/api/auth") or "token" in request.url.path:
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
-    
+
     return response
 
 # CORS middleware for frontend integration

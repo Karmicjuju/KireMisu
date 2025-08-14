@@ -2,12 +2,13 @@
 
 import asyncio
 import time
-import pytest
 from datetime import datetime, timedelta
 from uuid import uuid4
+
+import pytest
 from httpx import AsyncClient
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
 
 from kiremisu.database.models import Chapter, Series
 
@@ -116,7 +117,7 @@ class TestProgressCalculationPerformance:
         assert response_time < 5.0, f"Dashboard stats took {response_time:.3f}s, exceeding 5s limit"
 
         # Additional performance metrics
-        print(f"Performance metrics:")
+        print("Performance metrics:")
         print(f"  - Series processed: {data['total_series']}")
         print(f"  - Chapters processed: {data['total_chapters']}")
         print(f"  - Processing rate: {data['total_chapters'] / response_time:.0f} chapters/second")
@@ -161,7 +162,7 @@ class TestProgressCalculationPerformance:
         avg_response_time = sum(response_times) / len(response_times)
         max_response_time = max(response_times)
 
-        print(f"Series progress performance summary:")
+        print("Series progress performance summary:")
         print(f"  - Average response time: {avg_response_time:.3f}s")
         print(f"  - Maximum response time: {max_response_time:.3f}s")
         print(f"  - Chapters per series: {dataset['chapters_per_series']}")
@@ -206,7 +207,7 @@ class TestProgressCalculationPerformance:
         avg_response_time = sum(response_times) / len(response_times)
         max_response_time = max(response_times)
 
-        print(f"Concurrent requests performance:")
+        print("Concurrent requests performance:")
         print(f"  - Total time: {total_time:.3f}s")
         print(f"  - Average individual response time: {avg_response_time:.3f}s")
         print(f"  - Maximum individual response time: {max_response_time:.3f}s")
@@ -264,7 +265,7 @@ class TestProgressCalculationPerformance:
         for chapter in unread_chapters:
             assert marked_chapters[chapter["id"]]["is_read"] is True
 
-        print(f"Batch mark-read performance:")
+        print("Batch mark-read performance:")
         print(f"  - Chapters marked: {len(unread_chapters)}")
         print(f"  - Total time: {sequential_time:.3f}s")
         print(f"  - Average time per chapter: {sequential_time / len(unread_chapters):.3f}s")
@@ -321,7 +322,7 @@ class TestProgressCalculationPerformance:
         db_series = result.scalar_one()
         assert db_series.read_chapters == initial_read_count + 1
 
-        print(f"Progress aggregation performance:")
+        print("Progress aggregation performance:")
         print(f"  - Aggregation time: {aggregation_time:.3f}s")
         print(f"  - Series chapters: {dataset['chapters_per_series']}")
 
@@ -349,7 +350,7 @@ class TestProgressCalculationPerformance:
             },
             {
                 "name": "Count read chapters",
-                "query": select(func.count(Chapter.id)).where(Chapter.is_read == True),
+                "query": select(func.count(Chapter.id)).where(Chapter.is_read),
             },
             {
                 "name": "Series with read counts",
@@ -393,8 +394,9 @@ class TestProgressCalculationPerformance:
         self, client: AsyncClient, large_library_dataset: dict
     ):
         """Test memory usage during large progress calculations."""
-        import psutil
         import os
+
+        import psutil
 
         dataset = large_library_dataset
         process = psutil.Process(os.getpid())
@@ -402,7 +404,7 @@ class TestProgressCalculationPerformance:
         # Measure initial memory usage
         initial_memory = process.memory_info().rss / 1024 / 1024  # MB
 
-        print(f"Memory usage test:")
+        print("Memory usage test:")
         print(f"  - Initial memory: {initial_memory:.1f} MB")
 
         # Perform memory-intensive operations
@@ -527,8 +529,8 @@ class TestProgressCalculationPerformance:
         assert len(data["chapters"]) == 1000
         assert data["progress_percentage"] == 50.0
 
-        print(f"Extreme scalability test results:")
-        print(f"  - Chapters: 1000")
+        print("Extreme scalability test results:")
+        print("  - Chapters: 1000")
         print(f"  - Response time: {response_time:.3f}s")
         print(f"  - Processing rate: {1000 / response_time:.0f} chapters/second")
 

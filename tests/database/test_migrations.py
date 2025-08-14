@@ -1,7 +1,8 @@
 """Test database migrations."""
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 
 def test_migration_file_exists() -> None:

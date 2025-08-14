@@ -2,18 +2,19 @@
 
 import asyncio
 import os
-import pytest
-from typing import AsyncGenerator
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlalchemy.pool import NullPool
-from sqlalchemy import text
-
-from kiremisu.database.models import Base, Series, Chapter, Annotation, Notification
-from kiremisu.database.connection import get_db
-from kiremisu.main import app
+from collections.abc import AsyncGenerator
+from datetime import UTC
 from uuid import uuid4
 
+import pytest
+from httpx import AsyncClient
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
+
+from kiremisu.database.connection import get_db
+from kiremisu.database.models import Annotation, Base, Chapter, Notification, Series
+from kiremisu.main import app
 
 # Test database URL - uses PostgreSQL test database
 TEST_DATABASE_URL = os.getenv(
@@ -53,7 +54,7 @@ async def engine():
 
 
 @pytest.fixture
-async def db_session(engine) -> AsyncGenerator[AsyncSession, None]:
+async def db_session(engine) -> AsyncGenerator[AsyncSession]:
     """Create test database session with proper isolation."""
     async_session = async_sessionmaker(
         bind=engine,
@@ -86,10 +87,10 @@ async def db_session(engine) -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest.fixture
-async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
     """Create test HTTP client."""
 
-    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+    async def override_get_db() -> AsyncGenerator[AsyncSession]:
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
@@ -170,7 +171,7 @@ async def sample_annotations(db_session: AsyncSession, sample_series_with_chapte
     series, chapters = sample_series_with_chapters
 
     annotations = []
-    
+
     # Chapter 1 annotations
     annotations.extend([
         Annotation(
@@ -249,7 +250,7 @@ async def sample_series(db_session: AsyncSession):
     db_session.add(series)
     await db_session.commit()
     await db_session.refresh(series)
-    
+
     return series
 
 
@@ -258,10 +259,10 @@ async def sample_notifications(
     db_session: AsyncSession, sample_series: Series
 ) -> list[Notification]:
     """Create sample notifications for testing."""
-    from datetime import datetime, timezone
-    
+    from datetime import datetime
+
     notifications = []
-    
+
     for i in range(5):
         notification = Notification(
             notification_type="new_chapter",
@@ -270,12 +271,12 @@ async def sample_notifications(
             series_id=sample_series.id,
             is_read=i % 2 == 0,  # Alternate read/unread
         )
-        
+
         if notification.is_read:
-            notification.read_at = datetime.now(timezone.utc).replace(tzinfo=None)
-        
+            notification.read_at = datetime.now(UTC).replace(tzinfo=None)
+
         db_session.add(notification)
         notifications.append(notification)
-    
+
     await db_session.commit()
     return notifications

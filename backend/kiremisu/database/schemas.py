@@ -1,11 +1,11 @@
 """Pydantic schemas for API requests and responses."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Generic, TypeVar, Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator, validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 if TYPE_CHECKING:
     from kiremisu.database.models import JobQueue
@@ -40,8 +40,8 @@ class PaginationMeta(BaseModel):
     total_pages: int = Field(..., description="Total number of pages")
     has_prev: bool = Field(..., description="Whether there's a previous page")
     has_next: bool = Field(..., description="Whether there's a next page")
-    prev_page: Optional[int] = Field(None, description="Previous page number")
-    next_page: Optional[int] = Field(None, description="Next page number")
+    prev_page: int | None = Field(None, description="Previous page number")
+    next_page: int | None = Field(None, description="Next page number")
 
     @classmethod
     def create(cls, page: int, per_page: int, total_items: int) -> "PaginationMeta":
@@ -60,10 +60,10 @@ class PaginationMeta(BaseModel):
         )
 
 
-class PaginatedResponse(BaseModel, Generic[T]):
+class PaginatedResponse[T](BaseModel):
     """Generic schema for paginated API responses."""
 
-    items: List[T] = Field(..., description="List of items")
+    items: list[T] = Field(..., description="List of items")
     pagination: PaginationMeta = Field(..., description="Pagination metadata")
 
 
@@ -72,8 +72,8 @@ class TagBase(BaseModel):
     """Base schema for tag."""
 
     name: str = Field(..., max_length=100, description="Tag name")
-    description: Optional[str] = Field(None, description="Tag description")
-    color: Optional[str] = Field(None, description="Tag color (hex format #RRGGBB)")
+    description: str | None = Field(None, description="Tag description")
+    color: str | None = Field(None, description="Tag color (hex format #RRGGBB)")
 
     @field_validator("name")
     @classmethod
@@ -122,9 +122,9 @@ class TagCreate(TagBase):
 class TagUpdate(BaseModel):
     """Schema for updating a tag."""
 
-    name: Optional[str] = Field(None, max_length=100, description="Tag name")
-    description: Optional[str] = Field(None, description="Tag description")
-    color: Optional[str] = Field(None, description="Tag color (hex format #RRGGBB)")
+    name: str | None = Field(None, max_length=100, description="Tag name")
+    description: str | None = Field(None, description="Tag description")
+    color: str | None = Field(None, description="Tag color (hex format #RRGGBB)")
 
     @field_validator("name")
     @classmethod
@@ -190,14 +190,14 @@ class TagResponse(TagBase):
 class TagListResponse(BaseModel):
     """Schema for list of tags."""
 
-    tags: List[TagResponse] = Field(..., description="List of tags")
+    tags: list[TagResponse] = Field(..., description="List of tags")
     total: int = Field(..., description="Total number of tags")
 
 
 class SeriesTagAssignment(BaseModel):
     """Schema for assigning/removing tags to/from series."""
 
-    tag_ids: List[UUID] = Field(..., description="List of tag IDs to assign")
+    tag_ids: list[UUID] = Field(..., description="List of tag IDs to assign")
 
     @field_validator("tag_ids")
     @classmethod
@@ -235,9 +235,9 @@ class LibraryPathCreate(LibraryPathBase):
 class LibraryPathUpdate(BaseModel):
     """Schema for updating a library path."""
 
-    path: Optional[str] = Field(None, description="File system path to manga library")
-    enabled: Optional[bool] = Field(None, description="Whether this path is enabled for scanning")
-    scan_interval_hours: Optional[int] = Field(
+    path: str | None = Field(None, description="File system path to manga library")
+    enabled: bool | None = Field(None, description="Whether this path is enabled for scanning")
+    scan_interval_hours: int | None = Field(
         None, ge=1, le=168, description="Scan interval in hours (1-168)"
     )
 
@@ -254,7 +254,7 @@ class LibraryPathResponse(LibraryPathBase):
     """Schema for library path responses."""
 
     id: UUID = Field(..., description="Unique identifier")
-    last_scan: Optional[datetime] = Field(None, description="Last scan timestamp")
+    last_scan: datetime | None = Field(None, description="Last scan timestamp")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
 
@@ -274,11 +274,11 @@ class ChapterInfo(BaseModel):
 
     file_path: str = Field(..., description="Path to chapter file or directory")
     chapter_number: float = Field(..., description="Chapter number (supports fractional)")
-    volume_number: Optional[int] = Field(None, description="Volume number if available")
-    title: Optional[str] = Field(None, description="Chapter title if extracted")
+    volume_number: int | None = Field(None, description="Volume number if available")
+    title: str | None = Field(None, description="Chapter title if extracted")
     file_size: int = Field(0, description="File size in bytes")
     page_count: int = Field(0, description="Number of pages in chapter")
-    source_metadata: Dict = Field(
+    source_metadata: dict = Field(
         default_factory=dict, description="Additional metadata from parsing"
     )
 
@@ -288,15 +288,15 @@ class SeriesInfo(BaseModel):
 
     title_primary: str = Field(..., description="Primary series title")
     file_path: str = Field(..., description="Path to series directory or file")
-    chapters: List[ChapterInfo] = Field(default_factory=list, description="List of chapters")
+    chapters: list[ChapterInfo] = Field(default_factory=list, description="List of chapters")
 
     # Optional metadata
-    title_alternative: Optional[str] = Field(None, description="Alternative series title")
-    author: Optional[str] = Field(None, description="Series author")
-    artist: Optional[str] = Field(None, description="Series artist")
-    description: Optional[str] = Field(None, description="Series description")
-    cover_image_path: Optional[str] = Field(None, description="Path to cover image")
-    source_metadata: Dict = Field(
+    title_alternative: str | None = Field(None, description="Alternative series title")
+    author: str | None = Field(None, description="Series author")
+    artist: str | None = Field(None, description="Series artist")
+    description: str | None = Field(None, description="Series description")
+    cover_image_path: str | None = Field(None, description="Path to cover image")
+    source_metadata: dict = Field(
         default_factory=dict, description="Additional metadata from parsing"
     )
 
@@ -310,7 +310,7 @@ class SeriesInfo(BaseModel):
 class LibraryScanRequest(BaseModel):
     """Schema for library scan request."""
 
-    library_path_id: Optional[UUID] = Field(
+    library_path_id: UUID | None = Field(
         None,
         description="Optional specific library path ID to scan. If not provided, scans all enabled paths",
     )
@@ -342,14 +342,14 @@ class JobResponse(BaseModel):
 
     id: UUID = Field(..., description="Job unique identifier")
     job_type: str = Field(..., description="Type of job (e.g., library_scan)")
-    payload: Dict = Field(..., description="Job payload data")
+    payload: dict = Field(..., description="Job payload data")
     status: str = Field(..., description="Job status (pending, running, completed, failed)")
     priority: int = Field(..., description="Job priority (higher = more urgent)")
 
     # Execution tracking
-    started_at: Optional[datetime] = Field(None, description="When job started execution")
-    completed_at: Optional[datetime] = Field(None, description="When job completed")
-    error_message: Optional[str] = Field(None, description="Error message if job failed")
+    started_at: datetime | None = Field(None, description="When job started execution")
+    completed_at: datetime | None = Field(None, description="When job completed")
+    error_message: str | None = Field(None, description="Error message if job failed")
     retry_count: int = Field(..., description="Number of retry attempts")
     max_retries: int = Field(..., description="Maximum retry attempts")
 
@@ -385,9 +385,9 @@ class JobResponse(BaseModel):
 class JobListResponse(BaseModel):
     """Schema for list of jobs."""
 
-    jobs: List[JobResponse] = Field(..., description="List of jobs")
+    jobs: list[JobResponse] = Field(..., description="List of jobs")
     total: int = Field(..., description="Total number of jobs returned")
-    job_type_filter: Optional[str] = Field(None, description="Applied job type filter")
+    job_type_filter: str | None = Field(None, description="Applied job type filter")
 
 
 class JobScheduleRequest(BaseModel):
@@ -396,15 +396,15 @@ class JobScheduleRequest(BaseModel):
     job_type: str = Field(
         ..., description="Type of job to schedule (library_scan, auto_schedule, download)"
     )
-    library_path_id: Optional[UUID] = Field(
+    library_path_id: UUID | None = Field(
         None, description="Optional specific library path ID for manual scans"
     )
     priority: int = Field(default=5, ge=1, le=10, description="Job priority (1=low, 10=high)")
 
     # Download job specific fields
-    manga_id: Optional[str] = Field(None, description="External manga ID for download jobs")
-    download_type: Optional[str] = Field(default="mangadx", description="Download source type")
-    series_id: Optional[UUID] = Field(
+    manga_id: str | None = Field(None, description="External manga ID for download jobs")
+    download_type: str | None = Field(default="mangadx", description="Download source type")
+    series_id: UUID | None = Field(
         None, description="Optional local series ID to associate with"
     )
 
@@ -423,12 +423,12 @@ class JobScheduleResponse(BaseModel):
 
     status: str = Field(..., description="Scheduling status (scheduled, completed)")
     message: str = Field(..., description="Human-readable status message")
-    job_id: Optional[UUID] = Field(None, description="ID of scheduled job (for manual jobs)")
+    job_id: UUID | None = Field(None, description="ID of scheduled job (for manual jobs)")
     scheduled_count: int = Field(default=0, description="Number of jobs scheduled")
-    skipped_count: Optional[int] = Field(
+    skipped_count: int | None = Field(
         None, description="Number of paths skipped (for auto scheduling)"
     )
-    total_paths: Optional[int] = Field(
+    total_paths: int | None = Field(
         None, description="Total paths evaluated (for auto scheduling)"
     )
 
@@ -436,8 +436,8 @@ class JobScheduleResponse(BaseModel):
 class JobStatsResponse(BaseModel):
     """Schema for job queue statistics."""
 
-    queue_stats: Dict[str, int] = Field(..., description="Job queue statistics by status")
-    worker_status: Optional[Dict[str, Any]] = Field(None, description="Worker status information")
+    queue_stats: dict[str, int] = Field(..., description="Job queue statistics by status")
+    worker_status: dict[str, Any] | None = Field(None, description="Worker status information")
     timestamp: datetime = Field(..., description="Statistics timestamp")
 
 
@@ -448,7 +448,7 @@ class WorkerStatusResponse(BaseModel):
     active_jobs: int = Field(..., description="Number of currently active jobs")
     max_concurrent_jobs: int = Field(..., description="Maximum concurrent jobs allowed")
     poll_interval_seconds: int = Field(..., description="Job polling interval in seconds")
-    message: Optional[str] = Field(None, description="Additional status message")
+    message: str | None = Field(None, description="Additional status message")
 
 
 # Series and Chapter schemas for API responses
@@ -457,37 +457,37 @@ class SeriesResponse(BaseModel):
 
     id: UUID = Field(..., description="Series unique identifier")
     title_primary: str = Field(..., description="Primary series title")
-    title_alternative: Optional[str] = Field(None, description="Alternative series title")
-    description: Optional[str] = Field(None, description="Series description")
-    author: Optional[str] = Field(None, description="Series author")
-    artist: Optional[str] = Field(None, description="Series artist")
-    genres: List[str] = Field(default_factory=list, description="Series genres")
-    tags: List[str] = Field(default_factory=list, description="Series tags")
-    publication_status: Optional[str] = Field(None, description="Publication status")
-    content_rating: Optional[str] = Field(None, description="Content rating")
+    title_alternative: str | None = Field(None, description="Alternative series title")
+    description: str | None = Field(None, description="Series description")
+    author: str | None = Field(None, description="Series author")
+    artist: str | None = Field(None, description="Series artist")
+    genres: list[str] = Field(default_factory=list, description="Series genres")
+    tags: list[str] = Field(default_factory=list, description="Series tags")
+    publication_status: str | None = Field(None, description="Publication status")
+    content_rating: str | None = Field(None, description="Content rating")
     language: str = Field(..., description="Series language")
 
     # File system information
-    file_path: Optional[str] = Field(None, description="File system path")
-    cover_image_path: Optional[str] = Field(None, description="Cover image path")
+    file_path: str | None = Field(None, description="File system path")
+    cover_image_path: str | None = Field(None, description="Cover image path")
 
     # External source information
-    mangadx_id: Optional[str] = Field(None, description="MangaDx ID")
-    source_metadata: Dict = Field(default_factory=dict, description="Source metadata")
+    mangadx_id: str | None = Field(None, description="MangaDx ID")
+    source_metadata: dict = Field(default_factory=dict, description="Source metadata")
 
     # User customization
-    user_metadata: Dict = Field(default_factory=dict, description="User metadata")
-    custom_tags: List[str] = Field(default_factory=list, description="Custom user tags")
-    user_tags: List[TagResponse] = Field(default_factory=list, description="User-assigned tags")
+    user_metadata: dict = Field(default_factory=dict, description="User metadata")
+    custom_tags: list[str] = Field(default_factory=list, description="Custom user tags")
+    user_tags: list[TagResponse] = Field(default_factory=list, description="User-assigned tags")
 
     # Watching configuration
     watching_enabled: bool = Field(
         default=False, description="Whether watching is enabled for this series"
     )
-    watching_config: Optional[Dict[str, Any]] = Field(
+    watching_config: dict[str, Any] | None = Field(
         default_factory=dict, description="Watching configuration settings"
     )
-    last_watched_check: Optional[datetime] = Field(
+    last_watched_check: datetime | None = Field(
         None, description="Last time series was checked for updates"
     )
 
@@ -550,8 +550,8 @@ class ChapterResponse(BaseModel):
 
     # Chapter identification
     chapter_number: float = Field(..., description="Chapter number")
-    volume_number: Optional[int] = Field(None, description="Volume number")
-    title: Optional[str] = Field(None, description="Chapter title")
+    volume_number: int | None = Field(None, description="Volume number")
+    title: str | None = Field(None, description="Chapter title")
 
     # File system information
     file_path: str = Field(..., description="File system path")
@@ -559,21 +559,21 @@ class ChapterResponse(BaseModel):
     page_count: int = Field(..., description="Number of pages")
 
     # External source information
-    mangadx_id: Optional[str] = Field(None, description="MangaDx ID")
-    source_metadata: Dict = Field(default_factory=dict, description="Source metadata")
+    mangadx_id: str | None = Field(None, description="MangaDx ID")
+    source_metadata: dict = Field(default_factory=dict, description="Source metadata")
 
     # Reading progress
     is_read: bool = Field(..., description="Whether chapter is marked as read")
     last_read_page: int = Field(..., description="Last read page number")
-    read_at: Optional[datetime] = Field(None, description="When chapter was read")
-    started_reading_at: Optional[datetime] = Field(None, description="When reading started")
+    read_at: datetime | None = Field(None, description="When chapter was read")
+    started_reading_at: datetime | None = Field(None, description="When reading started")
 
     # Timestamps
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
 
     # Optional series information (when loaded with relationship)
-    series: Optional[SeriesResponse] = Field(None, description="Parent series information")
+    series: SeriesResponse | None = Field(None, description="Parent series information")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -618,7 +618,7 @@ class ChapterPagesInfoResponse(BaseModel):
 
     chapter_id: UUID = Field(..., description="Chapter unique identifier")
     total_pages: int = Field(..., description="Total number of pages")
-    pages: List[PageInfoResponse] = Field(..., description="List of page information")
+    pages: list[PageInfoResponse] = Field(..., description="List of page information")
 
 
 # Reader-specific schemas
@@ -626,7 +626,7 @@ class ChapterProgressUpdate(BaseModel):
     """Schema for updating chapter reading progress."""
 
     last_read_page: int = Field(..., ge=0, description="Last read page number (0-indexed)")
-    is_read: Optional[bool] = Field(None, description="Whether chapter is marked as read")
+    is_read: bool | None = Field(None, description="Whether chapter is marked as read")
 
     @field_validator("last_read_page")
     @classmethod
@@ -652,8 +652,8 @@ class ChapterInfoResponse(BaseModel):
 
     # Chapter identification
     chapter_number: float = Field(..., description="Chapter number")
-    volume_number: Optional[int] = Field(None, description="Volume number")
-    title: Optional[str] = Field(None, description="Chapter title")
+    volume_number: int | None = Field(None, description="Volume number")
+    title: str | None = Field(None, description="Chapter title")
 
     # File system information
     file_size: int = Field(..., description="File size in bytes")
@@ -662,8 +662,8 @@ class ChapterInfoResponse(BaseModel):
     # Reading progress
     is_read: bool = Field(..., description="Whether chapter is marked as read")
     last_read_page: int = Field(..., description="Last read page number")
-    read_at: Optional[datetime] = Field(None, description="When chapter was read")
-    started_reading_at: Optional[datetime] = Field(None, description="When reading started")
+    read_at: datetime | None = Field(None, description="When chapter was read")
+    started_reading_at: datetime | None = Field(None, description="When reading started")
 
     # Timestamps
     created_at: datetime = Field(..., description="Creation timestamp")
@@ -676,7 +676,7 @@ class SeriesChaptersResponse(BaseModel):
     """Schema for series chapters response."""
 
     series: SeriesResponse = Field(..., description="Series information")
-    chapters: List[ChapterResponse] = Field(..., description="List of chapters in order")
+    chapters: list[ChapterResponse] = Field(..., description="List of chapters in order")
 
 
 # Mark-read and progress schemas
@@ -685,7 +685,7 @@ class ChapterMarkReadResponse(BaseModel):
 
     id: UUID = Field(..., description="Chapter unique identifier")
     is_read: bool = Field(..., description="Updated read status")
-    read_at: Optional[datetime] = Field(None, description="When chapter was marked as read")
+    read_at: datetime | None = Field(None, description="When chapter was marked as read")
     series_read_chapters: int = Field(..., description="Updated series read chapter count")
 
     model_config = ConfigDict(from_attributes=True)
@@ -695,7 +695,7 @@ class ReadingProgressUpdateRequest(BaseModel):
     """Schema for updating reading progress."""
 
     current_page: int = Field(..., ge=0, description="Current page being read (0-indexed)")
-    is_complete: Optional[bool] = Field(None, description="Mark as complete if specified")
+    is_complete: bool | None = Field(None, description="Mark as complete if specified")
 
     @field_validator("current_page")
     @classmethod
@@ -715,8 +715,8 @@ class ReadingProgressResponse(BaseModel):
     total_pages: int = Field(..., description="Total pages in chapter")
     progress_percentage: float = Field(..., description="Reading progress as percentage (0-100)")
     is_read: bool = Field(..., description="Whether chapter is marked as read")
-    started_at: Optional[datetime] = Field(None, description="When reading started")
-    read_at: Optional[datetime] = Field(None, description="When chapter was completed")
+    started_at: datetime | None = Field(None, description="When reading started")
+    read_at: datetime | None = Field(None, description="When chapter was completed")
     updated_at: datetime = Field(..., description="Last progress update")
 
     model_config = ConfigDict(from_attributes=True)
@@ -733,8 +733,8 @@ class UserReadingStatsResponse(BaseModel):
     reading_streak_days: int = Field(..., description="Current reading streak in days")
     chapters_read_this_week: int = Field(..., description="Chapters read this week")
     chapters_read_this_month: int = Field(..., description="Chapters read this month")
-    favorite_genres: List[str] = Field(default_factory=list, description="Most read genres")
-    recent_activity: List[ChapterResponse] = Field(
+    favorite_genres: list[str] = Field(default_factory=list, description="Most read genres")
+    recent_activity: list[ChapterResponse] = Field(
         default_factory=list, description="Recent reading activity (up to 10)"
     )
 
@@ -748,10 +748,10 @@ class SeriesProgressResponse(BaseModel):
     total_chapters: int = Field(..., description="Total number of chapters")
     read_chapters: int = Field(..., description="Number of read chapters")
     progress_percentage: float = Field(..., description="Progress percentage (0-100)")
-    recent_chapters: List[ChapterResponse] = Field(
+    recent_chapters: list[ChapterResponse] = Field(
         default_factory=list, description="Recently read chapters (up to 5)"
     )
-    last_read_at: Optional[datetime] = Field(None, description="Most recent read timestamp")
+    last_read_at: datetime | None = Field(None, description="Most recent read timestamp")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -765,7 +765,7 @@ class DashboardStatsResponse(BaseModel):
     reading_progress_percentage: float = Field(
         ..., description="Overall reading progress percentage (0-100)"
     )
-    recent_activity: List[ChapterResponse] = Field(
+    recent_activity: list[ChapterResponse] = Field(
         default_factory=list, description="Recently read chapters (up to 10)"
     )
     series_by_status: dict = Field(
@@ -781,17 +781,17 @@ class AnnotationBase(BaseModel):
     """Base schema for annotation data."""
 
     content: str = Field(..., min_length=1, max_length=2000, description="Annotation content")
-    page_number: Optional[int] = Field(None, ge=1, description="Page number (1-indexed)")
+    page_number: int | None = Field(None, ge=1, description="Page number (1-indexed)")
     annotation_type: str = Field(
         default="note", description="Type of annotation (note, bookmark, highlight)"
     )
-    position_x: Optional[float] = Field(
+    position_x: float | None = Field(
         None, ge=0, le=1, description="X position on page (0-1 normalized)"
     )
-    position_y: Optional[float] = Field(
+    position_y: float | None = Field(
         None, ge=0, le=1, description="Y position on page (0-1 normalized)"
     )
-    color: Optional[str] = Field(
+    color: str | None = Field(
         None, pattern=r"^#[0-9A-Fa-f]{6}$", description="Annotation color in hex format"
     )
 
@@ -814,20 +814,20 @@ class AnnotationCreate(AnnotationBase):
 class AnnotationUpdate(BaseModel):
     """Schema for updating annotations."""
 
-    content: Optional[str] = Field(
+    content: str | None = Field(
         None, min_length=1, max_length=2000, description="Annotation content"
     )
-    page_number: Optional[int] = Field(None, ge=1, description="Page number (1-indexed)")
-    annotation_type: Optional[str] = Field(
+    page_number: int | None = Field(None, ge=1, description="Page number (1-indexed)")
+    annotation_type: str | None = Field(
         None, description="Type of annotation (note, bookmark, highlight)"
     )
-    position_x: Optional[float] = Field(
+    position_x: float | None = Field(
         None, ge=0, le=1, description="X position on page (0-1 normalized)"
     )
-    position_y: Optional[float] = Field(
+    position_y: float | None = Field(
         None, ge=0, le=1, description="Y position on page (0-1 normalized)"
     )
-    color: Optional[str] = Field(
+    color: str | None = Field(
         None, pattern=r"^#[0-9A-Fa-f]{6}$", description="Annotation color in hex format"
     )
 
@@ -851,7 +851,7 @@ class AnnotationResponse(AnnotationBase):
     updated_at: datetime = Field(..., description="Last update timestamp")
 
     # Optional chapter information (when loaded with relationship)
-    chapter: Optional[ChapterResponse] = Field(None, description="Parent chapter information")
+    chapter: ChapterResponse | None = Field(None, description="Parent chapter information")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -884,7 +884,7 @@ class FileOperationRequest(BaseModel):
 
     operation_type: str = Field(..., description="Type of operation (rename, delete, move)")
     source_path: str = Field(..., description="Source file/directory path")
-    target_path: Optional[str] = Field(None, description="Target path (for rename/move operations)")
+    target_path: str | None = Field(None, description="Target path (for rename/move operations)")
 
     # Safety options
     force: bool = Field(default=False, description="Force operation without confirmations")
@@ -934,12 +934,12 @@ class FileOperationResponse(BaseModel):
 
     # File paths
     source_path: str = Field(..., description="Source path")
-    target_path: Optional[str] = Field(None, description="Target path")
-    backup_path: Optional[str] = Field(None, description="Backup path")
+    target_path: str | None = Field(None, description="Target path")
+    backup_path: str | None = Field(None, description="Backup path")
 
     # Affected records
-    affected_series_ids: List[str] = Field(default_factory=list, description="Affected series IDs")
-    affected_chapter_ids: List[str] = Field(
+    affected_series_ids: list[str] = Field(default_factory=list, description="Affected series IDs")
+    affected_chapter_ids: list[str] = Field(
         default_factory=list, description="Affected chapter IDs"
     )
 
@@ -948,14 +948,14 @@ class FileOperationResponse(BaseModel):
     validation_results: dict = Field(default_factory=dict, description="Validation results")
 
     # Error handling
-    error_message: Optional[str] = Field(None, description="Error message if operation failed")
+    error_message: str | None = Field(None, description="Error message if operation failed")
     retry_count: int = Field(..., description="Number of retry attempts")
     max_retries: int = Field(..., description="Maximum retry attempts")
 
     # Timing
-    started_at: Optional[datetime] = Field(None, description="Operation start time")
-    completed_at: Optional[datetime] = Field(None, description="Operation completion time")
-    validated_at: Optional[datetime] = Field(None, description="Validation completion time")
+    started_at: datetime | None = Field(None, description="Operation start time")
+    completed_at: datetime | None = Field(None, description="Operation completion time")
+    validated_at: datetime | None = Field(None, description="Validation completion time")
 
     # Timestamps
     created_at: datetime = Field(..., description="Operation creation time")
@@ -967,10 +967,10 @@ class FileOperationResponse(BaseModel):
 class AnnotationListResponse(BaseModel):
     """Schema for list of annotations."""
 
-    annotations: List[AnnotationResponse] = Field(..., description="List of annotations")
+    annotations: list[AnnotationResponse] = Field(..., description="List of annotations")
     total: int = Field(..., description="Total number of annotations")
-    chapter_id: Optional[UUID] = Field(None, description="Chapter ID filter applied")
-    annotation_type: Optional[str] = Field(None, description="Annotation type filter applied")
+    chapter_id: UUID | None = Field(None, description="Chapter ID filter applied")
+    annotation_type: str | None = Field(None, description="Annotation type filter applied")
 
 
 class ChapterAnnotationsResponse(BaseModel):
@@ -979,8 +979,8 @@ class ChapterAnnotationsResponse(BaseModel):
     chapter_id: UUID = Field(..., description="Chapter unique identifier")
     chapter_title: str = Field(..., description="Chapter title")
     total_pages: int = Field(..., description="Total pages in chapter")
-    annotations: List[AnnotationResponse] = Field(..., description="Chapter annotations")
-    annotations_by_page: Dict[int, List[AnnotationResponse]] = Field(
+    annotations: list[AnnotationResponse] = Field(..., description="Chapter annotations")
+    annotations_by_page: dict[int, list[AnnotationResponse]] = Field(
         ..., description="Annotations grouped by page number"
     )
 
@@ -1009,13 +1009,13 @@ class ChapterAnnotationsResponse(BaseModel):
 class MangaDxSearchRequest(BaseModel):
     """Schema for MangaDx search requests."""
 
-    title: Optional[str] = Field(None, description="Manga title to search for")
-    author: Optional[str] = Field(None, description="Author name to search for")
-    artist: Optional[str] = Field(None, description="Artist name to search for")
-    year: Optional[int] = Field(None, ge=1900, le=2030, description="Publication year")
-    status: Optional[List[str]] = Field(None, description="Publication status filter")
-    content_rating: Optional[List[str]] = Field(None, description="Content rating filter")
-    original_language: Optional[List[str]] = Field(None, description="Original language filter")
+    title: str | None = Field(None, description="Manga title to search for")
+    author: str | None = Field(None, description="Author name to search for")
+    artist: str | None = Field(None, description="Artist name to search for")
+    year: int | None = Field(None, ge=1900, le=2030, description="Publication year")
+    status: list[str] | None = Field(None, description="Publication status filter")
+    content_rating: list[str] | None = Field(None, description="Content rating filter")
+    original_language: list[str] | None = Field(None, description="Original language filter")
     limit: int = Field(default=20, ge=1, le=100, description="Number of results (1-100)")
     offset: int = Field(default=0, ge=0, description="Offset for pagination")
 
@@ -1051,29 +1051,29 @@ class MangaDxMangaInfo(BaseModel):
 
     id: str = Field(..., description="MangaDx manga UUID")
     title: str = Field(..., description="Primary manga title")
-    alternative_titles: List[str] = Field(default_factory=list, description="Alternative titles")
-    description: Optional[str] = Field(None, description="Manga description")
-    author: Optional[str] = Field(None, description="Author name")
-    artist: Optional[str] = Field(None, description="Artist name")
-    genres: List[str] = Field(default_factory=list, description="Manga genres")
-    tags: List[str] = Field(default_factory=list, description="Manga tags")
+    alternative_titles: list[str] = Field(default_factory=list, description="Alternative titles")
+    description: str | None = Field(None, description="Manga description")
+    author: str | None = Field(None, description="Author name")
+    artist: str | None = Field(None, description="Artist name")
+    genres: list[str] = Field(default_factory=list, description="Manga genres")
+    tags: list[str] = Field(default_factory=list, description="Manga tags")
     status: str = Field(..., description="Publication status")
     content_rating: str = Field(..., description="Content rating")
     original_language: str = Field(..., description="Original language")
-    publication_year: Optional[int] = Field(None, description="Publication year")
-    last_volume: Optional[str] = Field(None, description="Last volume number")
-    last_chapter: Optional[str] = Field(None, description="Last chapter number")
-    cover_art_url: Optional[str] = Field(None, description="Cover art image URL")
+    publication_year: int | None = Field(None, description="Publication year")
+    last_volume: str | None = Field(None, description="Last volume number")
+    last_chapter: str | None = Field(None, description="Last chapter number")
+    cover_art_url: str | None = Field(None, description="Cover art image URL")
 
     # MangaDx metadata
-    mangadx_created_at: Optional[datetime] = Field(None, description="MangaDx creation timestamp")
-    mangadx_updated_at: Optional[datetime] = Field(None, description="MangaDx update timestamp")
+    mangadx_created_at: datetime | None = Field(None, description="MangaDx creation timestamp")
+    mangadx_updated_at: datetime | None = Field(None, description="MangaDx update timestamp")
 
 
 class MangaDxSearchResponse(BaseModel):
     """Schema for MangaDx search response."""
 
-    results: List[MangaDxMangaInfo] = Field(default_factory=list, description="Search results")
+    results: list[MangaDxMangaInfo] = Field(default_factory=list, description="Search results")
     total: int = Field(..., description="Total number of results")
     limit: int = Field(..., description="Results per page")
     offset: int = Field(..., description="Current offset")
@@ -1084,7 +1084,7 @@ class MangaDxImportRequest(BaseModel):
     """Schema for MangaDx metadata import requests."""
 
     mangadx_id: str = Field(..., description="MangaDx manga UUID to import")
-    target_series_id: Optional[UUID] = Field(
+    target_series_id: UUID | None = Field(
         None, description="Optional existing series ID to enrich with metadata"
     )
     import_cover_art: bool = Field(default=True, description="Whether to download cover art")
@@ -1092,7 +1092,7 @@ class MangaDxImportRequest(BaseModel):
     overwrite_existing: bool = Field(
         default=False, description="Whether to overwrite existing metadata fields"
     )
-    custom_title: Optional[str] = Field(
+    custom_title: str | None = Field(
         None, description="Custom title override (if different from MangaDx)"
     )
 
@@ -1101,12 +1101,12 @@ class MangaDxImportResult(BaseModel):
     """Schema for MangaDx import operation result."""
 
     success: bool = Field(..., description="Whether import was successful")
-    series_id: Optional[UUID] = Field(None, description="ID of created/updated series")
+    series_id: UUID | None = Field(None, description="ID of created/updated series")
     mangadx_id: str = Field(..., description="MangaDx manga UUID that was imported")
     operation: str = Field(..., description="Operation performed (created/updated/enriched)")
 
     # Import statistics
-    metadata_fields_updated: List[str] = Field(
+    metadata_fields_updated: list[str] = Field(
         default_factory=list, description="List of metadata fields that were updated"
     )
     cover_art_downloaded: bool = Field(
@@ -1115,12 +1115,12 @@ class MangaDxImportResult(BaseModel):
     chapters_imported: int = Field(default=0, description="Number of chapters imported")
 
     # Error information
-    warnings: List[str] = Field(default_factory=list, description="Non-fatal warnings")
-    errors: List[str] = Field(default_factory=list, description="Error messages if failed")
+    warnings: list[str] = Field(default_factory=list, description="Non-fatal warnings")
+    errors: list[str] = Field(default_factory=list, description="Error messages if failed")
 
     # Timing information
-    import_duration_ms: Optional[int] = Field(None, description="Import duration in milliseconds")
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    import_duration_ms: int | None = Field(None, description="Import duration in milliseconds")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC).replace(tzinfo=None))
 
 
 class MangaDxImportResponse(BaseModel):
@@ -1134,7 +1134,7 @@ class MangaDxImportResponse(BaseModel):
 class MangaDxBulkImportRequest(BaseModel):
     """Schema for bulk MangaDx import requests."""
 
-    import_requests: List[MangaDxImportRequest] = Field(
+    import_requests: list[MangaDxImportRequest] = Field(
         ..., min_length=1, max_length=50, description="List of import requests (max 50)"
     )
     priority: int = Field(
@@ -1150,7 +1150,7 @@ class MangaDxBulkImportResponse(BaseModel):
 
     status: str = Field(..., description="Request status (scheduled/failed)")
     message: str = Field(..., description="Human-readable status message")
-    job_id: Optional[UUID] = Field(None, description="Background job ID")
+    job_id: UUID | None = Field(None, description="Background job ID")
     import_count: int = Field(..., description="Number of imports scheduled")
 
 
@@ -1158,7 +1158,7 @@ class MangaDxEnrichmentRequest(BaseModel):
     """Schema for enriching existing series with MangaDx metadata."""
 
     series_id: UUID = Field(..., description="Local series ID to enrich")
-    search_query: Optional[str] = Field(
+    search_query: str | None = Field(
         None, description="Override search query (uses series title if not provided)"
     )
     auto_select_best_match: bool = Field(
@@ -1178,7 +1178,7 @@ class MangaDxEnrichmentCandidate(BaseModel):
 
     mangadx_info: MangaDxMangaInfo = Field(..., description="MangaDx manga information")
     confidence_score: float = Field(..., ge=0.0, le=1.0, description="Match confidence (0.0-1.0)")
-    match_reasons: List[str] = Field(
+    match_reasons: list[str] = Field(
         default_factory=list, description="Reasons for this match (title, author, etc.)"
     )
     is_recommended: bool = Field(..., description="Whether this is the recommended match")
@@ -1189,10 +1189,10 @@ class MangaDxEnrichmentResponse(BaseModel):
 
     series_id: UUID = Field(..., description="Local series ID")
     series_title: str = Field(..., description="Local series title")
-    candidates: List[MangaDxEnrichmentCandidate] = Field(
+    candidates: list[MangaDxEnrichmentCandidate] = Field(
         default_factory=list, description="Potential MangaDx matches"
     )
-    auto_selected: Optional[MangaDxEnrichmentCandidate] = Field(
+    auto_selected: MangaDxEnrichmentCandidate | None = Field(
         None, description="Auto-selected candidate if confidence threshold met"
     )
     search_query_used: str = Field(..., description="Search query that was used")
@@ -1203,9 +1203,9 @@ class MangaDxHealthResponse(BaseModel):
     """Schema for MangaDx API health check response."""
 
     api_accessible: bool = Field(..., description="Whether MangaDx API is accessible")
-    response_time_ms: Optional[int] = Field(None, description="API response time in milliseconds")
+    response_time_ms: int | None = Field(None, description="API response time in milliseconds")
     last_check: datetime = Field(..., description="Last health check timestamp")
-    error_message: Optional[str] = Field(None, description="Error message if health check failed")
+    error_message: str | None = Field(None, description="Error message if health check failed")
 
 
 # Notification schemas
@@ -1220,19 +1220,19 @@ class NotificationResponse(BaseModel):
     message: str = Field(..., description="Notification message")
 
     # Optional relationships
-    series_id: Optional[UUID] = Field(None, description="Associated series ID")
-    chapter_id: Optional[UUID] = Field(None, description="Associated chapter ID")
+    series_id: UUID | None = Field(None, description="Associated series ID")
+    chapter_id: UUID | None = Field(None, description="Associated chapter ID")
 
     # Read status
     is_read: bool = Field(..., description="Whether notification has been read")
-    read_at: Optional[datetime] = Field(None, description="When notification was read")
+    read_at: datetime | None = Field(None, description="When notification was read")
 
     # Timestamps
     created_at: datetime = Field(..., description="Notification creation timestamp")
 
     # Optional related data for convenience
-    series_title: Optional[str] = Field(None, description="Series title if associated")
-    chapter_title: Optional[str] = Field(None, description="Chapter title if associated")
+    series_title: str | None = Field(None, description="Series title if associated")
+    chapter_title: str | None = Field(None, description="Chapter title if associated")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -1273,7 +1273,7 @@ class NotificationResponse(BaseModel):
 class NotificationListResponse(BaseModel):
     """Schema for notification list responses."""
 
-    notifications: List[NotificationResponse] = Field(..., description="List of notifications")
+    notifications: list[NotificationResponse] = Field(..., description="List of notifications")
     total: int = Field(..., description="Total number of notifications in response")
     unread_only: bool = Field(
         default=False, description="Whether only unread notifications were requested"
@@ -1300,7 +1300,7 @@ class NotificationMarkReadResponse(BaseModel):
 
     id: UUID = Field(..., description="Notification ID")
     is_read: bool = Field(..., description="Updated read status")
-    read_at: Optional[datetime] = Field(None, description="When notification was marked as read")
+    read_at: datetime | None = Field(None, description="When notification was marked as read")
     unread_count: int = Field(..., description="Updated total unread count")
 
 
@@ -1324,7 +1324,7 @@ class WatchToggleResponse(BaseModel):
     series_id: UUID = Field(..., description="Series ID")
     series_title: str = Field(..., description="Series title")
     watching_enabled: bool = Field(..., description="Updated watching status")
-    last_watched_check: Optional[datetime] = Field(None, description="Last check timestamp")
+    last_watched_check: datetime | None = Field(None, description="Last check timestamp")
     message: str = Field(..., description="Human-readable status message")
 
     @classmethod
@@ -1346,8 +1346,8 @@ class WatchingResponse(BaseModel):
     series_id: UUID = Field(..., description="Series ID")
     series_title: str = Field(..., description="Series title")
     watching_enabled: bool = Field(..., description="Watching status")
-    last_watched_check: Optional[datetime] = Field(None, description="Last check timestamp")
-    message: Optional[str] = Field(None, description="Optional status message")
+    last_watched_check: datetime | None = Field(None, description="Last check timestamp")
+    message: str | None = Field(None, description="Optional status message")
 
     @classmethod
     def from_series(cls, series):
@@ -1372,7 +1372,7 @@ class WatchingStatsResponse(BaseModel):
 class WatchedSeriesListResponse(BaseModel):
     """Schema for watched series list response."""
 
-    series: List[SeriesResponse] = Field(..., description="List of watched series")
+    series: list[SeriesResponse] = Field(..., description="List of watched series")
     total: int = Field(..., description="Total number of watched series")
     page: int = Field(..., description="Current page number")
     pages: int = Field(..., description="Total number of pages")
@@ -1406,11 +1406,11 @@ class ValidationResult(BaseModel):
     """Schema for validation results."""
 
     is_valid: bool = Field(..., description="Whether the operation is valid")
-    warnings: List[str] = Field(
+    warnings: list[str] = Field(
         default_factory=list, description="Non-critical validation warnings"
     )
-    errors: List[str] = Field(default_factory=list, description="Critical validation errors")
-    conflicts: List[dict] = Field(default_factory=list, description="Detected conflicts")
+    errors: list[str] = Field(default_factory=list, description="Critical validation errors")
+    conflicts: list[dict] = Field(default_factory=list, description="Detected conflicts")
 
     # Affected data summary
     affected_series_count: int = Field(default=0, description="Number of affected series")
@@ -1423,10 +1423,10 @@ class ValidationResult(BaseModel):
     )
 
     # Performance impact
-    estimated_duration_seconds: Optional[float] = Field(
+    estimated_duration_seconds: float | None = Field(
         None, description="Estimated operation duration"
     )
-    estimated_disk_usage_mb: Optional[float] = Field(
+    estimated_disk_usage_mb: float | None = Field(
         None, description="Estimated disk usage for backups"
     )
 
@@ -1445,16 +1445,16 @@ class FileOperationConfirmationRequest(BaseModel):
 
     operation_id: UUID = Field(..., description="Operation ID to confirm")
     confirmed: bool = Field(..., description="User confirmation")
-    confirmation_message: Optional[str] = Field(None, description="Optional confirmation message")
+    confirmation_message: str | None = Field(None, description="Optional confirmation message")
 
 
 class FileOperationListResponse(BaseModel):
     """Schema for listing file operations."""
 
-    operations: List[FileOperationResponse] = Field(..., description="List of operations")
+    operations: list[FileOperationResponse] = Field(..., description="List of operations")
     total: int = Field(..., description="Total number of operations")
-    status_filter: Optional[str] = Field(None, description="Applied status filter")
-    operation_type_filter: Optional[str] = Field(None, description="Applied operation type filter")
+    status_filter: str | None = Field(None, description="Applied status filter")
+    operation_type_filter: str | None = Field(None, description="Applied operation type filter")
 
 
 # Download Job schemas
@@ -1463,16 +1463,16 @@ class DownloadJobProgressInfo(BaseModel):
 
     total_chapters: int = Field(..., description="Total number of chapters to download")
     downloaded_chapters: int = Field(..., description="Number of chapters completed")
-    current_chapter: Optional[Dict[str, Any]] = Field(
+    current_chapter: dict[str, Any] | None = Field(
         None, description="Current chapter being downloaded"
     )
     current_chapter_progress: float = Field(
         default=0.0, ge=0.0, le=1.0, description="Current chapter progress (0.0-1.0)"
     )
     error_count: int = Field(default=0, description="Number of chapters that failed to download")
-    errors: List[Dict[str, Any]] = Field(default_factory=list, description="List of error details")
-    started_at: Optional[str] = Field(None, description="Download start timestamp (ISO format)")
-    estimated_completion: Optional[str] = Field(
+    errors: list[dict[str, Any]] = Field(default_factory=list, description="List of error details")
+    started_at: str | None = Field(None, description="Download start timestamp (ISO format)")
+    estimated_completion: str | None = Field(
         None, description="Estimated completion timestamp (ISO format)"
     )
 
@@ -1500,16 +1500,16 @@ class DownloadJobRequest(BaseModel):
     manga_id: str = Field(..., description="External manga ID (MangaDx UUID)")
 
     # Chapter selection
-    chapter_ids: Optional[List[str]] = Field(
+    chapter_ids: list[str] | None = Field(
         None, description="Specific chapter IDs to download (for single/batch)"
     )
-    volume_number: Optional[str] = Field(None, description="Volume number (for volume downloads)")
+    volume_number: str | None = Field(None, description="Volume number (for volume downloads)")
 
     # Local association
-    series_id: Optional[UUID] = Field(None, description="Local series ID to associate with")
+    series_id: UUID | None = Field(None, description="Local series ID to associate with")
 
     # Download options
-    destination_path: Optional[str] = Field(None, description="Custom destination path")
+    destination_path: str | None = Field(None, description="Custom destination path")
     priority: int = Field(
         default=3, ge=1, le=10, description="Job priority (1-10, higher = more urgent)"
     )
@@ -1541,20 +1541,20 @@ class DownloadJobResponse(BaseModel):
     # Download metadata
     download_type: str = Field(..., description="Type of download")
     manga_id: str = Field(..., description="External manga ID")
-    series_id: Optional[UUID] = Field(None, description="Associated local series ID")
-    batch_type: Optional[str] = Field(
+    series_id: UUID | None = Field(None, description="Associated local series ID")
+    batch_type: str | None = Field(
         None, description="Batch type (single, multiple, volume, series)"
     )
-    volume_number: Optional[str] = Field(None, description="Volume number for volume downloads")
-    destination_path: Optional[str] = Field(None, description="Download destination path")
+    volume_number: str | None = Field(None, description="Volume number for volume downloads")
+    destination_path: str | None = Field(None, description="Download destination path")
 
     # Manga metadata for better UI display
-    manga_title: Optional[str] = Field(None, description="Human-readable manga title")
-    manga_author: Optional[str] = Field(None, description="Manga author name")
-    manga_cover_url: Optional[str] = Field(None, description="Manga cover image URL")
+    manga_title: str | None = Field(None, description="Human-readable manga title")
+    manga_author: str | None = Field(None, description="Manga author name")
+    manga_cover_url: str | None = Field(None, description="Manga cover image URL")
 
     # Progress tracking
-    progress: Optional[DownloadJobProgressInfo] = Field(
+    progress: DownloadJobProgressInfo | None = Field(
         None, description="Download progress information"
     )
 
@@ -1564,26 +1564,26 @@ class DownloadJobResponse(BaseModel):
     max_retries: int = Field(..., description="Maximum retry attempts")
 
     # Error handling
-    error_message: Optional[str] = Field(None, description="Error message if job failed")
+    error_message: str | None = Field(None, description="Error message if job failed")
 
     # Timing
     scheduled_at: datetime = Field(..., description="Job scheduled time")
-    started_at: Optional[datetime] = Field(None, description="Job start time")
-    completed_at: Optional[datetime] = Field(None, description="Job completion time")
+    started_at: datetime | None = Field(None, description="Job start time")
+    completed_at: datetime | None = Field(None, description="Job completion time")
     created_at: datetime = Field(..., description="Job creation time")
     updated_at: datetime = Field(..., description="Last update time")
 
     # Computed properties
     @property
-    def duration_seconds(self) -> Optional[float]:
+    def duration_seconds(self) -> float | None:
         """Calculate job duration in seconds."""
         if not self.started_at:
             return None
-        end_time = self.completed_at or datetime.now(timezone.utc).replace(tzinfo=None)
+        end_time = self.completed_at or datetime.now(UTC).replace(tzinfo=None)
         return (end_time - self.started_at).total_seconds()
 
     @property
-    def estimated_remaining_seconds(self) -> Optional[float]:
+    def estimated_remaining_seconds(self) -> float | None:
         """Estimate remaining time based on current progress."""
         if not self.progress or not self.started_at or self.progress.total_chapters == 0:
             return None
@@ -1592,7 +1592,7 @@ class DownloadJobResponse(BaseModel):
             return 0.0
 
         elapsed = (
-            datetime.now(timezone.utc).replace(tzinfo=None) - self.started_at
+            datetime.now(UTC).replace(tzinfo=None) - self.started_at
         ).total_seconds()
         progress_ratio = self.progress.progress_percentage / 100.0
 
@@ -1644,7 +1644,7 @@ class DownloadJobResponse(BaseModel):
 class DownloadJobListResponse(BaseModel):
     """Schema for listing download jobs."""
 
-    jobs: List[DownloadJobResponse] = Field(..., description="List of download jobs")
+    jobs: list[DownloadJobResponse] = Field(..., description="List of download jobs")
     total: int = Field(..., description="Total number of jobs")
     active_downloads: int = Field(..., description="Number of currently active downloads")
     pending_downloads: int = Field(..., description="Number of pending downloads")
@@ -1652,11 +1652,11 @@ class DownloadJobListResponse(BaseModel):
     completed_downloads: int = Field(..., description="Number of completed downloads")
 
     # Filters applied
-    status_filter: Optional[str] = Field(None, description="Applied status filter")
-    download_type_filter: Optional[str] = Field(None, description="Applied download type filter")
+    status_filter: str | None = Field(None, description="Applied status filter")
+    download_type_filter: str | None = Field(None, description="Applied download type filter")
 
     # Pagination info
-    pagination: Optional[PaginationMeta] = Field(None, description="Pagination metadata")
+    pagination: PaginationMeta | None = Field(None, description="Pagination metadata")
 
 
 class DownloadJobActionRequest(BaseModel):
@@ -1665,7 +1665,7 @@ class DownloadJobActionRequest(BaseModel):
     action: Literal["cancel", "retry", "pause", "resume"] = Field(
         ..., description="Action to perform"
     )
-    reason: Optional[str] = Field(None, description="Optional reason for the action")
+    reason: str | None = Field(None, description="Optional reason for the action")
 
 
 class DownloadJobActionResponse(BaseModel):
@@ -1675,7 +1675,7 @@ class DownloadJobActionResponse(BaseModel):
     action: str = Field(..., description="Action that was performed")
     success: bool = Field(..., description="Whether action was successful")
     message: str = Field(..., description="Human-readable result message")
-    new_status: Optional[str] = Field(None, description="New job status after action")
+    new_status: str | None = Field(None, description="New job status after action")
 
 
 class DownloadStatsResponse(BaseModel):
@@ -1694,34 +1694,34 @@ class DownloadStatsResponse(BaseModel):
     chapters_downloaded_today: int = Field(..., description="Chapters downloaded in last 24 hours")
 
     # System health
-    average_job_duration_minutes: Optional[float] = Field(
+    average_job_duration_minutes: float | None = Field(
         None, description="Average job duration in minutes"
     )
     success_rate_percentage: float = Field(..., description="Overall success rate percentage")
-    current_download_speed_mbps: Optional[float] = Field(
+    current_download_speed_mbps: float | None = Field(
         None, description="Current download speed in Mbps"
     )
 
     # Storage usage
-    total_downloaded_size_gb: Optional[float] = Field(
+    total_downloaded_size_gb: float | None = Field(
         None, description="Total size of downloaded content in GB"
     )
-    available_storage_gb: Optional[float] = Field(None, description="Available storage space in GB")
+    available_storage_gb: float | None = Field(None, description="Available storage space in GB")
 
     # Last updated
-    stats_generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    stats_generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC).replace(tzinfo=None))
 
 
 class BulkDownloadRequest(BaseModel):
     """Schema for bulk download requests."""
 
-    downloads: List[DownloadJobRequest] = Field(
+    downloads: list[DownloadJobRequest] = Field(
         ..., min_length=1, max_length=50, description="List of download requests (max 50)"
     )
-    global_priority: Optional[int] = Field(
+    global_priority: int | None = Field(
         None, ge=1, le=10, description="Global priority override"
     )
-    batch_name: Optional[str] = Field(None, description="Optional name for the batch")
+    batch_name: str | None = Field(None, description="Optional name for the batch")
     stagger_delay_seconds: int = Field(
         default=5, ge=0, le=300, description="Delay between job starts (0-300s)"
     )
@@ -1736,8 +1736,8 @@ class BulkDownloadResponse(BaseModel):
     total_requested: int = Field(..., description="Total number of downloads requested")
     successfully_queued: int = Field(..., description="Number of downloads successfully queued")
     failed_to_queue: int = Field(..., description="Number of downloads that failed to queue")
-    job_ids: List[UUID] = Field(..., description="List of created job IDs")
-    errors: List[str] = Field(
+    job_ids: list[UUID] = Field(..., description="List of created job IDs")
+    errors: list[str] = Field(
         default_factory=list, description="Error messages for failed requests"
     )
 
@@ -1748,8 +1748,8 @@ class ErrorDetail(BaseModel):
 
     code: str = Field(..., description="Error code identifier")
     message: str = Field(..., description="Human-readable error message")
-    field: Optional[str] = Field(None, description="Field name for validation errors")
-    context: Optional[Dict[str, Any]] = Field(None, description="Additional error context")
+    field: str | None = Field(None, description="Field name for validation errors")
+    context: dict[str, Any] | None = Field(None, description="Additional error context")
 
 
 class ErrorResponse(BaseModel):
@@ -1758,11 +1758,11 @@ class ErrorResponse(BaseModel):
     error: bool = Field(default=True, description="Always true for error responses")
     message: str = Field(..., description="Human-readable error message")
     status_code: int = Field(..., description="HTTP status code")
-    error_code: Optional[str] = Field(None, description="Application-specific error code")
-    details: Optional[List[ErrorDetail]] = Field(None, description="Detailed error information")
-    request_id: Optional[str] = Field(None, description="Request tracking ID")
+    error_code: str | None = Field(None, description="Application-specific error code")
+    details: list[ErrorDetail] | None = Field(None, description="Detailed error information")
+    request_id: str | None = Field(None, description="Request tracking ID")
     timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None), description="Error timestamp"
+        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None), description="Error timestamp"
     )
 
     @classmethod
@@ -1770,9 +1770,9 @@ class ErrorResponse(BaseModel):
         cls,
         message: str,
         status_code: int,
-        error_code: Optional[str] = None,
-        details: Optional[List[ErrorDetail]] = None,
-        request_id: Optional[str] = None,
+        error_code: str | None = None,
+        details: list[ErrorDetail] | None = None,
+        request_id: str | None = None,
     ) -> "ErrorResponse":
         """Create a standardized error response."""
         return cls(
@@ -1791,7 +1791,7 @@ class ValidationErrorResponse(ErrorResponse):
 
     @classmethod
     def from_pydantic_error(
-        cls, validation_error: Any, request_id: Optional[str] = None
+        cls, validation_error: Any, request_id: str | None = None
     ) -> "ValidationErrorResponse":
         """Create validation error response from Pydantic validation error."""
         details = []
@@ -1822,7 +1822,7 @@ class NotFoundErrorResponse(ErrorResponse):
 
     @classmethod
     def create_for_resource(
-        cls, resource_type: str, resource_id: Optional[str] = None, request_id: Optional[str] = None
+        cls, resource_type: str, resource_id: str | None = None, request_id: str | None = None
     ) -> "NotFoundErrorResponse":
         """Create not found error for specific resource."""
         if resource_id:
@@ -1850,7 +1850,7 @@ class ForbiddenErrorResponse(ErrorResponse):
 
     @classmethod
     def create_for_user_context(
-        cls, message: str = "Access to this resource is forbidden", request_id: Optional[str] = None
+        cls, message: str = "Access to this resource is forbidden", request_id: str | None = None
     ) -> "ForbiddenErrorResponse":
         """Create forbidden error for user context issues."""
         return cls(
@@ -1872,7 +1872,7 @@ class RateLimitErrorResponse(ErrorResponse):
     """Schema for 429 Rate Limit error responses."""
 
     error_code: str = Field(default="RATE_LIMIT_EXCEEDED", description="Rate limit error code")
-    retry_after: Optional[int] = Field(None, description="Retry after seconds")
+    retry_after: int | None = Field(None, description="Retry after seconds")
 
 
 class ServiceUnavailableErrorResponse(ErrorResponse):
@@ -1881,7 +1881,7 @@ class ServiceUnavailableErrorResponse(ErrorResponse):
     error_code: str = Field(
         default="SERVICE_UNAVAILABLE", description="Service unavailable error code"
     )
-    retry_after: Optional[int] = Field(None, description="Retry after seconds")
+    retry_after: int | None = Field(None, description="Retry after seconds")
 
 
 # User Context and Multi-User Support schemas (future implementation)
@@ -1890,9 +1890,9 @@ class UserContextBase(BaseModel):
 
     # TODO: Implement user authentication system
     # These fields are placeholders for future multi-user support
-    user_id: Optional[UUID] = Field(None, description="User ID (future implementation)")
-    permissions: List[str] = Field(default_factory=list, description="User permissions")
-    scoped_access: Dict[str, Any] = Field(
+    user_id: UUID | None = Field(None, description="User ID (future implementation)")
+    permissions: list[str] = Field(default_factory=list, description="User permissions")
+    scoped_access: dict[str, Any] = Field(
         default_factory=dict, description="Scoped access rules (future implementation)"
     )
 
@@ -1912,14 +1912,14 @@ class WatchingContextRequest(BaseModel):
 class MangaDxChapterAttributes(BaseModel):
     """Schema for MangaDx chapter attributes."""
 
-    title: Optional[str] = Field(None, description="Chapter title")
-    volume: Optional[str] = Field(None, description="Volume number")
-    chapter: Optional[str] = Field(None, description="Chapter number")
+    title: str | None = Field(None, description="Chapter title")
+    volume: str | None = Field(None, description="Volume number")
+    chapter: str | None = Field(None, description="Chapter number")
     pages: int = Field(default=0, description="Number of pages")
     translated_language: str = Field(
         ..., alias="translatedLanguage", description="Chapter language code"
     )
-    external_url: Optional[str] = Field(
+    external_url: str | None = Field(
         None, alias="externalUrl", description="External URL if hosted elsewhere"
     )
     is_unavailable: bool = Field(
@@ -1938,11 +1938,11 @@ class MangaDxChapterResponse(BaseModel):
     id: str = Field(..., description="MangaDx chapter UUID")
     type: str = Field(default="chapter", description="Resource type")
     attributes: MangaDxChapterAttributes = Field(..., description="Chapter attributes")
-    relationships: List[Dict[str, Any]] = Field(
+    relationships: list[dict[str, Any]] = Field(
         default_factory=list, description="Chapter relationships"
     )
 
-    def get_chapter_number(self) -> Optional[float]:
+    def get_chapter_number(self) -> float | None:
         """Extract chapter number as float."""
         chapter_str = self.attributes.chapter
         if not chapter_str:
@@ -1952,7 +1952,7 @@ class MangaDxChapterResponse(BaseModel):
         except (ValueError, TypeError):
             return None
 
-    def get_volume_number(self) -> Optional[int]:
+    def get_volume_number(self) -> int | None:
         """Extract volume number as integer."""
         volume_str = self.attributes.volume
         if not volume_str:
@@ -1968,7 +1968,7 @@ class MangaDxChapterListResponse(BaseModel):
 
     result: str = Field(default="ok", description="Request result status")
     response: str = Field(default="collection", description="Response type")
-    data: List[MangaDxChapterResponse] = Field(default_factory=list, description="List of chapters")
+    data: list[MangaDxChapterResponse] = Field(default_factory=list, description="List of chapters")
     limit: int = Field(..., description="Results per page limit")
     offset: int = Field(..., description="Current page offset")
     total: int = Field(..., description="Total number of chapters available")
@@ -1983,12 +1983,12 @@ class MangaDxAtHomeChapterData(BaseModel):
     """Schema for MangaDx @Home chapter data."""
 
     hash: str = Field(..., description="Chapter hash for URL construction")
-    data: List[str] = Field(..., description="Full quality page filenames")
-    data_saver: List[str] = Field(
+    data: list[str] = Field(..., description="Full quality page filenames")
+    data_saver: list[str] = Field(
         ..., alias="dataSaver", description="Compressed quality page filenames"
     )
 
-    def get_page_filenames(self, quality: str = "data") -> List[str]:
+    def get_page_filenames(self, quality: str = "data") -> list[str]:
         """Get page filenames for specified quality."""
         if quality == "data-saver":
             return self.data_saver
@@ -2007,7 +2007,7 @@ class MangaDxAtHomeResponse(BaseModel):
         quality_path = "data-saver" if quality == "data-saver" else "data"
         return f"{self.base_url}/{quality_path}/{self.chapter.hash}/{page_filename}"
 
-    def get_all_page_urls(self, quality: str = "data") -> List[str]:
+    def get_all_page_urls(self, quality: str = "data") -> list[str]:
         """Get all page URLs for the chapter."""
         page_filenames = self.chapter.get_page_filenames(quality)
         return [self.construct_page_url(filename, quality) for filename in page_filenames]
@@ -2024,14 +2024,14 @@ class MangaDxDownloadedChapter(BaseModel):
     """Schema for downloaded chapter information."""
 
     chapter_id: str = Field(..., description="MangaDx chapter UUID")
-    title: Optional[str] = Field(None, description="Chapter title")
-    chapter_number: Optional[float] = Field(None, description="Chapter number")
-    volume_number: Optional[int] = Field(None, description="Volume number")
+    title: str | None = Field(None, description="Chapter title")
+    chapter_number: float | None = Field(None, description="Chapter number")
+    volume_number: int | None = Field(None, description="Volume number")
     file_path: str = Field(..., description="Local file path to CBZ file")
     file_size: int = Field(..., description="File size in bytes")
     page_count: int = Field(..., description="Number of pages downloaded")
     download_quality: str = Field(..., description="Download quality used")
-    download_duration_seconds: Optional[float] = Field(None, description="Time taken to download")
+    download_duration_seconds: float | None = Field(None, description="Time taken to download")
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None), description="Download timestamp"
+        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None), description="Download timestamp"
     )

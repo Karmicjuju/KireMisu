@@ -1,26 +1,24 @@
 """Database models for KireMisu."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
     ARRAY,
-    DateTime,
-    String,
-    Text,
     Boolean,
-    Integer,
-    JSON,
+    CheckConstraint,
+    Column,
+    DateTime,
     ForeignKey,
     Index,
-    CheckConstraint,
+    Integer,
+    String,
     Table,
-    Column,
-    TIMESTAMP,
+    Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -39,40 +37,40 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    
+
     # User profile
-    display_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    
+    display_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # Account status
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    
+
     # Security
     failed_login_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    last_failed_login: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    
+    last_failed_login: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     # API tokens (for future use)
-    api_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, unique=True, index=True)
-    api_key_created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    
+    api_key: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
+    api_key_created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     # Preferences
     preferences: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+        DateTime, nullable=False, default=lambda: datetime.now(UTC).replace(tzinfo=None)
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
-        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
-    last_login: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    
+    last_login: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     # Relationships
     push_subscriptions: Mapped[list["PushSubscription"]] = relationship(
         "PushSubscription", back_populates="user", cascade="all, delete-orphan"
@@ -83,7 +81,7 @@ class User(Base):
     reading_progress: Mapped[list["ReadingProgress"]] = relationship(
         "ReadingProgress", back_populates="user", cascade="all, delete-orphan"
     )
-    
+
     __table_args__ = (
         # Index for login lookups
         Index("ix_users_username_active", "username", "is_active"),
@@ -114,28 +112,28 @@ class ReadingProgress(Base):
     chapter_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("chapters.id", ondelete="CASCADE"), nullable=False
     )
-    
+
     # Reading state
     last_page_read: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_pages: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    
+
     # Timestamps
     started_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+        DateTime, nullable=False, default=lambda: datetime.now(UTC).replace(tzinfo=None)
     )
     last_read_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
-        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="reading_progress")
     chapter: Mapped["Chapter"] = relationship("Chapter")
-    
+
     __table_args__ = (
         # Unique constraint for user-chapter combination
         UniqueConstraint("user_id", "chapter_id", name="uq_reading_progress_user_chapter"),
@@ -163,7 +161,7 @@ series_tags = Table(
     Column(
         "created_at",
         DateTime,
-        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
         nullable=False,
     ),
     # Composite index for efficient querying
@@ -184,21 +182,21 @@ class Tag(Base):
 
     id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    color: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)  # Hex color code #RRGGBB
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    color: Mapped[str | None] = mapped_column(String(7), nullable=True)  # Hex color code #RRGGBB
 
     # Usage statistics
     usage_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, index=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+        DateTime, nullable=False, default=lambda: datetime.now(UTC).replace(tzinfo=None)
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
-        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
 
     # Relationships
@@ -220,26 +218,26 @@ class Series(Base):
     __tablename__ = "series"
 
     id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    user_id: Mapped[Optional[UUID]] = mapped_column(
+    user_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
     )
     title_primary: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
-    title_alternative: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    author: Mapped[Optional[str]] = mapped_column(String(200), nullable=True, index=True)
-    artist: Mapped[Optional[str]] = mapped_column(String(200), nullable=True, index=True)
+    title_alternative: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    author: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+    artist: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
     genres: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     tags: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
-    publication_status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
-    content_rating: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    publication_status: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    content_rating: Mapped[str | None] = mapped_column(String(20), nullable=True)
     language: Mapped[str] = mapped_column(String(10), nullable=False, default="en")
 
     # File system information
-    file_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    cover_image_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    file_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cover_image_path: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # External source information
-    mangadx_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, unique=True)
+    mangadx_id: Mapped[str | None] = mapped_column(String(36), nullable=True, unique=True)
     source_metadata: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     # User customization
@@ -249,7 +247,7 @@ class Series(Base):
     # Watching configuration
     watching_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     watching_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    last_watched_check: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_watched_check: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Statistics
     total_chapters: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -257,13 +255,13 @@ class Series(Base):
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+        DateTime, nullable=False, default=lambda: datetime.now(UTC).replace(tzinfo=None)
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
-        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
 
     # Relationships
@@ -287,8 +285,8 @@ class Chapter(Base):
 
     # Chapter identification
     chapter_number: Mapped[float] = mapped_column(nullable=False, index=True)
-    volume_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
-    title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    volume_number: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    title: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # File system information
     file_path: Mapped[str] = mapped_column(Text, nullable=False)
@@ -296,24 +294,24 @@ class Chapter(Base):
     page_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     # External source information
-    mangadx_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, unique=True)
+    mangadx_id: Mapped[str | None] = mapped_column(String(36), nullable=True, unique=True)
     source_metadata: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     # Reading progress
     is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
     last_read_page: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    started_reading_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    started_reading_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+        DateTime, nullable=False, default=lambda: datetime.now(UTC).replace(tzinfo=None)
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
-        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
 
     # Relationships
@@ -351,7 +349,7 @@ class Annotation(Base):
 
     # Annotation content
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    page_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Metadata
     annotation_type: Mapped[str] = mapped_column(
@@ -359,21 +357,21 @@ class Annotation(Base):
     )  # note, bookmark, highlight
 
     # Position fields for page-specific placement (normalized 0-1)
-    position_x: Mapped[Optional[float]] = mapped_column(nullable=True)
-    position_y: Mapped[Optional[float]] = mapped_column(nullable=True)
+    position_x: Mapped[float | None] = mapped_column(nullable=True)
+    position_y: Mapped[float | None] = mapped_column(nullable=True)
 
     # Color field for annotation customization (hex format)
-    color: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)
+    color: Mapped[str | None] = mapped_column(String(7), nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+        DateTime, nullable=False, default=lambda: datetime.now(UTC).replace(tzinfo=None)
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
-        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
 
     # Relationships
@@ -407,18 +405,18 @@ class UserList(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     series_ids: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+        DateTime, nullable=False, default=lambda: datetime.now(UTC).replace(tzinfo=None)
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
-        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
 
 
@@ -431,17 +429,17 @@ class LibraryPath(Base):
     path: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     scan_interval_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
-    last_scan: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_scan: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+        DateTime, nullable=False, default=lambda: datetime.now(UTC).replace(tzinfo=None)
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
-        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
 
 
@@ -459,9 +457,9 @@ class JobQueue(Base):
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0, index=True)
 
     # Execution tracking
-    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     max_retries: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
 
@@ -469,19 +467,19 @@ class JobQueue(Base):
     scheduled_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
         index=True,
     )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+        DateTime, nullable=False, default=lambda: datetime.now(UTC).replace(tzinfo=None)
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
-        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
 
     __table_args__ = (
@@ -522,8 +520,8 @@ class FileOperation(Base):
 
     # File paths
     source_path: Mapped[str] = mapped_column(Text, nullable=False)
-    target_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    backup_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    target_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    backup_path: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Affected database records
     affected_series_ids: Mapped[list[str]] = mapped_column(
@@ -539,24 +537,24 @@ class FileOperation(Base):
     rollback_data: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     # Error handling
-    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     max_retries: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
 
     # Timing
-    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    validated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+        DateTime, nullable=False, default=lambda: datetime.now(UTC).replace(tzinfo=None)
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
-        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
 
     __table_args__ = (
@@ -593,22 +591,22 @@ class Notification(Base):
     message: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Optional relationships to series and chapter
-    series_id: Mapped[Optional[UUID]] = mapped_column(
+    series_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("series.id", ondelete="SET NULL"), nullable=True
     )
-    chapter_id: Mapped[Optional[UUID]] = mapped_column(
+    chapter_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("chapters.id", ondelete="SET NULL"), nullable=True
     )
 
     # Read status tracking
     is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
-    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
         index=True,
     )
 
@@ -641,7 +639,7 @@ class PushSubscription(Base):
     id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid4, nullable=False
     )
-    
+
     # User relationship
     user_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
@@ -654,7 +652,7 @@ class PushSubscription(Base):
     keys: Mapped[dict] = mapped_column(JSONB, nullable=False)
 
     # User agent of the subscribing browser
-    user_agent: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Subscription status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -663,23 +661,23 @@ class PushSubscription(Base):
     failure_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # Subscription expiration
-    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None), nullable=False
     )
-    last_used: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_used: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
-        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
         nullable=False,
     )
-    
+
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="push_subscriptions")
-    
+
     __table_args__ = (
         # Unique constraint on user_id + endpoint combination
         UniqueConstraint("user_id", "endpoint", name="uq_push_subscription_user_endpoint"),
