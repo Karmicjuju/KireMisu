@@ -17,7 +17,7 @@ import { ChapterResponse, chaptersApi } from '@/lib/api';
 import { mutate } from 'swr';
 import { toast } from 'sonner';
 import { BookOpen, Calendar, FileText, Play, ChevronRight, Clock, Check } from 'lucide-react';
-// import { formatDistanceToNow, format } from 'date-fns'; // Temporarily disabled to prevent build errors
+import { formatDistanceToNow } from 'date-fns';
 
 export interface ChapterListProps {
   chapters: ChapterResponse[];

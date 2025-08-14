@@ -96,8 +96,7 @@ export function ServiceWorkerRegistration() {
         const handleControllerChange = () => {
           console.log('Service worker controller changed');
           setSwState(prev => ({ ...prev, isUpdating: false }));
-          // Don't auto-reload to prevent infinite reload loop during first installation
-          // window.location.reload();
+          // Service worker controller changed - ready for use
         };
 
         navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
