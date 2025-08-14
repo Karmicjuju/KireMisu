@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     auth_rate_limit_attempts: int = Field(default=5, description="Max auth attempts per IP")
     auth_rate_limit_window_minutes: int = Field(default=30, description="Auth rate limit window")
     
+    # General rate limiting
+    general_rate_limit_per_minute: int = Field(default=120, description="General API requests per minute per IP")
+    general_rate_limit_per_hour: int = Field(default=3600, description="General API requests per hour per IP")
+    general_rate_limit_burst: int = Field(default=20, description="General API burst limit per IP")
+    
     # Admin user configuration
     default_admin_username: str = Field(default="admin", description="Default admin username")
     default_admin_password: str = Field(default="", description="Default admin password (set via env)")

@@ -44,8 +44,6 @@ PASSWORD_PATTERNS = {
 
 # Rate limiting for authentication
 _auth_attempts: Dict[str, List[datetime]] = {}
-MAX_AUTH_ATTEMPTS = 5
-AUTH_WINDOW_MINUTES = 30
 
 
 def validate_password_complexity(password: str) -> List[str]:
@@ -81,6 +79,19 @@ def validate_password_complexity(password: str) -> List[str]:
     
     return errors
 
+def clear_auth_rate_limits(client_ip: Optional[str] = None) -> None:
+    """Clear authentication rate limit data for testing/development.
+    
+    Args:
+        client_ip: Specific IP to clear, or None to clear all
+    """
+    if client_ip:
+        _auth_attempts.pop(client_ip, None)
+        logger.info(f"Cleared auth rate limits for IP: {client_ip}")
+    else:
+        _auth_attempts.clear()
+        logger.info("Cleared all auth rate limits")
+
 def check_auth_rate_limit(client_ip: str) -> bool:
     """Check if authentication attempts are within rate limits.
     
@@ -91,7 +102,7 @@ def check_auth_rate_limit(client_ip: str) -> bool:
         True if within limits, False if rate limited
     """
     now = datetime.utcnow()
-    cutoff_time = now - timedelta(minutes=AUTH_WINDOW_MINUTES)
+    cutoff_time = now - timedelta(minutes=settings.auth_rate_limit_window_minutes)
     
     # Clean old attempts
     if client_ip in _auth_attempts:
@@ -103,7 +114,7 @@ def check_auth_rate_limit(client_ip: str) -> bool:
         _auth_attempts[client_ip] = []
     
     # Check if limit exceeded
-    if len(_auth_attempts[client_ip]) >= MAX_AUTH_ATTEMPTS:
+    if len(_auth_attempts[client_ip]) >= settings.auth_rate_limit_attempts:
         logger.warning(f"Authentication rate limit exceeded for IP: {client_ip}")
         return False
     

@@ -11,76 +11,33 @@ echo "🚀 Starting KireMisu Backend..."
 echo "⏳ Waiting for database connection..."
 sleep 10
 
-# Function to check if database is ready
-check_db() {
-    python -c "
-import asyncio
-import sys
-from kiremisu.database.connection import get_db_session
-from sqlalchemy import text
-
-async def test_connection():
-    try:
-        async with get_db_session() as session:
-            await session.execute(text('SELECT 1'))
-        return True
-    except Exception as e:
-        print(f'Database connection failed: {e}')
-        return False
-
-result = asyncio.run(test_connection())
-sys.exit(0 if result else 1)
-"
+# Simple database connection check with curl
+check_db_simple() {
+    # Use curl to check if postgres is responding on port 5432
+    nc -z postgres 5432 >/dev/null 2>&1
 }
 
 # Wait for database with retries
-echo "🔄 Testing database connection..."
+echo "🔄 Waiting for database to be ready..."
 for i in {1..30}; do
-    if check_db; then
-        echo "✅ Database connection successful"
+    if check_db_simple; then
+        echo "✅ Database port accessible"
         break
     fi
     echo "⏳ Database not ready, waiting... (attempt $i/30)"
     sleep 2
+    if [ $i -eq 30 ]; then
+        echo "⚠️  Database check failed, but continuing with startup..."
+        break
+    fi
 done
 
 # Run database migrations
 echo "📊 Running database migrations..."
 cd /app/backend && uv run alembic upgrade head && cd /app
 
-# Create admin user if environment variables are set
-if [[ -n "$DEFAULT_ADMIN_USERNAME" && -n "$DEFAULT_ADMIN_PASSWORD" ]]; then
-    echo "👤 Creating admin user..."
-    python -c "
-import asyncio
-import os
-from kiremisu.database.connection import get_db_session
-from kiremisu.core.auth import create_user_db
-
-async def create_admin():
-    try:
-        async with get_db_session() as session:
-            admin_user = await create_user_db(
-                db=session,
-                username=os.environ['DEFAULT_ADMIN_USERNAME'],
-                email=os.environ.get('DEFAULT_ADMIN_EMAIL', 'admin@kiremisu.local'),
-                password=os.environ['DEFAULT_ADMIN_PASSWORD'],
-                is_admin=True
-            )
-            print(f'✅ Admin user created: {admin_user.username}')
-    except ValueError as e:
-        if 'already' in str(e).lower():
-            print('ℹ️  Admin user already exists')
-        else:
-            print(f'❌ Failed to create admin user: {e}')
-    except Exception as e:
-        print(f'❌ Error creating admin user: {e}')
-
-asyncio.run(create_admin())
-"
-else
-    echo "⚠️  No admin user credentials provided in environment variables"
-fi
+# Admin user creation will be handled by the FastAPI app on startup
+echo "ℹ️  Admin user creation will be handled by FastAPI app startup"
 
 echo "🎉 Backend initialization complete!"
 

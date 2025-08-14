@@ -190,14 +190,34 @@ class FilesystemParser:
             try:
                 for item in directory.iterdir():
                     if item.is_dir():
-                        # Check if directory contains manga files
-                        has_manga_files = any(
+                        # Check if directory contains manga files directly
+                        has_manga_files_directly = any(
                             f.suffix.lower() in ALL_SUPPORTED_FORMATS
                             for f in item.iterdir()
                             if f.is_file()
                         )
-                        if has_manga_files:
+                        
+                        # Check if directory contains subdirectories with manga files (chapter directories)
+                        has_chapter_directories = False
+                        if not has_manga_files_directly:
+                            try:
+                                for subdir in item.iterdir():
+                                    if subdir.is_dir():
+                                        has_images_in_subdir = any(
+                                            f.suffix.lower() in ALL_SUPPORTED_FORMATS
+                                            for f in subdir.iterdir()
+                                            if f.is_file()
+                                        )
+                                        if has_images_in_subdir:
+                                            has_chapter_directories = True
+                                            break
+                            except (PermissionError, OSError):
+                                pass
+                        
+                        # Add directory as candidate if it has manga files directly or chapter subdirectories
+                        if has_manga_files_directly or has_chapter_directories:
                             local_candidates.append(item)
+                            
                     elif (
                         item.is_file()
                         and item.suffix.lower()
