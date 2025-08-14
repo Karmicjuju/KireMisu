@@ -20,38 +20,42 @@ help:
 	@echo "  clean                    - Clean coverage reports and build artifacts"
 	@echo ""
 
+# Environment variables for development testing
+export SECRET_KEY ?= kiremisu-dev-secret-key-12345-very-long-key-for-testing-purposes
+export DATABASE_URL ?= postgresql://kiremisu:kiremisu@localhost:5432/kiremisu_dev
+
 # Run all tests
 test:
-	pytest
+	uv run pytest
 
 # Unit tests coverage
 test-coverage-unit:
 	@echo "Running unit tests with coverage..."
-	COVERAGE_CONTEXT=unit pytest -m "unit" --cov=kiremisu --cov-report=html --cov-report=term-missing
+	COVERAGE_CONTEXT=unit uv run pytest -m "unit" --cov=kiremisu --cov-report=html --cov-report=term-missing
 	@echo "Unit test coverage report generated in htmlcov/unit/"
 
 # Integration tests coverage  
 test-coverage-integration:
 	@echo "Running integration tests with coverage..."
-	COVERAGE_CONTEXT=integration pytest -m "integration" --cov=kiremisu --cov-report=html --cov-report=term-missing
+	COVERAGE_CONTEXT=integration uv run pytest -m "integration" --cov=kiremisu --cov-report=html --cov-report=term-missing
 	@echo "Integration test coverage report generated in htmlcov/integration/"
 
 # API tests coverage
 test-coverage-api:
 	@echo "Running API tests with coverage..."
-	COVERAGE_CONTEXT=api pytest -m "api" --cov=kiremisu --cov-report=html --cov-report=term-missing
+	COVERAGE_CONTEXT=api uv run pytest -m "api" --cov=kiremisu --cov-report=html --cov-report=term-missing
 	@echo "API test coverage report generated in htmlcov/api/"
 
 # Security tests coverage
 test-coverage-security:
 	@echo "Running security tests with coverage..."  
-	COVERAGE_CONTEXT=security pytest -m "security" --cov=kiremisu --cov-report=html --cov-report=term-missing
+	COVERAGE_CONTEXT=security uv run pytest -m "security" --cov=kiremisu --cov-report=html --cov-report=term-missing
 	@echo "Security test coverage report generated in htmlcov/security/"
 
 # All tests coverage (existing behavior)
 test-coverage-all:
 	@echo "Running all tests with coverage..."
-	COVERAGE_CONTEXT=combined pytest --cov=kiremisu --cov-report=html --cov-report=term-missing
+	COVERAGE_CONTEXT=combined uv run pytest --cov=kiremisu --cov-report=html --cov-report=term-missing
 	@echo "Combined test coverage report generated in htmlcov/combined/"
 
 # Generate comparison report (depends on having some coverage data)

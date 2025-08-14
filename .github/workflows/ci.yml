@@ -1,0 +1,312 @@
+name: CI Pipeline
+
+# Required GitHub Secrets:
+# - DB_USERNAME: Database username for testing (e.g., 'kiremisu')  
+# - DB_PASSWORD: Database password for testing (e.g., 'secure_test_password')
+# - ADMIN_USERNAME: Admin user for application (should be 'admin')
+# - ADMIN_PASSWORD: Admin password for application (should be 'KireMisu2025!')
+# 
+# Optional Secrets:
+# - CODECOV_TOKEN: Token for code coverage reporting (recommended)
+
+on:
+  push:
+    branches-ignore:
+      - main
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
+
+env:
+  SECRET_KEY: ${{ secrets.SECRET_KEY }}
+  DATABASE_URL: postgresql://${{ secrets.DB_USERNAME }}:${{ secrets.DB_PASSWORD }}@localhost:5432/kiremisu_test
+  DB_USERNAME: ${{ secrets.DB_USERNAME }}
+  DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+  ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
+  ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+
+jobs:
+  backend-unit-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python and install dependencies
+        run: |
+          uv python install 3.13
+          uv sync --dev
+
+      - name: Add uv tools to PATH
+        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install backend tools
+        run: |
+          uv tool install ruff
+          uv tool install mypy
+
+      - name: Run linting (ruff check)
+        run: ruff check . --output-format=github
+
+      - name: Run formatting check (ruff format)
+        run: ruff format --check .
+
+      - name: Run type checking (mypy)
+        run: mypy backend/kiremisu
+
+      - name: Run unit tests only
+        run: |
+          # Run unit tests without database dependencies (using marker-based approach to match current workflow)
+          uv run pytest -m "unit" -v --cov=kiremisu --cov-report=xml --cov-report=term-missing
+
+      - name: Upload unit test coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: backend-unit
+          name: backend-unit-coverage
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: ./frontend
+        run: npm run lint
+
+      - name: Run TypeScript type checking
+        working-directory: ./frontend
+        run: npm run type-check
+
+      - name: Run frontend unit tests
+        working-directory: ./frontend
+        run: npm run test:coverage
+
+      - name: Upload frontend coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./frontend/coverage/lcov.info
+          flags: frontend
+          name: frontend-coverage
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  backend-database-tests:
+    runs-on: ubuntu-latest
+    needs: [backend-unit-tests]
+    
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: kiremisu_test
+          POSTGRES_USER: ${{ secrets.DB_USERNAME }}
+          POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python and install dependencies
+        run: |
+          uv python install 3.13
+          uv sync --dev
+
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          echo "Waiting for PostgreSQL to be ready..."
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U ${{ secrets.DB_USERNAME }}; then
+              echo "✅ PostgreSQL is ready"
+              break
+            fi
+            echo "⏳ PostgreSQL not ready, waiting... (attempt $i/30)"
+            sleep 2
+            if [ $i -eq 30 ]; then
+              echo "❌ PostgreSQL failed to become ready"
+              exit 1
+            fi
+          done
+
+      - name: Verify database setup
+        run: |
+          PGPASSWORD="${{ secrets.DB_PASSWORD }}" psql -h localhost -U ${{ secrets.DB_USERNAME }} -d kiremisu_test -c "SELECT version();"
+          echo "✅ Database connection verified"
+
+      # === MIGRATION TESTING ===
+      - name: Test forward migrations
+        working-directory: ./backend
+        run: |
+          PYTHONPATH=../backend:$PYTHONPATH uv run alembic upgrade head
+          echo "✅ Forward migrations completed successfully"
+
+      - name: Test rollback migrations
+        working-directory: ./backend
+        run: |
+          PYTHONPATH=../backend:$PYTHONPATH uv run alembic downgrade -1
+          echo "✅ Rollback migration completed successfully"
+
+      - name: Test migration reversibility
+        working-directory: ./backend
+        run: |
+          PYTHONPATH=../backend:$PYTHONPATH uv run alembic upgrade head
+          echo "✅ Re-upgrade after rollback completed"
+          
+          PYTHONPATH=../backend:$PYTHONPATH uv run alembic downgrade base
+          echo "✅ Complete rollback to base completed"
+          
+          PYTHONPATH=../backend:$PYTHONPATH uv run alembic upgrade head
+          echo "✅ Full migration cycle test completed"
+
+      - name: Verify migration history
+        working-directory: ./backend
+        run: |
+          PYTHONPATH=../backend:$PYTHONPATH uv run alembic history --verbose
+          echo "✅ Migration history verified"
+
+      # === DATABASE & INTEGRATION TESTING ===
+      - name: Run database tests
+        run: |
+          uv run pytest tests/database/ -v --cov=kiremisu --cov-report=xml --cov-report=term-missing
+
+      - name: Run integration tests
+        run: |
+          uv run pytest -m "integration" -v --cov=kiremisu --cov-append --cov-report=xml --cov-report=term-missing
+
+      - name: Run API tests
+        run: |
+          uv run pytest -m "api" -v --cov=kiremisu --cov-append --cov-report=xml --cov-report=term-missing
+
+      - name: Upload database & integration coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: backend-database
+          name: backend-database-coverage
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  frontend-integration-tests:
+    runs-on: ubuntu-latest
+    needs: [frontend-tests]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Run frontend integration tests
+        working-directory: ./frontend
+        run: |
+          npm run test tests/integration/ -- --coverage --coverageReporters=lcov
+        continue-on-error: true
+
+      - name: Upload frontend integration coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          file: ./frontend/coverage/lcov.info
+          flags: frontend-integration
+          name: frontend-integration-coverage
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: [backend-database-tests, frontend-integration-tests]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend Docker image
+        run: |
+          docker build \
+            --build-arg ADMIN_USERNAME="${{ secrets.ADMIN_USERNAME }}" \
+            --build-arg ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" \
+            -f backend/Dockerfile \
+            -t kiremisu-backend:test \
+            .
+
+      - name: Build frontend Docker image
+        run: |
+          docker build \
+            -f frontend/Dockerfile \
+            -t kiremisu-frontend:test \
+            frontend/
+
+      - name: Test Docker images
+        run: |
+          echo "✅ Backend image built successfully"
+          docker images | grep kiremisu-backend
+          echo "✅ Frontend image built successfully"  
+          docker images | grep kiremisu-frontend
+
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: [docker-build]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
