@@ -27,6 +27,9 @@ security = HTTPBearer(auto_error=False)
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
+# Authentication rate limiting
+AUTH_WINDOW_MINUTES = 15  # Rate limiting window in minutes
+
 # Password hashing - Use bcrypt with cost factor 12 for security
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
 

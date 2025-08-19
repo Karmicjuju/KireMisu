@@ -14,6 +14,7 @@ from sqlalchemy import and_, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.database.models import JobQueue, LibraryPath
+from kiremisu.database.schemas import MangaDxChapterResponse
 from kiremisu.services.mangadx_client import MangaDxClient
 
 logger = logging.getLogger(__name__)
@@ -764,7 +765,7 @@ class DownloadService:
             if os.path.exists(chapter_file_path):
                 try:
                     os.remove(chapter_file_path)
-                except:
+                except OSError:
                     pass
             raise DownloadError(f"CBZ creation failed: {e}")
 
@@ -801,7 +802,7 @@ class DownloadService:
                     parts.append(f"c{int(ch_num):04d}")
                 else:
                     parts.append(f"c{ch_num:07.1f}")
-            except:
+            except (ValueError, AttributeError):
                 parts.append(f"c{chapter_data.attributes.chapter}")
 
         if chapter_data.attributes.title:

@@ -7,11 +7,12 @@ particularly focused on polling operations, background jobs, and API performance
 import logging
 import time
 from collections import defaultdict, deque
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from threading import Lock
-from typing import Any, AsyncGenerator
+from typing import Any
 from uuid import UUID
 
 logger = logging.getLogger(__name__)
@@ -204,7 +205,7 @@ class MetricsCollector:
     @asynccontextmanager
     async def track_polling_operation(
         self, operation_type: str, series_id: UUID | None = None, series_count: int = 0
-    ) -> AsyncGenerator[Any, None]:
+    ) -> AsyncGenerator[Any]:
         """Context manager for tracking polling operations.
 
         Usage:

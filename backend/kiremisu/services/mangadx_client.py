@@ -3,11 +3,20 @@
 import asyncio
 import logging
 import time
-from typing import Any
+
+# Import types for forward references
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin
 
 import httpx
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from kiremisu.database.schemas import (
+        MangaDxAtHomeResponse,
+        MangaDxChapterListResponse,
+        MangaDxDownloadedChapter,
+    )
 
 logger = logging.getLogger(__name__)
 
