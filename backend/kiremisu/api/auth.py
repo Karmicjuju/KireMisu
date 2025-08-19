@@ -1,7 +1,7 @@
 """Secure authentication API endpoints."""
 
 import logging
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field, field_validator
@@ -37,6 +37,9 @@ from kiremisu.database.connection import get_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
+
+# Dependency type alias to avoid B008 violations
+DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
 # Request/Response Models
@@ -202,7 +205,7 @@ async def login(
     request: LoginRequest,
     http_request: Request,
     response: Response,
-    db: AsyncSession = Depends(get_db)
+    db: DbSession
 ):
     """Authenticate user with environment-based auth method.
 
@@ -282,7 +285,7 @@ async def login(
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Authentication service temporarily unavailable",
-            )
+            ) from e
 
         logger.info(f"JWT login successful: {user.username}")
 
@@ -298,7 +301,7 @@ async def login(
 async def register_user(
     request: UserRegistrationRequest,
     http_request: Request,
-    db: AsyncSession = Depends(get_db)
+    db: DbSession
 ):
     """Register a new user account.
 
@@ -359,19 +362,19 @@ async def register_user(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Registration error for {request.username}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Registration service temporarily unavailable",
-        )
+        ) from e
 
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(
     request: Request,
-    db: AsyncSession = Depends(get_db)
+    db: DbSession
 ):
     """Get current authenticated user information."""
     user = await get_current_user(request, db)
@@ -392,7 +395,7 @@ async def get_current_user_info(
 async def logout(
     request: Request,
     response: Response,
-    db: AsyncSession = Depends(get_db)
+    db: DbSession
 ):
     """Logout user using environment-appropriate method."""
     import os
@@ -437,7 +440,7 @@ async def logout(
 async def change_password(
     change_request: ChangePasswordRequest,
     request: Request,
-    db: AsyncSession = Depends(get_db)
+    db: DbSession
 ):
     """Change user password."""
     user = await get_current_user(request, db)
@@ -477,7 +480,7 @@ async def change_password(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Password change service temporarily unavailable",
-        )
+        ) from e
 
 
 @router.post("/validate-password", response_model=PasswordValidationResponse)
@@ -493,7 +496,7 @@ async def validate_password(request: PasswordValidationRequest):
 @router.post("/cleanup")
 async def cleanup_auth_data(
     request: Request,
-    db: AsyncSession = Depends(get_db)
+    db: DbSession
 ):
     """Clean up old authentication data (admin only)."""
     try:
@@ -506,13 +509,13 @@ async def cleanup_auth_data(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Cleanup service temporarily unavailable",
-        )
+        ) from e
 
 
 @router.post("/clear-rate-limits")
 async def clear_rate_limits(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: DbSession,
     client_ip: str | None = None
 ):
     """Clear authentication rate limits (admin only, for development/testing)."""
@@ -531,4 +534,4 @@ async def clear_rate_limits(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Rate limit service temporarily unavailable",
-        )
+        ) from e
