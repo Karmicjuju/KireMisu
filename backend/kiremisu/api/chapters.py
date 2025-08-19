@@ -6,6 +6,7 @@ import zipfile
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Annotated
 from uuid import UUID
 
 import fitz  # PyMuPDF
@@ -37,12 +38,18 @@ SUPPORTED_IMAGE_FORMATS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".t
 
 router = APIRouter(prefix="/api/chapters", tags=["chapters"])
 
+# Dependency type aliases to avoid B008 violations
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+CurrentUser = Annotated[dict, Depends(get_current_user)]
+SkipQuery = Annotated[int, Query(0, ge=0, description="Number of chapters to skip")]
+LimitQuery = Annotated[int, Query(100, ge=1, le=1000, description="Number of chapters to return")]
+
 
 @router.get("/{chapter_id}", response_model=ChapterResponse)
 async def get_chapter(
     chapter_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    db: DbSession,
+    current_user: CurrentUser
 ) -> ChapterResponse:
     """Get chapter details by ID."""
     result = await db.execute(
@@ -57,7 +64,7 @@ async def get_chapter(
 
 
 @router.get("/{chapter_id}/pages/{page_number}")
-async def get_chapter_page(chapter_id: UUID, page_number: int, db: AsyncSession = Depends(get_db)):
+async def get_chapter_page(chapter_id: UUID, page_number: int, db: DbSession):
     """Stream a specific page from a chapter."""
     # Get chapter from database
     result = await db.execute(select(Chapter).where(Chapter.id == chapter_id))
@@ -157,7 +164,7 @@ async def get_chapter_page(chapter_id: UUID, page_number: int, db: AsyncSession 
 
 @router.get("/{chapter_id}/pages", response_model=ChapterPagesInfoResponse)
 async def get_chapter_pages_info(
-    chapter_id: UUID, db: AsyncSession = Depends(get_db)
+    chapter_id: UUID, db: DbSession
 ) -> ChapterPagesInfoResponse:
     """Get information about all pages in a chapter."""
     result = await db.execute(select(Chapter).where(Chapter.id == chapter_id))
@@ -398,9 +405,9 @@ def _get_content_type(filename: str) -> str:
 @router.get("/series/{series_id}/chapters", response_model=list[ChapterResponse])
 async def get_series_chapters(
     series_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    skip: int = Query(0, ge=0, description="Number of chapters to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Number of chapters to return"),
+    db: DbSession,
+    skip: SkipQuery,
+    limit: LimitQuery,
 ) -> list[ChapterResponse]:
     """Get all chapters for a series."""
     # First verify series exists
@@ -425,7 +432,7 @@ async def get_series_chapters(
 
 @router.put("/{chapter_id}/mark-read", response_model=ChapterMarkReadResponse)
 async def toggle_chapter_read_status(
-    chapter_id: UUID, db: AsyncSession = Depends(get_db)
+    chapter_id: UUID, db: DbSession
 ) -> ChapterMarkReadResponse:
     """Toggle chapter read status and update series aggregate."""
     from datetime import datetime
