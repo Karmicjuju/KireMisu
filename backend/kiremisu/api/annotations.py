@@ -1,5 +1,6 @@
 """Annotation API endpoints for KireMisu."""
 
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -19,11 +20,23 @@ from kiremisu.database.schemas import (
 
 router = APIRouter(prefix="/api/annotations", tags=["annotations"])
 
+# Dependency type aliases to avoid B008 violations
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+IncludeChapter = Annotated[bool, Query(False, description="Include chapter information")]
+OptionalChapterId = Annotated[UUID | None, Query(None, description="Filter by chapter ID")]
+OptionalAnnotationType = Annotated[str | None, Query(None, description="Filter by annotation type")]
+OptionalPageNumber = Annotated[int | None, Query(None, description="Filter by page number")]
+LimitQuery = Annotated[int, Query(50, ge=1, le=200, description="Maximum number of annotations to return")]
+OffsetQuery = Annotated[int, Query(0, ge=0, description="Number of annotations to skip")]
+OptionalPageNumberFilter = Annotated[int | None, Query(None, description="Filter by specific page")]
+DeleteAnnotationType = Annotated[str | None, Query(None, description="Delete only specific annotation type")]
+DeletePageNumber = Annotated[int | None, Query(None, description="Delete only annotations on specific page")]
+
 
 @router.post("/", response_model=AnnotationResponse, status_code=201)
 async def create_annotation(
     annotation_data: AnnotationCreate,
-    db: AsyncSession = Depends(get_db),
+    db: DbSession,
 ) -> AnnotationResponse:
     """Create a new annotation for a chapter."""
     # Verify chapter exists
@@ -61,8 +74,8 @@ async def create_annotation(
 @router.get("/{annotation_id}", response_model=AnnotationResponse)
 async def get_annotation(
     annotation_id: UUID,
-    include_chapter: bool = Query(False, description="Include chapter information"),
-    db: AsyncSession = Depends(get_db),
+    include_chapter: IncludeChapter,
+    db: DbSession,
 ) -> AnnotationResponse:
     """Get a specific annotation by ID."""
     query = select(Annotation).where(Annotation.id == annotation_id)
@@ -82,7 +95,7 @@ async def get_annotation(
 async def update_annotation(
     annotation_id: UUID,
     annotation_data: AnnotationUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: DbSession,
 ) -> AnnotationResponse:
     """Update an existing annotation."""
     result = await db.execute(select(Annotation).where(Annotation.id == annotation_id))
@@ -129,7 +142,7 @@ async def update_annotation(
 @router.delete("/{annotation_id}", status_code=204)
 async def delete_annotation(
     annotation_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: DbSession,
 ) -> None:
     """Delete an annotation."""
     result = await db.execute(select(Annotation).where(Annotation.id == annotation_id))
@@ -143,12 +156,12 @@ async def delete_annotation(
 
 @router.get("/", response_model=AnnotationListResponse)
 async def list_annotations(
-    chapter_id: UUID | None = Query(None, description="Filter by chapter ID"),
-    annotation_type: str | None = Query(None, description="Filter by annotation type"),
-    page_number: int | None = Query(None, description="Filter by page number"),
-    limit: int = Query(50, ge=1, le=200, description="Maximum number of annotations to return"),
-    offset: int = Query(0, ge=0, description="Number of annotations to skip"),
-    db: AsyncSession = Depends(get_db),
+    chapter_id: OptionalChapterId,
+    annotation_type: OptionalAnnotationType,
+    page_number: OptionalPageNumber,
+    limit: LimitQuery,
+    offset: OffsetQuery,
+    db: DbSession,
 ) -> AnnotationListResponse:
     """List annotations with optional filtering."""
     query = select(Annotation)
@@ -184,9 +197,9 @@ async def list_annotations(
 @router.get("/chapters/{chapter_id}", response_model=ChapterAnnotationsResponse)
 async def get_chapter_annotations(
     chapter_id: UUID,
-    annotation_type: str | None = Query(None, description="Filter by annotation type"),
-    page_number: int | None = Query(None, description="Filter by specific page"),
-    db: AsyncSession = Depends(get_db),
+    annotation_type: OptionalAnnotationType,
+    page_number: OptionalPageNumberFilter,
+    db: DbSession,
 ) -> ChapterAnnotationsResponse:
     """Get all annotations for a specific chapter, grouped by page."""
     # Verify chapter exists
@@ -216,8 +229,8 @@ async def get_chapter_annotations(
 async def get_page_annotations(
     chapter_id: UUID,
     page_number: int,
-    annotation_type: str | None = Query(None, description="Filter by annotation type"),
-    db: AsyncSession = Depends(get_db),
+    annotation_type: OptionalAnnotationType,
+    db: DbSession,
 ) -> list[AnnotationResponse]:
     """Get all annotations for a specific page in a chapter."""
     # Verify chapter exists
@@ -259,7 +272,7 @@ async def create_page_annotation(
     chapter_id: UUID,
     page_number: int,
     annotation_data: AnnotationCreate,
-    db: AsyncSession = Depends(get_db),
+    db: DbSession,
 ) -> AnnotationResponse:
     """Create an annotation for a specific page (convenience endpoint)."""
     # Override the chapter_id and page_number from the URL
@@ -273,13 +286,9 @@ async def create_page_annotation(
 @router.delete("/chapters/{chapter_id}", status_code=204)
 async def delete_chapter_annotations(
     chapter_id: UUID,
-    annotation_type: str | None = Query(
-        None, description="Delete only specific annotation type"
-    ),
-    page_number: int | None = Query(
-        None, description="Delete only annotations on specific page"
-    ),
-    db: AsyncSession = Depends(get_db),
+    annotation_type: DeleteAnnotationType,
+    page_number: DeletePageNumber,
+    db: DbSession,
 ) -> None:
     """Delete all annotations for a chapter (with optional filtering)."""
     # Verify chapter exists
