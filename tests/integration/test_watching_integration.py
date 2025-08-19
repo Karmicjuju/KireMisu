@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiremisu.database.models import Chapter, JobQueue, Notification, Series

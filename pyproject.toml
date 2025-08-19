@@ -68,6 +68,7 @@ ignore = [
     "E501",  # line too long, handled by line-length setting
     "B008",  # function calls in defaults - fix gradually during feature development
     "B904",  # exception chaining - fix gradually
+    "B017",  # blind exception assertions in tests - acceptable in test scenarios
 ]
 
 [tool.ruff.format]

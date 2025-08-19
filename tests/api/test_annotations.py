@@ -38,7 +38,7 @@ class TestAnnotationAPI:
         assert "created_at" in data
         assert "updated_at" in data
 
-    def test_create_annotation_invalid_chapter(self, db_session):
+    def test_create_annotation_invalid_chapter(self, client: AsyncClient, db_session):
         """Test creating annotation with invalid chapter ID."""
         annotation_data = {
             "chapter_id": str(UUID('00000000-0000-0000-0000-000000000000')),
@@ -50,7 +50,7 @@ class TestAnnotationAPI:
         assert response.status_code == 404
         assert "Chapter not found" in response.json()["detail"]
 
-    def test_create_annotation_invalid_page_number(self, db_session, sample_series_with_chapters):
+    def test_create_annotation_invalid_page_number(self, client: AsyncClient, db_session, sample_series_with_chapters):
         """Test creating annotation with invalid page number."""
         series, chapters = sample_series_with_chapters
         chapter = chapters[0]
@@ -66,7 +66,7 @@ class TestAnnotationAPI:
         assert response.status_code == 400
         assert "Page number must be between" in response.json()["detail"]
 
-    def test_get_annotation(self, db_session, sample_annotation):
+    def test_get_annotation(self, client: AsyncClient, db_session, sample_annotation):
         """Test retrieving an annotation."""
         annotation = sample_annotation
 
@@ -78,7 +78,7 @@ class TestAnnotationAPI:
         assert data["content"] == annotation.content
         assert data["annotation_type"] == annotation.annotation_type
 
-    def test_get_annotation_with_chapter(self, db_session, sample_annotation):
+    def test_get_annotation_with_chapter(self, client: AsyncClient, db_session, sample_annotation):
         """Test retrieving an annotation with chapter information."""
         annotation = sample_annotation
 
@@ -90,12 +90,12 @@ class TestAnnotationAPI:
         assert "chapter" in data
         assert data["chapter"]["id"] == str(annotation.chapter_id)
 
-    def test_get_annotation_not_found(self, db_session):
+    def test_get_annotation_not_found(self, client: AsyncClient, db_session):
         """Test retrieving non-existent annotation."""
         response = client.get(f"/api/annotations/{UUID('00000000-0000-0000-0000-000000000000')}")
         assert response.status_code == 404
 
-    def test_update_annotation(self, db_session, sample_annotation):
+    def test_update_annotation(self, client: AsyncClient, db_session, sample_annotation):
         """Test updating an annotation."""
         annotation = sample_annotation
 
@@ -113,7 +113,7 @@ class TestAnnotationAPI:
         assert data["annotation_type"] == update_data["annotation_type"]
         assert data["color"] == update_data["color"]
 
-    def test_delete_annotation(self, db_session, sample_annotation):
+    def test_delete_annotation(self, client: AsyncClient, db_session, sample_annotation):
         """Test deleting an annotation."""
         annotation = sample_annotation
 
@@ -124,7 +124,7 @@ class TestAnnotationAPI:
         response = client.get(f"/api/annotations/{annotation.id}")
         assert response.status_code == 404
 
-    def test_list_annotations(self, db_session, sample_annotations):
+    def test_list_annotations(self, client: AsyncClient, db_session, sample_annotations):
         """Test listing annotations."""
         annotations = sample_annotations
 
@@ -136,7 +136,7 @@ class TestAnnotationAPI:
         assert "total" in data
         assert len(data["annotations"]) == len(annotations)
 
-    def test_list_annotations_filtered_by_chapter(self, db_session, sample_annotations):
+    def test_list_annotations_filtered_by_chapter(self, client: AsyncClient, db_session, sample_annotations):
         """Test listing annotations filtered by chapter."""
         annotations = sample_annotations
         chapter_id = annotations[0].chapter_id
@@ -149,7 +149,7 @@ class TestAnnotationAPI:
         assert len(data["annotations"]) == len(chapter_annotations)
         assert data["chapter_id"] == str(chapter_id)
 
-    def test_list_annotations_filtered_by_type(self, db_session, sample_annotations):
+    def test_list_annotations_filtered_by_type(self, client: AsyncClient, db_session, sample_annotations):
         """Test listing annotations filtered by type."""
         annotations = sample_annotations
 
@@ -161,7 +161,7 @@ class TestAnnotationAPI:
         assert len(data["annotations"]) == len(note_annotations)
         assert data["annotation_type"] == "note"
 
-    def test_get_chapter_annotations(self, db_session, sample_annotations):
+    def test_get_chapter_annotations(self, client: AsyncClient, db_session, sample_annotations):
         """Test getting all annotations for a chapter."""
         annotations = sample_annotations
         chapter_id = annotations[0].chapter_id
@@ -179,7 +179,7 @@ class TestAnnotationAPI:
         chapter_annotations = [a for a in annotations if a.chapter_id == chapter_id]
         assert len(data["annotations"]) == len(chapter_annotations)
 
-    def test_get_page_annotations(self, db_session, sample_annotations):
+    def test_get_page_annotations(self, client: AsyncClient, db_session, sample_annotations):
         """Test getting annotations for a specific page."""
         annotations = sample_annotations
         chapter_id = annotations[0].chapter_id
@@ -195,7 +195,7 @@ class TestAnnotationAPI:
         ]
         assert len(data) == len(page_annotations)
 
-    def test_create_page_annotation(self, db_session, sample_series_with_chapters):
+    def test_create_page_annotation(self, client: AsyncClient, db_session, sample_series_with_chapters):
         """Test creating annotation for specific page."""
         series, chapters = sample_series_with_chapters
         chapter = chapters[0]
@@ -218,7 +218,7 @@ class TestAnnotationAPI:
         assert data["page_number"] == page_number
         assert data["chapter_id"] == str(chapter.id)
 
-    def test_delete_chapter_annotations(self, db_session, sample_annotations):
+    def test_delete_chapter_annotations(self, client: AsyncClient, db_session, sample_annotations):
         """Test deleting all annotations for a chapter."""
         annotations = sample_annotations
         chapter_id = annotations[0].chapter_id

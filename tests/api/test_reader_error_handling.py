@@ -1,5 +1,6 @@
 """Test reader API error handling scenarios."""
 
+import asyncio
 import os
 import tempfile
 import zipfile
@@ -279,7 +280,7 @@ class TestReaderErrorHandling:
         with patch("os.path.exists", return_value=True):
             with patch("asyncio.get_event_loop") as mock_loop:
                 # Simulate timeout
-                mock_loop.return_value.run_in_executor.side_effect = asyncio.TimeoutError(
+                mock_loop.return_value.run_in_executor.side_effect = TimeoutError(
                     "Operation timed out"
                 )
 
@@ -403,7 +404,6 @@ class TestReaderErrorHandling:
         self, client: AsyncClient, sample_series_and_chapter
     ):
         """Test resource exhaustion with many concurrent page requests."""
-        import asyncio
 
         _, chapter = sample_series_and_chapter
 

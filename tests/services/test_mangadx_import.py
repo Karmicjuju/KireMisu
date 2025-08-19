@@ -346,7 +346,7 @@ class TestMangaDxImportService:
         mock_db_session.rollback.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_search_and_match_series_success(self, import_service, sample_local_series):
+    async def test_search_and_match_series_success(self, import_service, sample_local_series, sample_mangadx_manga):
         """Test successful series matching."""
         mock_db_session = AsyncMock(spec=AsyncSession)
 
