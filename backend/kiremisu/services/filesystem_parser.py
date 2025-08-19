@@ -21,6 +21,7 @@ import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import fitz  # PyMuPDF
 import rarfile
@@ -512,7 +513,7 @@ class FilesystemParser:
         def _count_pdf_pages(path: Path) -> int:
             try:
                 doc = fitz.open(str(path))
-                page_count = doc.page_count
+                page_count = int(doc.page_count)
                 doc.close()
                 return page_count
             except Exception:
@@ -595,11 +596,11 @@ class FilesystemParser:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(self.io_pool, _find_cover, directory)
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "FilesystemParser":
         """Async context manager entry."""
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: type | None, exc_val: Exception | None, exc_tb: Any) -> None:
         """Async context manager exit - cleanup thread pools."""
         self.cpu_pool.shutdown(wait=True)
         self.io_pool.shutdown(wait=True)

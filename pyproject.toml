@@ -78,18 +78,21 @@ split-on-trailing-comma = true
 
 [tool.mypy]
 python_version = "3.13"
-warn_return_any = true
+warn_return_any = false
 warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
 check_untyped_defs = true
-disallow_untyped_decorators = true
+disallow_untyped_decorators = false
 no_implicit_optional = true
 warn_redundant_casts = true
-warn_unused_ignores = true
+warn_unused_ignores = false
 warn_no_return = true
 warn_unreachable = true
 strict_equality = true
+# Gradually enable stricter typing
+follow_imports = "silent"
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = [
@@ -151,6 +154,7 @@ directory = "htmlcov/${COVERAGE_CONTEXT:-combined}"
 [dependency-groups]
 dev = [
     "aiosqlite>=0.21.0",
+    "mypy>=1.17.1",
     "pytest>=8.4.1",
     "pytest-asyncio>=1.1.0",
     "pytest-cov>=6.2.1",

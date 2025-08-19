@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from threading import Lock
-from typing import Any
+from typing import Any, AsyncGenerator
 from uuid import UUID
 
 logger = logging.getLogger(__name__)
@@ -153,7 +153,7 @@ class MetricsCollector:
         chapters_processed: int = 0,
         notifications_created: int = 0,
         external_api_calls: int = 0,
-    ):
+    ) -> None:
         """Finish tracking a polling operation.
 
         Args:
@@ -204,7 +204,7 @@ class MetricsCollector:
     @asynccontextmanager
     async def track_polling_operation(
         self, operation_type: str, series_id: UUID | None = None, series_count: int = 0
-    ):
+    ) -> AsyncGenerator[Any, None]:
         """Context manager for tracking polling operations.
 
         Usage:
@@ -218,7 +218,7 @@ class MetricsCollector:
 
         # Create a tracker object for updating metrics
         class PollingTracker:
-            def __init__(self):
+            def __init__(self) -> None:
                 self.chapters_processed = 0
                 self.notifications_created = 0
                 self.external_api_calls = 0
@@ -272,7 +272,7 @@ class MetricsCollector:
 
     def record_api_request_end(
         self, metric: APIMetric, status_code: int, response_size_bytes: int = 0
-    ):
+    ) -> None:
         """Finish tracking an API request.
 
         Args:
@@ -304,7 +304,7 @@ class MetricsCollector:
                 self.gauges.get("api.total_response_bytes", 0) + response_size_bytes
             )
 
-    def increment_counter(self, name: str, value: int = 1):
+    def increment_counter(self, name: str, value: int = 1) -> None:
         """Increment a named counter.
 
         Args:
@@ -314,7 +314,7 @@ class MetricsCollector:
         with self._lock:
             self.counters[name] += value
 
-    def set_gauge(self, name: str, value: float):
+    def set_gauge(self, name: str, value: float) -> None:
         """Set a named gauge value.
 
         Args:
@@ -346,7 +346,7 @@ class MetricsCollector:
 
             # Calculate API metrics
             total_api = len(self.api_metrics)
-            api_status_counts = defaultdict(int)
+            api_status_counts: defaultdict[int, int] = defaultdict(int)
             for metric in self.api_metrics:
                 if metric.status_code:
                     api_status_counts[metric.status_code] += 1
@@ -365,10 +365,10 @@ class MetricsCollector:
             total_api_requests=total_api,
             api_requests_by_status=dict(api_status_counts),
             average_api_response_time_ms=avg_api_duration,
-            active_background_jobs=self.gauges.get("jobs.active", 0),
-            pending_background_jobs=self.gauges.get("jobs.pending", 0),
+            active_background_jobs=int(self.gauges.get("jobs.active", 0)),
+            pending_background_jobs=int(self.gauges.get("jobs.pending", 0)),
             completed_jobs_last_hour=self.counters.get("jobs.completed.last_hour", 0),
-            watched_series_count=self.gauges.get("watching.series_count", 0),
+            watched_series_count=int(self.gauges.get("watching.series_count", 0)),
             series_checked_last_hour=self.counters.get("watching.checks.last_hour", 0),
             notifications_sent_last_hour=self.counters.get("notifications.sent.last_hour", 0),
         )
@@ -438,7 +438,7 @@ class MetricsCollector:
             "p99": sorted_values[int(count * 0.99)] if count > 0 else 0,
         }
 
-    def reset_metrics(self):
+    def reset_metrics(self) -> None:
         """Reset all collected metrics (useful for testing)."""
         with self._lock:
             self.polling_metrics.clear()
