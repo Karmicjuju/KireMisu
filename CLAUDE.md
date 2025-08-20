@@ -36,3 +36,5 @@ For new development sessions, start with:
 ---
 
 *This migration was completed on 2025-08-16. Backup of original files available in `/docs/backup-[timestamp]/`*
+
+- activate the local .venv before running any builds or tests
