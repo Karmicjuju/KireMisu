@@ -213,3 +213,10 @@ temp/
 *_TEST_COVERAGE*.md
 *_API_CONTRACT.md
 QUICK_TEST.md
+# Prevent temporary documentation accumulation
+*_SUMMARY.md
+*_IMPLEMENTATION_SUMMARY.md
+*_TEST_COVERAGE*.md
+*_API_CONTRACT.md
+QUICK_TEST.md
+SESSION_*.md
