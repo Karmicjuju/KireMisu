@@ -112,6 +112,32 @@ npx -y @modelcontextprotocol/server-filesystem /tmp
 npx -y mcp-playwright --help
 ```
 
+## Security Considerations
+
+### File System Access Controls
+- **Principle of Least Privilege:** Filesystem server restricted to essential directories only
+- **Excluded Patterns:** Sensitive files (.git, .env*, node_modules) explicitly blocked
+- **Read-Only Operations:** Agents limited to read-only access where possible
+- **Path Validation:** Use relative paths to prevent directory traversal attacks
+
+### Agent Security Boundaries
+- **Scope Restrictions:** Each agent limited to its specific functional area
+- **Operation Constraints:** No system command execution or package installation
+- **Data Protection:** No access to credentials, environment variables, or sensitive configurations
+- **Network Isolation:** Restricted external API access for testing endpoints only
+
+### Configuration Security
+```json
+{
+  "filesystem": {
+    "args": [
+      "--allowed-directories", "./frontend", "./backend", "./docs", "./.claude/docs",
+      "--excluded-patterns", ".git/**", ".env*", "node_modules/**", "dist/**", "build/**"
+    ]
+  }
+}
+```
+
 ## Configuration Best Practices
 
 1. **Keep global config minimal** - Project-specific servers in `.claude/mcp.json`
@@ -119,6 +145,7 @@ npx -y mcp-playwright --help
 3. **Cross-platform paths** - Document platform-specific configurations  
 4. **Regular updates** - Keep MCP packages updated
 5. **Authentication** - Use environment variables for tokens
+6. **Security First** - Always implement least-privilege access controls
 
 ## Maintenance
 

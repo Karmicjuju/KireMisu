@@ -12,7 +12,19 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-filesystem",
-        "C:\\Users\\karmic\\Documents\\source\\kiremisu"
+        "./",
+        "--allowed-directories",
+        "./frontend",
+        "./backend",
+        "./docs",
+        "./.claude/docs",
+        "--excluded-patterns",
+        ".git/**",
+        ".env*",
+        "node_modules/**",
+        "dist/**",
+        "build/**",
+        ".venv/**"
       ]
     },
     "playwright": {
