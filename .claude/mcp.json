@@ -1,14 +1,31 @@
 {
   "servers": {
-    "github": {
+    "memory": {
       "command": "npx",
       "args": [
         "-y",
-        "@github/github-mcp-server"
-      ],
-      "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
-      }
+        "@modelcontextprotocol/server-memory"
+      ]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "./",
+        "--allowed-directories",
+        "./frontend",
+        "./backend",
+        "./docs",
+        "./.claude/docs",
+        "--excluded-patterns",
+        ".git/**",
+        ".env*",
+        "node_modules/**",
+        "dist/**",
+        "build/**",
+        ".venv/**"
+      ]
     },
     "playwright": {
       "command": "npx",
