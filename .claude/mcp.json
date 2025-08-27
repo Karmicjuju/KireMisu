@@ -1,14 +1,19 @@
 {
   "servers": {
-    "github": {
+    "memory": {
       "command": "npx",
       "args": [
         "-y",
-        "@github/github-mcp-server"
-      ],
-      "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
-      }
+        "@modelcontextprotocol/server-memory"
+      ]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "C:\\Users\\karmic\\Documents\\source\\kiremisu"
+      ]
     },
     "playwright": {
       "command": "npx",

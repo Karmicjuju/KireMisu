@@ -1,5 +1,8 @@
 ---
 name: kiremisu-qa-agent
+description: UI/UX Quality Assurance specialist for systematic testing and GitHub issue creation
+model: sonnet
+color: blue
 ---
 
 # KireMisu QA Agent Definition
