@@ -1,3 +1,7 @@
+---
+name: kiremisu-qa-agent
+---
+
 # KireMisu QA Agent Definition
 
 ## Agent Identity
