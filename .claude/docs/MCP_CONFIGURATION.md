@@ -18,7 +18,19 @@ This document describes the Model Context Protocol (MCP) server configuration fo
       "args": [
         "-y", 
         "@modelcontextprotocol/server-filesystem",
-        "C:\\Users\\karmic\\Documents\\source\\kiremisu"
+        "./",
+        "--allowed-directories",
+        "./frontend",
+        "./backend", 
+        "./docs",
+        "./.claude/docs",
+        "--excluded-patterns",
+        ".git/**",
+        ".env*",
+        "node_modules/**",
+        "dist/**",
+        "build/**",
+        ".venv/**"
       ]
     },
     "playwright": {
@@ -130,9 +142,23 @@ npx -y mcp-playwright --help
 ```json
 {
   "filesystem": {
+    "command": "npx",
     "args": [
-      "--allowed-directories", "./frontend", "./backend", "./docs", "./.claude/docs",
-      "--excluded-patterns", ".git/**", ".env*", "node_modules/**", "dist/**", "build/**"
+      "-y",
+      "@modelcontextprotocol/server-filesystem",
+      "./",
+      "--allowed-directories",
+      "./frontend",
+      "./backend", 
+      "./docs",
+      "./.claude/docs",
+      "--excluded-patterns",
+      ".git/**",
+      ".env*",
+      "node_modules/**",
+      "dist/**",
+      "build/**",
+      ".venv/**"
     ]
   }
 }
