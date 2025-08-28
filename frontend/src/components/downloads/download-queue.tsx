@@ -35,6 +35,7 @@ interface DownloadQueueProps {
   downloads: DownloadJobResponse[];
   stats: DownloadQueueStats;
   loading: boolean;
+  refreshing: boolean;
   onCancel: (jobId: string) => Promise<void>;
   onRetry: (jobId: string) => Promise<void>;
   onDelete: (jobId: string) => Promise<void>;
@@ -47,6 +48,7 @@ export function DownloadQueue({
   downloads,
   stats,
   loading,
+  refreshing,
   onCancel,
   onRetry,
   onDelete,
@@ -207,10 +209,10 @@ export function DownloadQueue({
                 variant="outline"
                 size="sm"
                 onClick={onRefresh}
-                disabled={loading}
+                disabled={refreshing}
                 className="flex items-center gap-2"
               >
-                <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+                <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
                 Refresh
               </Button>
 
@@ -286,8 +288,8 @@ export function DownloadQueue({
 
       {/* Downloads List */}
       <div className="space-y-4">
-        {loading && downloads.length === 0 ? (
-          // Loading state
+        {loading && (stats.total === undefined || stats.total === null) ? (
+          // Loading state - only show when stats haven't loaded yet
           <GlassCard className="p-12 text-center">
             <div className="flex items-center justify-center gap-3 text-white/60">
               <RefreshCw className="h-5 w-5 animate-spin" />
