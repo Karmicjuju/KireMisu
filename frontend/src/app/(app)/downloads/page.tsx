@@ -19,6 +19,7 @@ export default function Downloads() {
     downloads, 
     stats, 
     loading, 
+    refreshing,
     error, 
     refetch, 
     performAction, 
@@ -124,10 +125,10 @@ export default function Downloads() {
             variant="outline"
             size="sm"
             onClick={refetch}
-            disabled={loading}
+            disabled={refreshing}
             className="flex items-center gap-2"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
           <Button 
@@ -206,6 +207,7 @@ export default function Downloads() {
           downloads={downloads}
           stats={stats}
           loading={loading}
+          refreshing={refreshing}
           onCancel={handleCancel}
           onRetry={handleRetry}
           onDelete={handleDelete}

@@ -42,6 +42,7 @@ interface UseDownloadsReturn {
   };
   pagination?: DownloadJobListResponse['pagination'];
   loading: boolean;
+  refreshing: boolean;
   error: string | null;
   refetch: () => Promise<void>;
   createDownload: (request: DownloadJobRequest) => Promise<DownloadJobResponse | null>;
@@ -74,8 +75,10 @@ export function useDownloads(options: UseDownloadsOptions = {}): UseDownloadsRet
     completed_downloads: 0,
   });
   const [pagination, setPagination] = useState<DownloadJobListResponse['pagination']>();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Start with loading true for initial load
+  const [refreshing, setRefreshing] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isVisible, setIsVisible] = useState(true);
   const { toast } = useToast();
@@ -118,9 +121,8 @@ export function useDownloads(options: UseDownloadsOptions = {}): UseDownloadsRet
     abortControllerRef.current = new AbortController();
 
     try {
-      // Show loading only on initial load or recent user actions
-      const isInitialOrUserAction = initialLoad || (Date.now() - lastUserActionRef.current < 2000);
-      if (isInitialOrUserAction) {
+      // Show loading only on initial load - background polling is silent
+      if (initialLoad) {
         setLoading(true);
       }
       setError(null);
@@ -149,6 +151,8 @@ export function useDownloads(options: UseDownloadsOptions = {}): UseDownloadsRet
       
       if (initialLoad) {
         setInitialLoad(false);
+        setHasLoadedOnce(true);
+        setLoading(false); // Only clear loading after initial load completes
       }
     } catch (err) {
       // Ignore abort errors
@@ -160,11 +164,13 @@ export function useDownloads(options: UseDownloadsOptions = {}): UseDownloadsRet
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch downloads';
       setError(errorMessage);
       console.error('Failed to fetch downloads:', err);
-      throw err; // Re-throw for adaptive polling error handling
-    } finally {
-      if (mountedRef.current) {
+      
+      // Clear loading state on error during initial load
+      if (initialLoad) {
         setLoading(false);
+        setHasLoadedOnce(true);
       }
+      throw err; // Re-throw for adaptive polling error handling
     }
   }, [status, download_type, page, per_page, enabled, initialLoad]);
 
@@ -284,8 +290,12 @@ export function useDownloads(options: UseDownloadsOptions = {}): UseDownloadsRet
 
   // Memoize refetch function to prevent unnecessary re-renders
   const refetch = useCallback(async () => {
-    lastUserActionRef.current = Date.now();
-    await adaptivePolling.pollNow();
+    setRefreshing(true);
+    try {
+      await adaptivePolling.pollNow();
+    } finally {
+      setRefreshing(false);
+    }
   }, [adaptivePolling]);
 
   return useMemo(() => ({
@@ -293,6 +303,7 @@ export function useDownloads(options: UseDownloadsOptions = {}): UseDownloadsRet
     stats,
     pagination,
     loading,
+    refreshing,
     error,
     refetch,
     createDownload,
@@ -316,6 +327,7 @@ export function useDownloads(options: UseDownloadsOptions = {}): UseDownloadsRet
     stats,
     pagination,
     loading,
+    refreshing,
     error,
     refetch,
     createDownload,
