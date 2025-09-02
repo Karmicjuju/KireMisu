@@ -1,0 +1,56 @@
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose*
+.dockerignore
+
+# Development
+.env*
+!.env.example
+.vscode
+.idea
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+env/
+
+# Build artifacts
+.next/
+out/
+dist/
+build/
+*.egg-info/
+
+# Testing
+coverage/
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# DevContainer
+.devcontainer/
+DEV_SETUP.md

@@ -1,13 +1,16 @@
 {
-  "servers": {
+  "mcpServers": {
     "memory": {
+      "type": "stdio",
       "command": "npx",
       "args": [
         "-y",
         "@modelcontextprotocol/server-memory"
-      ]
+      ],
+      "env": {}
     },
     "filesystem": {
+      "type": "stdio",
       "command": "npx",
       "args": [
         "-y",
@@ -25,14 +28,23 @@
         "dist/**",
         "build/**",
         ".venv/**"
-      ]
+      ],
+      "env": {}
     },
     "playwright": {
+      "type": "stdio",
       "command": "npx",
       "args": [
         "-y",
         "mcp-playwright"
-      ]
+      ],
+      "env": {}
+    },
+    "npm": {
+      "type": "stdio",
+      "command": "mcp-playwright",
+      "args": [],
+      "env": {}
     }
   }
 }
