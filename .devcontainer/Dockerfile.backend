@@ -1,0 +1,95 @@
+# Use Python 3.12 as the base image
+FROM python:3.12-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install system dependencies for manga file processing and development
+RUN apt-get update && apt-get install -y \
+    # Build tools
+    build-essential \
+    curl \
+    git \
+    # PostgreSQL client
+    postgresql-client \
+    # Image processing libraries
+    libpng-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
+    libtiff5-dev \
+    # Archive handling
+    unrar-free \
+    unzip \
+    p7zip-full \
+    # PDF processing
+    libpoppler-dev \
+    libmupdf-dev \
+    # Other utilities
+    zsh \
+    sudo \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create vscode user
+RUN groupadd --gid 1000 vscode \
+    && useradd --uid 1000 --gid vscode --shell /bin/zsh --create-home vscode \
+    && echo 'vscode ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+# Install UV (fast Python package manager)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.cargo/bin:$PATH"
+
+# Create UV installation directory and symlink for vscode user
+RUN mkdir -p /opt/uv/bin && \
+    ln -s /root/.cargo/bin/uv /opt/uv/bin/uv && \
+    ln -s /root/.cargo/bin/uvx /opt/uv/bin/uvx
+
+# Install global Python development tools with UV
+RUN /root/.cargo/bin/uv tool install ruff && \
+    /root/.cargo/bin/uv tool install mypy && \
+    /root/.cargo/bin/uv tool install pytest && \
+    /root/.cargo/bin/uv tool install pre-commit
+
+# Create symlinks for development tools
+RUN ln -s /root/.local/bin/ruff /opt/uv/bin/ruff && \
+    ln -s /root/.local/bin/mypy /opt/uv/bin/mypy && \
+    ln -s /root/.local/bin/pytest /opt/uv/bin/pytest && \
+    ln -s /root/.local/bin/pre-commit /opt/uv/bin/pre-commit
+
+# Install Node.js (needed for some Python tools and to work alongside frontend)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs
+
+# Install pnpm
+RUN npm install -g pnpm
+
+# Set up workspace directory
+WORKDIR /workspace
+
+# Switch to vscode user
+USER vscode
+
+# Set up zsh for vscode user
+RUN sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+
+# Create Python virtual environment in workspace
+RUN mkdir -p /home/vscode/.cache/uv
+
+# Set up environment variables for the vscode user
+ENV PATH="/opt/uv/bin:$PATH" \
+    PYTHONPATH="/workspace/backend"
+
+# Create a basic Python environment setup script
+RUN echo '#!/bin/bash\n\
+cd /workspace/backend && \n\
+if [ -f "requirements.txt" ]; then \n\
+    uv pip install -r requirements.txt \n\
+elif [ -f "pyproject.toml" ]; then \n\
+    uv pip install -e . \n\
+fi' > /home/vscode/setup-python.sh && \
+    chmod +x /home/vscode/setup-python.sh
+
+# Default command
+CMD ["sleep", "infinity"]

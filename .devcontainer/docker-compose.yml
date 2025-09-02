@@ -1,0 +1,93 @@
+version: '3.8'
+
+# Load environment variables from .env.devcontainer if it exists
+# Otherwise use defaults (./dev-manga, ./dev-thumbnails, ./dev-processed)
+services:
+  # Main development container
+  devcontainer:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    volumes:
+      - ../:/workspace:cached
+      - kiremisu-uv-cache:/home/vscode/.cache/uv
+      - kiremisu-node-modules:/workspace/frontend/node_modules
+      # Bind mount manga library directories (read-write for downloads)
+      - ${MANGA_LIBRARY_PATH:-./dev-manga}:/manga                # Manga library with download capability
+      - ${THUMBNAILS_PATH:-./dev-thumbnails}:/thumbnails         # Generated thumbnails cache
+      - ${PROCESSED_DATA_PATH:-./dev-processed}:/processed       # Processed manga metadata
+    environment:
+      # Backend environment
+      - DATABASE_URL=postgresql://kiremisu:development@postgres:5432/kiremisu
+      - SECRET_KEY=development-secret-key-change-in-production
+      - LOG_LEVEL=DEBUG
+      - PYTHONPATH=/workspace/backend
+      
+      # Manga library paths
+      - MANGA_LIBRARY_PATH=/manga
+      - THUMBNAILS_PATH=/thumbnails
+      - PROCESSED_DATA_PATH=/processed
+      
+      # Frontend environment
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      
+    depends_on:
+      - postgres
+    network_mode: service:postgres
+    command: sleep infinity
+
+  # Node.js service for frontend development
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    volumes:
+      - ../:/workspace:cached
+      - kiremisu-node-modules:/workspace/frontend/node_modules
+      # Bind mount manga library directories (read-only for frontend)
+      - ${MANGA_LIBRARY_PATH:-./dev-manga}:/manga:ro
+      - ${THUMBNAILS_PATH:-./dev-thumbnails}:/thumbnails:ro
+    working_dir: /workspace/frontend
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      # Manga library paths for frontend
+      - MANGA_LIBRARY_PATH=/manga
+      - THUMBNAILS_PATH=/thumbnails
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+    command: sh -c "pnpm install && pnpm dev"
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kiremisu
+      POSTGRES_USER: kiremisu
+      POSTGRES_PASSWORD: development
+    ports:
+      - "5432:5432"
+      - "3000:3000"  # Forwarded for frontend
+      - "8000:8000"  # Forwarded for backend
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kiremisu -d kiremisu"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
+  kiremisu-uv-cache:
+  kiremisu-node-modules:
+  # Note: Manga library now uses bind mounts instead of volumes
+  # Configure paths via environment variables:
+  # - MANGA_LIBRARY_PATH: Path to your manga collection
+  # - THUMBNAILS_PATH: Path for generated thumbnails  
+  # - PROCESSED_DATA_PATH: Path for processed metadata
