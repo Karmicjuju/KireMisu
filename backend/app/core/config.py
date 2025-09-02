@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     DATABASE_URL: Optional[str] = None
     
     # Security
-    SECRET_KEY: str = "development-secret-key-change-in-production"
+    SECRET_KEY: str  # Required environment variable - no default for security
     
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8080"]
@@ -39,11 +39,16 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return v
         # Fallback to environment variables if DATABASE_URL not set
-        postgres_user = os.getenv("POSTGRES_USER", "kiremisu")
-        postgres_password = os.getenv("POSTGRES_PASSWORD", "development")
+        # SECURITY: No default passwords - all credentials must be explicitly set
+        postgres_user = os.getenv("POSTGRES_USER")
+        postgres_password = os.getenv("POSTGRES_PASSWORD")
         postgres_server = os.getenv("POSTGRES_SERVER", "postgres")
         postgres_port = os.getenv("POSTGRES_PORT", "5432")
         postgres_db = os.getenv("POSTGRES_DB", "kiremisu")
+        
+        if not postgres_user or not postgres_password:
+            raise ValueError("POSTGRES_USER and POSTGRES_PASSWORD environment variables are required")
+        
         return f"postgresql://{postgres_user}:{postgres_password}@{postgres_server}:{postgres_port}/{postgres_db}"
 
     class Config:
