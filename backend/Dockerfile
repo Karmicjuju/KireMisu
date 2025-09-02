@@ -1,0 +1,30 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv for faster Python package management
+RUN pip install uv
+
+# Copy dependency files
+COPY pyproject.toml ./
+
+# Install Python dependencies
+RUN uv pip install --system -r pyproject.toml
+
+# Copy application code
+COPY . .
+
+# Create directories for volumes
+RUN mkdir -p /manga /thumbnails /processed
+
+# Expose port
+EXPOSE 8000
+
+# Development command (overridden in docker-compose)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
