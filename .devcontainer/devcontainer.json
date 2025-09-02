@@ -1,0 +1,151 @@
+{
+  "name": "KireMisu Full-Stack Development",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "devcontainer",
+  "workspaceFolder": "/workspace",
+  
+  // Configure which service to use for VS Code
+  "shutdownAction": "stopCompose",
+  
+  // Features to install in the development container
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "configureZshAsDefaultShell": true,
+      "installOhMyZsh": true,
+      "username": "vscode",
+      "userUid": "1000",
+      "userGid": "1000"
+    },
+    "ghcr.io/devcontainers/features/git:1": {
+      "ppa": true,
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {
+      "installDirectlyFromGitHubRelease": true,
+      "version": "latest"
+    }
+  },
+  
+  // Configure ports to forward
+  "forwardPorts": [3000, 8000, 5432],
+  "portsAttributes": {
+    "3000": {
+      "label": "Frontend (Next.js)",
+      "onAutoForward": "notify"
+    },
+    "8000": {
+      "label": "Backend API (FastAPI)",
+      "onAutoForward": "notify"
+    },
+    "5432": {
+      "label": "PostgreSQL Database",
+      "onAutoForward": "silent"
+    }
+  },
+  
+  // VS Code customizations
+  "customizations": {
+    "vscode": {
+      "settings": {
+        // Python settings
+        "python.defaultInterpreterPath": "/opt/uv/bin/python",
+        "python.linting.enabled": true,
+        "python.linting.ruffEnabled": true,
+        "python.formatting.provider": "black",
+        "python.formatting.blackPath": "/opt/uv/bin/ruff",
+        "python.sortImports.args": ["--profile", "black"],
+        
+        // TypeScript/Node.js settings
+        "typescript.preferences.importModuleSpecifier": "relative",
+        "typescript.updateImportsOnFileMove.enabled": "always",
+        "eslint.workingDirectories": ["frontend"],
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": true,
+          "source.organizeImports": true
+        },
+        
+        // File associations
+        "files.associations": {
+          "*.env*": "dotenv",
+          "docker-compose*.yml": "dockercompose",
+          "Dockerfile*": "dockerfile"
+        },
+        
+        // Terminal
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "terminal.integrated.profiles.linux": {
+          "zsh": {
+            "path": "/bin/zsh"
+          }
+        }
+      },
+      
+      "extensions": [
+        // Python development
+        "ms-python.python",
+        "ms-python.ruff",
+        "ms-python.mypy-type-checker",
+        
+        // JavaScript/TypeScript development
+        "bradlc.vscode-tailwindcss",
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint",
+        "ms-vscode.vscode-typescript-next",
+        
+        // Database
+        "ms-ossdata.vscode-postgresql",
+        
+        // Docker
+        "ms-azuretools.vscode-docker",
+        "ms-vscode-remote.remote-containers",
+        
+        // Git
+        "eamodio.gitlens",
+        "github.vscode-pull-request-github",
+        
+        // General development
+        "ms-vscode.vscode-json",
+        "redhat.vscode-yaml",
+        "ms-vscode.hexeditor",
+        "christian-kohler.path-intellisense",
+        "formulahendry.auto-rename-tag",
+        "aaron-bond.better-comments",
+        
+        // REST API testing
+        "humao.rest-client",
+        
+        // Markdown
+        "yzhang.markdown-all-in-one"
+      ]
+    }
+  },
+  
+  // Lifecycle scripts
+  "postCreateCommand": ".devcontainer/scripts/post-create.sh",
+  "postStartCommand": ".devcontainer/scripts/post-start.sh",
+  
+  // Development user
+  "remoteUser": "vscode",
+  
+  // Environment variables
+  "containerEnv": {
+    "PYTHONPATH": "/workspace/backend",
+    "NODE_ENV": "development",
+    "DATABASE_URL": "postgresql://kiremisu:development@postgres:5432/kiremisu",
+    "NEXT_PUBLIC_API_URL": "http://localhost:8000",
+    // Manga library paths
+    "MANGA_LIBRARY_PATH": "/manga",
+    "THUMBNAILS_PATH": "/thumbnails", 
+    "PROCESSED_DATA_PATH": "/processed"
+  },
+  
+  // Mount the workspace and preserve file permissions
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+    "source=kiremisu-node-modules,target=/workspace/frontend/node_modules,type=volume",
+    "source=kiremisu-uv-cache,target=/home/vscode/.cache/uv,type=volume"
+  ]
+}

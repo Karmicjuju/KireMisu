@@ -1,0 +1,61 @@
+# Use Node.js 20 as the base image
+FROM node:20-slim
+
+# Set environment variables
+ENV NODE_ENV=development \
+    PNPM_HOME="/pnpm" \
+    PATH="$PNPM_HOME:$PATH"
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    zsh \
+    sudo \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create vscode user
+RUN groupadd --gid 1000 vscode \
+    && useradd --uid 1000 --gid vscode --shell /bin/zsh --create-home vscode \
+    && echo 'vscode ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+# Install pnpm globally
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Install global development tools
+RUN pnpm add -g \
+    eslint \
+    prettier \
+    typescript \
+    @typescript-eslint/parser \
+    @typescript-eslint/eslint-plugin
+
+# Set up workspace directory
+WORKDIR /workspace
+
+# Switch to vscode user
+USER vscode
+
+# Set up zsh for vscode user
+RUN sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+
+# Create cache directories
+RUN mkdir -p /home/vscode/.cache/pnpm
+
+# Set up pnpm configuration for vscode user
+RUN pnpm config set store-dir /home/vscode/.cache/pnpm/store && \
+    pnpm config set cache-dir /home/vscode/.cache/pnpm/cache
+
+# Create a setup script for frontend dependencies
+RUN echo '#!/bin/bash\n\
+cd /workspace/frontend && \n\
+if [ -f "package.json" ]; then \n\
+    echo "Installing frontend dependencies..." && \n\
+    pnpm install \n\
+else \n\
+    echo "No package.json found in /workspace/frontend" \n\
+fi' > /home/vscode/setup-frontend.sh && \
+    chmod +x /home/vscode/setup-frontend.sh
+
+# Default command
+CMD ["sleep", "infinity"]
