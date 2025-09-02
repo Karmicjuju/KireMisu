@@ -4,9 +4,9 @@
 
 | Component | Technology | Primary Rationale |
 |-----------|------------|-------------------|
-| **Backend API** | FastAPI + Python 3.13+ | Async performance, auto-generated docs, type safety |
+| **Backend API** | FastAPI + Python 3.12+ | Async performance, auto-generated docs, type safety |
 | **Database** | PostgreSQL + JSONB | ACID compliance with flexible metadata support |
-| **Frontend** | Next.js 15.4+ + React 19+ + TypeScript | SSR performance, React ecosystem maturity |
+| **Frontend** | Next.js 15.5+ + React 19+ + TypeScript | SSR performance, React ecosystem maturity |
 | **UI Framework** | Tailwind CSS + shadcn/ui | Non-UI developer friendly with component library |
 | **State Management** | Zustand | Minimal API, excellent performance for reading apps |
 | **HTTP Client** | HTTPX | Unified async/sync interface, HTTP/2 support |
@@ -20,7 +20,7 @@
 
 ## Backend Architecture
 
-### FastAPI + Python 3.13+
+### FastAPI + Python 3.12+
 **Why:** FastAPI provides async performance critical for file processing workloads while generating OpenAPI documentation essential for future AI agent integration. Python's rich ecosystem handles manga file formats effectively.
 
 **Key Implementation Pattern:**
@@ -294,8 +294,8 @@ async def process_chapter(file_path: str):
 
 ## Deployment Strategy
 
-### Docker + Kubernetes
-**Why:** Self-hosted users need deployment flexibility from simple Docker Compose to sophisticated Kubernetes. Containerization ensures consistent environments across development and production.
+### Docker
+**Why:** Self-hosted users need deployment flexibility from simple Docker Compose. Containerization ensures consistent environments across development and production.
 
 **Key Architecture:**
 ```yaml
@@ -310,10 +310,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-# Advanced deployment (Kubernetes)
-# - Horizontal scaling for API
-# - Persistent volumes for manga storage  
-# - Separate worker pods for file processing
 ```
 
 **Trade-offs:**
@@ -359,4 +355,4 @@ processor = FileProcessorFactory.create(config.processor_type)
 
 This tech stack prioritizes **rapid MVP delivery** while establishing **clear migration paths** for future optimization. Core decisions emphasize **self-hosted deployment simplicity** and **developer productivity** over premature performance optimization.
 
-The architecture supports evolution from simple Docker deployment for individual users to sophisticated Kubernetes deployment for power users, with file processing performance scaling from Python threading to Rust implementation based on actual usage patterns.
+The architecture supports evolution from simple Docker deployment for individual users, with file processing performance scaling from Python threading to Rust implementation based on actual usage patterns.
