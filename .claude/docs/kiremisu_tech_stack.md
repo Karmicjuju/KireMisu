@@ -1,20 +1,35 @@
-# KireMisu Tech Stack - Final Architecture
+# KireMisu Tech Stack - Complete Architecture
 
 ## High-Level Technology Choices
 
-| Component | Technology | Primary Rationale |
-|-----------|------------|-------------------|
-| **Backend API** | FastAPI + Python 3.12+ | Async performance, auto-generated docs, type safety |
-| **Database** | PostgreSQL + JSONB | ACID compliance with flexible metadata support |
-| **Frontend** | Next.js 15.5+ + React 19+ + TypeScript | SSR performance, React ecosystem maturity |
-| **UI Framework** | Tailwind CSS + shadcn/ui | Non-UI developer friendly with component library |
-| **State Management** | Zustand | Minimal API, excellent performance for reading apps |
-| **HTTP Client** | HTTPX | Unified async/sync interface, HTTP/2 support |
-| **File Processing** | PIL + PyMuPDF + rarfile | Comprehensive manga format support |
-| **Background Jobs** | PostgreSQL-based queue | Eliminates Redis dependency, simpler deployment |
-| **Development Tools** | Ruff + UV + Pre-commit | Modern, fast Python tooling |
-| **Logging** | Structlog + Prometheus | Structured observability for self-hosted environments |
-| **Deployment** | Docker + Kubernetes | Self-hosted flexibility with cloud-native scalability |
+| Component | Technology | Version | Primary Rationale |
+|-----------|------------|---------|-------------------|
+| **Backend API** | FastAPI | 0.115+ | Async performance, auto-generated docs, type safety |
+| **Python Runtime** | Python | 3.12+ | Modern async features, performance improvements |
+| **Database** | PostgreSQL + JSONB | 15+ | ACID compliance with flexible metadata support |
+| **ORM** | SQLAlchemy | 2.0+ | Mature, flexible, excellent PostgreSQL support |
+| **Frontend Framework** | Next.js | 15.5+ | SSR performance, App Router, React Server Components |
+| **UI Library** | React + TypeScript | 19+ / 5.6+ | Component model, type safety, ecosystem |
+| **UI Components** | shadcn/ui + Radix UI | Latest | Accessible, customizable, well-designed |
+| **CSS Framework** | Tailwind CSS | 3.4+ | Utility-first, excellent DX, consistent styling |
+| **State Management** | Zustand | 5.0+ | Minimal API, excellent performance for reading apps |
+| **HTTP Client (Backend)** | HTTPX | 0.27+ | Async support, connection pooling, HTTP/2 |
+| **API Client (Frontend)** | Axios | 1.7+ | Interceptors, request cancellation, TypeScript support |
+| **File Processing** | PIL + PyMuPDF + rarfile | Latest | Comprehensive manga format support |
+| **Background Jobs** | PostgreSQL-based queue | - | Eliminates Redis dependency, simpler deployment |
+| **Package Manager (Python)** | uv | Latest | 10-100x faster than pip, built-in venv management |
+| **Package Manager (JS)** | pnpm | 9.0+ | Efficient disk usage, fast installs, workspace support |
+| **Python Linting** | Ruff | 0.8+ | 10-100x faster than traditional tools, comprehensive |
+| **JS/TS Linting** | ESLint + Prettier | 9.0+ / 3.0+ | Industry standard, TypeScript support |
+| **Testing (Backend)** | pytest + pytest-asyncio | 8.0+ | Powerful fixtures, async support, extensive plugins |
+| **Testing (Frontend)** | Vitest | 2.0+ | Fast, Vite-powered, Jest-compatible |
+| **E2E Testing** | Playwright | 1.49+ | Cross-browser, reliable, great debugging |
+| **Pre-commit Hooks** | pre-commit | 4.0+ | Automated code quality checks |
+| **Logging** | Structlog | 24.0+ | Structured logging, context preservation |
+| **Monitoring** | Prometheus + Grafana | Latest | Self-hosted metrics and visualization |
+| **Containerization** | Docker | 24.0+ | Standard containerization, multi-stage builds |
+| **Orchestration** | Docker Compose | 2.0+ | Simple multi-container deployment |
+| **CI/CD** | GitHub Actions | - | Native GitHub integration, free for public repos |
 
 ---
 
@@ -351,8 +366,164 @@ processor = FileProcessorFactory.create(config.processor_type)
 
 ---
 
+## Development Environment Setup
+
+### Python Environment (Backend)
+```bash
+# Install uv (Python package manager)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create virtual environment and install dependencies
+uv venv
+uv pip install -r requirements.txt
+
+# Run development server
+uv run fastapi dev app/main.py
+```
+
+### Node Environment (Frontend)
+```bash
+# Install pnpm
+npm install -g pnpm
+
+# Install dependencies
+pnpm install
+
+# Run development server
+pnpm dev
+```
+
+### Database Setup
+```bash
+# Start PostgreSQL with Docker
+docker run -d \
+  --name kiremisu-postgres \
+  -e POSTGRES_DB=kiremisu \
+  -e POSTGRES_USER=kiremisu \
+  -e POSTGRES_PASSWORD=development \
+  -p 5432:5432 \
+  postgres:15-alpine
+```
+
+---
+
+## Configuration Management
+
+### Environment Variables
+All configuration via environment variables for 12-factor app compliance:
+
+```bash
+# Backend (.env)
+DATABASE_URL=postgresql://kiremisu:password@localhost/kiremisu
+SECRET_KEY=your-secret-key-here
+MANGADEX_API_URL=https://api.mangadex.org
+STORAGE_PATH=/data/manga
+LOG_LEVEL=INFO
+
+# Frontend (.env.local)
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_APP_NAME=KireMisu
+```
+
+### Configuration Files
+
+#### Backend (pyproject.toml)
+```toml
+[project]
+name = "kiremisu"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "sqlalchemy>=2.0.0",
+    "httpx>=0.27.0",
+    "structlog>=24.0.0",
+    # ... other dependencies
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+select = ["E", "F", "I", "B", "UP", "N", "S"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+asyncio_mode = "auto"
+```
+
+#### Frontend (package.json)
+```json
+{
+  "name": "kiremisu-frontend",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "test": "vitest",
+    "test:e2e": "playwright test",
+    "lint": "eslint . --fix",
+    "format": "prettier --write ."
+  }
+}
+```
+
+---
+
+## Testing Strategy Overview
+
+### Test Pyramid
+1. **Unit Tests** (70%) - Fast, isolated component tests
+2. **Integration Tests** (20%) - API endpoints, database operations
+3. **E2E Tests** (10%) - Critical user journeys only
+
+### Backend Testing
+```python
+# tests/test_api/test_series.py
+import pytest
+from httpx import AsyncClient
+
+@pytest.mark.asyncio
+async def test_get_series(client: AsyncClient):
+    response = await client.get("/api/v1/series")
+    assert response.status_code == 200
+```
+
+### Frontend Testing
+```typescript
+// tests/components/SeriesCard.test.tsx
+import { describe, it, expect } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { SeriesCard } from '@/components/SeriesCard'
+
+describe('SeriesCard', () => {
+  it('renders series title', () => {
+    render(<SeriesCard title="Naruto" />)
+    expect(screen.getByText('Naruto')).toBeInTheDocument()
+  })
+})
+```
+
+### E2E Testing
+```typescript
+// tests/e2e/library.spec.ts
+import { test, expect } from '@playwright/test'
+
+test('user can browse library', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Library' })).toBeVisible()
+})
+```
+
+---
+
 ## Summary
 
-This tech stack prioritizes **rapid MVP delivery** while establishing **clear migration paths** for future optimization. Core decisions emphasize **self-hosted deployment simplicity** and **developer productivity** over premature performance optimization.
+This tech stack prioritizes:
+- **Developer Velocity**: Fast tools (uv, pnpm, Ruff) for rapid iteration
+- **Type Safety**: TypeScript frontend, Pydantic backend for runtime validation
+- **Self-Hosted Simplicity**: Single PostgreSQL database, Docker Compose deployment
+- **Testing Confidence**: Comprehensive test coverage across all layers
+- **Maintainability**: Consistent tooling, automated formatting, clear patterns
 
-The architecture supports evolution from simple Docker deployment for individual users, with file processing performance scaling from Python threading to Rust implementation based on actual usage patterns.
+The architecture supports evolution from simple Docker deployment for individual users to Kubernetes orchestration for advanced deployments, with file processing performance scaling from Python to Rust based on actual usage patterns.
