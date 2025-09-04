@@ -9,13 +9,18 @@ class Settings(BaseSettings):
     VERSION: str = "0.1.0"
     API_V1_STR: str = "/api/v1"
     
+    # Environment
+    ENVIRONMENT: str = "development"
+    
     # Database
     DATABASE_URL: Optional[str] = None
     
     # Security
     SECRET_KEY: str  # Required environment variable - no default for security
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
-    # CORS
+    # CORS - restrictive defaults, override in production
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8080"]
     
     # Storage paths
@@ -26,10 +31,24 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"
     
+    # Rate limiting (configurable per environment)
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_READ_REQUESTS: int = 200
+    RATE_LIMIT_WRITE_REQUESTS: int = 50
+    RATE_LIMIT_SEARCH_REQUESTS: int = 100
+    RATE_LIMIT_WINDOW_SECONDS: int = 3600
+    
     @validator("BACKEND_CORS_ORIGINS", pre=True)
     def assemble_cors_origins(cls, v: str | List[str]) -> List[str]:
         if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
+            origins = [i.strip() for i in v.split(",")]
+            # Security validation: ensure no wildcard origins in production
+            for origin in origins:
+                if origin == "*":
+                    raise ValueError("Wildcard CORS origins (*) are not allowed for security reasons")
+                if not (origin.startswith("http://") or origin.startswith("https://")):
+                    raise ValueError(f"CORS origin must be a valid HTTP/HTTPS URL: {origin}")
+            return origins
         elif isinstance(v, (list, str)):
             return v
         raise ValueError(v)

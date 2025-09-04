@@ -170,3 +170,4 @@ The application manages three main directories:
 - `/processed`: Processed manga metadata
 
 These paths are configured via environment variables and mounted as volumes in Docker.
+- always clean up existing containers and redeploy if you make any changes, never use alternative ports. If you run into a port is already being used then you should assume you need to clean up old containers
