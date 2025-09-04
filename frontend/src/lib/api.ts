@@ -8,21 +8,25 @@ class ApiError extends Error {
 }
 
 async function fetchWithAuth(url: string, options: RequestInit = {}) {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
-  
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   }
   
-  if (token) {
-    (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`
-  }
-  
+  // Include cookies in request - this will send httpOnly auth cookie automatically
   const response = await fetch(`${API_BASE_URL}${url}`, {
     ...options,
     headers,
+    credentials: 'include', // Include cookies in requests
   })
+  
+  // Handle 401 responses by redirecting to login
+  if (response.status === 401) {
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login'
+    }
+    throw new ApiError('Authentication required', 401)
+  }
   
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ detail: 'An error occurred' }))
@@ -43,6 +47,7 @@ export async function login(username: string, password: string) {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: formData.toString(),
+    credentials: 'include', // Include cookies in login request
   })
   
   if (!response.ok) {
@@ -54,8 +59,22 @@ export async function login(username: string, password: string) {
 }
 
 export async function logout() {
-  localStorage.removeItem('token')
-  window.location.href = '/login'
+  try {
+    // Call backend logout endpoint to clear httpOnly cookie
+    await fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+  } catch (error) {
+    // Continue with logout even if API call fails
+    console.warn('Logout API call failed:', error)
+  }
+  
+  // Clear any remaining local storage (from old implementation)
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('token')
+    window.location.href = '/login'
+  }
 }
 
 export async function getCurrentUser() {

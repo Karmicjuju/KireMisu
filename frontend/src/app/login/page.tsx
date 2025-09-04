@@ -38,9 +38,15 @@ export default function LoginPage() {
     try {
       const response = await login(data.username, data.password)
       
+      // With httpOnly cookies, the token is automatically set by the server
+      // No need to manually store it in localStorage anymore
       if (response.access_token) {
-        localStorage.setItem("token", response.access_token)
-        router.push("/")
+        // Check for redirect parameter in URL
+        const searchParams = new URLSearchParams(window.location.search)
+        const redirect = searchParams.get('redirect')
+        
+        // Redirect to the intended page or default to home
+        router.push(redirect || "/")
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid username or password")
