@@ -23,7 +23,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data:; "
             "font-src 'self'; "
-            "connect-src 'self'; "
+            "connect-src 'self' http://localhost:3000; "
             "frame-ancestors 'none'"
         )
         
