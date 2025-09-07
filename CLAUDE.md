@@ -171,3 +171,44 @@ The application manages three main directories:
 
 These paths are configured via environment variables and mounted as volumes in Docker.
 - always clean up existing containers and redeploy if you make any changes, never use alternative ports. If you run into a port is already being used then you should assume you need to clean up old containers
+
+## Iterative Feature Implementation Process
+
+KireMisu follows a structured approach for implementing atomic features from `atomic-features-20250902.md`:
+
+### Implementation Workflow
+
+For each atomic feature, follow this process strictly:
+
+1. **Plan & Context**: Use specialized sub-agents with current project state and specific feature details
+2. **Implement**: Follow acceptance criteria exactly as defined in the atomic features document
+3. **Security Review**: Use security-auditor agent to identify critical/high security issues
+4. **Fix Security Issues**: Address all critical and high severity vulnerabilities before proceeding
+5. **Deploy & Test**: 
+   - Clean and prune old containers
+   - Build and deploy updated containers
+   - Run full test suite (must achieve >80% pass rate)
+6. **Complete**: Update atomic-features-20250902.md with completion status and commit changes
+7. **Next Iteration**: Move to next prioritized feature
+
+### Quality Gates
+
+A feature is only considered complete when:
+- ✅ All acceptance criteria met
+- ✅ No critical or high security vulnerabilities
+- ✅ Old containers pruned and new ones deployed successfully  
+- ✅ Test suite passes with >80% success rate
+- ✅ Feature marked complete in atomic-features-20250902.md
+- ✅ Changes committed to repository
+
+### Agent Usage Strategy
+
+- **Use specialized agents** for complex implementations to manage context better
+- **Pass current state** of the atomic features document to each agent
+- **Provide specific feature details** and acceptance criteria
+- **Use REF MCP** for any documentation research needs
+- **Use security-auditor agent** for mandatory security reviews after implementation
+
+### Alignment
+
+All implementations must align with `.claude/docs/kiremisu_prd.md` and follow the established architecture patterns.
