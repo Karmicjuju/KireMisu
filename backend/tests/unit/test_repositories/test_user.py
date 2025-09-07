@@ -40,7 +40,7 @@ def sample_user_create():
         username="testuser",
         email="test@example.com",
         full_name="Test User",
-        password="testpassword123"
+        password="TestPassword123!"
     )
 
 
@@ -74,7 +74,7 @@ class TestUserRepository:
         duplicate_user = UserCreate(
             username="testuser",  # Same username
             email="different@example.com",
-            password="differentpassword"
+            password="DifferentPassword123!"
         )
         
         with pytest.raises(ValueError, match="Username 'testuser' already exists"):
@@ -91,7 +91,7 @@ class TestUserRepository:
         duplicate_user = UserCreate(
             username="differentuser",
             email="test@example.com",  # Same email
-            password="differentpassword"
+            password="DifferentPassword123!"
         )
         
         with pytest.raises(ValueError, match="Email 'test@example.com' already exists"):

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.database import get_db
 from app.services.user import UserService
-from app.schemas.user import Token, TokenData, UserResponse
+from app.schemas.user import Token, TokenData, UserResponse, UserCreate
 
 router = APIRouter()
 
@@ -69,6 +69,49 @@ async def get_current_active_user(current_user = Depends(get_current_user)):
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
+
+@router.post("/register", response_model=UserResponse)
+async def register(
+    user_data: UserCreate,
+    user_service: UserService = Depends(get_user_service)
+):
+    """Register a new user (limited to single user initially)."""
+    
+    # Check if username already exists
+    if user_service.user_repo.is_username_taken(user_data.username):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already exists"
+        )
+    
+    # Check if email already exists
+    if user_service.user_repo.is_email_taken(user_data.email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already exists"
+        )
+    
+    # Check if any users already exist (single user limit)
+    if user_service.user_repo.get_active_users_count() > 0:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registration is currently limited to a single user"
+        )
+    
+    try:
+        # Create the user (password validation happens in the schema)
+        user = user_service.create_user(user_data)
+        return user
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="User registration failed"
+        )
 
 @router.post("/login", response_model=Token)
 async def login(
