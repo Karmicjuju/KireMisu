@@ -131,13 +131,13 @@ async def login(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
     
-    # Set httpOnly cookie for authentication
+    # Set httpOnly cookie for authentication with environment-based security
     response.set_cookie(
         key="auth-token",
         value=access_token,
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,  # 30 minutes in seconds
         httponly=True,
-        secure=False,  # Set to True in production with HTTPS
+        secure=settings.ENVIRONMENT == "production",  # Secure cookies in production
         samesite="lax"
     )
     
@@ -146,7 +146,11 @@ async def login(
 @router.post("/logout")
 async def logout(response: Response):
     """Logout endpoint - clears the auth cookie."""
-    response.delete_cookie(key="auth-token", samesite="lax")
+    response.delete_cookie(
+        key="auth-token", 
+        secure=settings.ENVIRONMENT == "production",  # Match security setting
+        samesite="lax"
+    )
     return {"message": "Successfully logged out"}
 
 @router.get("/users/me", response_model=UserResponse)

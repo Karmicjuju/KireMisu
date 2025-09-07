@@ -1,8 +1,10 @@
 "use client"
 
 import React, { useState, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import { Sidebar } from './Sidebar'
 import { TopHeader } from './TopHeader'
+import { useAuthStore } from '@/lib/auth-store'
 import { cn } from '@/lib/utils'
 
 interface NavigationLayoutProps {
@@ -13,6 +15,11 @@ interface NavigationLayoutProps {
 export function NavigationLayout({ children, className }: NavigationLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  const pathname = usePathname()
+  const { isAuthenticated } = useAuthStore()
+  
+  // Public routes that don't need authentication
+  const isPublicRoute = pathname === '/login'
 
   useEffect(() => {
     const handleResize = () => {
@@ -27,6 +34,15 @@ export function NavigationLayout({ children, className }: NavigationLayoutProps)
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [])
+
+  // For public routes, show minimal layout
+  if (isPublicRoute) {
+    return (
+      <div className="min-h-screen bg-background">
+        {children}
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background">

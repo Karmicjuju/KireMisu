@@ -9,11 +9,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { login } from "@/lib/api"
+import { useAuthStore } from "@/lib/auth-store"
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
   password: z.string().min(1, "Password is required"),
+  rememberMe: z.boolean(),
 })
 
 type LoginFormValues = z.infer<typeof loginSchema>
@@ -22,12 +25,14 @@ export default function LoginPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { login: authLogin } = useAuthStore()
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
       username: "",
       password: "",
+      rememberMe: false,
     },
   })
 
@@ -39,8 +44,16 @@ export default function LoginPage() {
       const response = await login(data.username, data.password)
       
       // With httpOnly cookies, the token is automatically set by the server
-      // No need to manually store it in localStorage anymore
       if (response.access_token) {
+        // Get user data and store in auth store
+        const { getCurrentUser } = await import('@/lib/api')
+        try {
+          const user = await getCurrentUser()
+          authLogin(user, data.rememberMe)
+        } catch (userError) {
+          console.warn('Failed to get user data after login:', userError)
+        }
+        
         // Check for redirect parameter in URL
         const searchParams = new URLSearchParams(window.location.search)
         const redirect = searchParams.get('redirect')
@@ -105,6 +118,26 @@ export default function LoginPage() {
                       />
                     </FormControl>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="rememberMe"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={isLoading}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel className="text-sm font-normal">
+                        Remember me
+                      </FormLabel>
+                    </div>
                   </FormItem>
                 )}
               />

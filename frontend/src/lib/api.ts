@@ -61,19 +61,36 @@ export async function login(username: string, password: string) {
 export async function logout() {
   try {
     // Call backend logout endpoint to clear httpOnly cookie
-    await fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
       method: 'POST',
       credentials: 'include',
     })
+    
+    // Check if logout was successful on server side
+    if (!response.ok) {
+      throw new ApiError('Server-side logout failed', response.status)
+    }
+    
+    // Clear any remaining local storage (from old implementation)
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('token')
+      window.location.href = '/login'
+    }
   } catch (error) {
-    // Continue with logout even if API call fails
-    console.warn('Logout API call failed:', error)
-  }
-  
-  // Clear any remaining local storage (from old implementation)
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('token')
-    window.location.href = '/login'
+    // For security, only proceed with client-side logout if it's a network error
+    // Don't logout if server explicitly rejected the logout request
+    if (error instanceof ApiError && error.status && error.status >= 400 && error.status < 500) {
+      console.error('Logout failed - server rejected logout:', error)
+      throw error // Re-throw to prevent client-side logout
+    }
+    
+    // Network errors or 5xx errors - proceed with client-side logout as fallback
+    console.warn('Logout API call failed (network/server error), proceeding with client-side logout:', error)
+    
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('token')
+      window.location.href = '/login'
+    }
   }
 }
 

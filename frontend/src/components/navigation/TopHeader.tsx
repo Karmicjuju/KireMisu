@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react'
 import { Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
+import { UserMenu } from '@/components/auth/UserMenu'
+import { useAuthStore } from '@/lib/auth-store'
 import { cn } from '@/lib/utils'
 import { z } from 'zod'
 
@@ -35,6 +37,7 @@ export function TopHeader({ sidebarCollapsed = false, className }: TopHeaderProp
   const [searchValue, setSearchValue] = useState('')
   const [searchError, setSearchError] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(false)
+  const { isAuthenticated } = useAuthStore()
 
   useEffect(() => {
     const handleResize = () => {
@@ -122,10 +125,10 @@ export function TopHeader({ sidebarCollapsed = false, className }: TopHeaderProp
           </form>
         </div>
 
-        {/* Right section - Theme toggle and future user menu/notifications */}
+        {/* Right section - Theme toggle and user menu */}
         <div className="flex items-center space-x-4">
           <ThemeToggle />
-          {/* Placeholder for future user menu, notifications, etc. */}
+          {isAuthenticated && <UserMenu />}
         </div>
       </div>
     </header>
