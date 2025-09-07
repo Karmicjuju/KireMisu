@@ -4,25 +4,26 @@
 
 @layer base {
   :root {
-    --background: 212 17% 15%; /* #1a1d29 - Dark navy background */
-    --foreground: 0 0% 98%;
-    --card: 215 19% 11%; /* #151821 - Darker sidebar */
-    --card-foreground: 0 0% 98%;
-    --popover: 215 19% 11%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 16 100% 60%; /* #ff6b35 - Orange accent */
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
+    /* Light theme variables */
+    --background: 0 0% 100%; /* White background */
+    --foreground: 0 0% 3.9%; /* Dark text */
+    --card: 0 0% 100%; /* White cards */
+    --card-foreground: 0 0% 3.9%; /* Dark card text */
+    --popover: 0 0% 100%; /* White popover */
+    --popover-foreground: 0 0% 3.9%; /* Dark popover text */
+    --primary: 16 100% 60%; /* #ff6b35 - Orange accent (consistent) */
+    --primary-foreground: 0 0% 98%; /* White on orange */
+    --secondary: 0 0% 96.1%; /* Light gray */
+    --secondary-foreground: 0 0% 9%; /* Dark on light gray */
+    --muted: 0 0% 96.1%; /* Light gray muted */
+    --muted-foreground: 0 0% 45.1%; /* Medium gray text */
     --accent: 16 100% 60%; /* #ff6b35 - Orange accent */
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 20%;
-    --input: 215 19% 11%;
-    --ring: 16 100% 60%;
+    --accent-foreground: 0 0% 9%; /* Dark on orange accent */
+    --destructive: 0 84.2% 60.2%; /* Red */
+    --destructive-foreground: 0 0% 98%; /* White on red */
+    --border: 0 0% 89.8%; /* Light border */
+    --input: 0 0% 96.1%; /* Light input background */
+    --ring: 16 100% 60%; /* Orange focus ring */
     --radius: 0.5rem;
   }
 

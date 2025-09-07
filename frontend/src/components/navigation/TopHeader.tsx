@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { cn } from '@/lib/utils'
 import { z } from 'zod'
 
@@ -54,7 +55,7 @@ export function TopHeader({ sidebarCollapsed = false, className }: TopHeaderProp
     const validation = searchSchema.safeParse({ query: sanitizedValue })
     
     if (!validation.success && sanitizedValue.length > 0) {
-      setSearchError(validation.error.errors[0]?.message || 'Invalid search input')
+      setSearchError(validation.error.issues[0]?.message || 'Invalid search input')
     } else {
       setSearchError(null)
     }
@@ -79,7 +80,7 @@ export function TopHeader({ sidebarCollapsed = false, className }: TopHeaderProp
 
   return (
     <header className={cn(
-      "fixed top-0 right-0 z-40 h-16 bg-[#1a1d29] border-b border-gray-800 transition-all duration-300",
+      "fixed top-0 right-0 z-40 h-16 bg-background border-b border-border transition-all duration-300",
       leftPadding,
       "left-0",
       className
@@ -93,17 +94,17 @@ export function TopHeader({ sidebarCollapsed = false, className }: TopHeaderProp
         {/* Center section - Search bar */}
         <div className="flex-1 max-w-md mx-4">
           <form onSubmit={handleSearchSubmit} className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="text"
               placeholder="Search manga, series, or authors..."
               value={searchValue}
               onChange={handleSearchChange}
               className={cn(
-                "pl-10 bg-[#151821] border-gray-700 text-white placeholder:text-gray-400",
-                "focus:border-[#ff6b35] focus:ring-[#ff6b35]/20",
-                "hover:border-gray-600 transition-colors",
-                searchError && "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                "pl-10 bg-input border-border text-foreground placeholder:text-muted-foreground",
+                "focus:border-primary focus:ring-primary/20",
+                "hover:border-accent transition-colors",
+                searchError && "border-destructive focus:border-destructive focus:ring-destructive/20"
               )}
               aria-label="Search manga library"
               aria-invalid={!!searchError}
@@ -113,7 +114,7 @@ export function TopHeader({ sidebarCollapsed = false, className }: TopHeaderProp
             {searchError && (
               <div
                 id="search-error"
-                className="absolute top-full left-0 mt-1 text-xs text-red-400 bg-[#1a1d29] px-2 py-1 rounded border border-red-500/30"
+                className="absolute top-full left-0 mt-1 text-xs text-destructive bg-background px-2 py-1 rounded border border-destructive/30"
               >
                 {searchError}
               </div>
@@ -121,8 +122,9 @@ export function TopHeader({ sidebarCollapsed = false, className }: TopHeaderProp
           </form>
         </div>
 
-        {/* Right section - could be used for user menu or notifications */}
+        {/* Right section - Theme toggle and future user menu/notifications */}
         <div className="flex items-center space-x-4">
+          <ThemeToggle />
           {/* Placeholder for future user menu, notifications, etc. */}
         </div>
       </div>

@@ -68,18 +68,18 @@ export function Sidebar({ className }: SidebarProps) {
   const bottomItems = navigationItems.filter(item => item.position === 'bottom')
 
   const NavContent = () => (
-    <div className="flex h-full flex-col bg-[#151821] border-r border-gray-800">
+    <div className="flex h-full flex-col bg-card border-r border-border">
       {/* Header with toggle */}
-      <div className="flex h-16 items-center justify-between px-4 border-b border-gray-800">
+      <div className="flex h-16 items-center justify-between px-4 border-b border-border">
         {!isCollapsed && (
-          <span className="text-lg font-semibold text-white">KireMisu</span>
+          <span className="text-lg font-semibold text-card-foreground">KireMisu</span>
         )}
         {!isMobile && (
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="h-8 w-8 text-gray-400 hover:text-white hover:bg-gray-800"
+            className="h-8 w-8 text-muted-foreground hover:text-card-foreground hover:bg-muted"
             aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -99,11 +99,11 @@ export function Sidebar({ className }: SidebarProps) {
               <Link
                 href={item.href}
                 className={cn(
-                  "flex items-center rounded-lg text-sm font-medium transition-all hover:bg-gray-800",
+                  "flex items-center rounded-lg text-sm font-medium transition-all hover:bg-muted",
                   isCollapsed ? "px-2 py-3" : "px-3 py-2",
                   isActive 
-                    ? "bg-[#ff6b35] text-white hover:bg-[#ff6b35]/90" 
-                    : "text-gray-400 hover:text-white",
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90" 
+                    : "text-muted-foreground hover:text-card-foreground",
                   isCollapsed ? "justify-center" : "justify-start"
                 )}
               >
@@ -141,11 +141,11 @@ export function Sidebar({ className }: SidebarProps) {
               <Link
                 href={item.href}
                 className={cn(
-                  "flex items-center rounded-lg text-sm font-medium transition-all hover:bg-gray-800",
+                  "flex items-center rounded-lg text-sm font-medium transition-all hover:bg-muted",
                   isCollapsed ? "px-2 py-3" : "px-3 py-2",
                   isActive 
-                    ? "bg-[#ff6b35] text-white hover:bg-[#ff6b35]/90" 
-                    : "text-gray-400 hover:text-white",
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90" 
+                    : "text-muted-foreground hover:text-card-foreground",
                   isCollapsed ? "justify-center" : "justify-start"
                 )}
               >
@@ -183,7 +183,7 @@ export function Sidebar({ className }: SidebarProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="fixed left-4 top-4 z-40 h-10 w-10 bg-[#151821] text-white hover:bg-gray-800 md:hidden"
+            className="fixed left-4 top-4 z-40 h-10 w-10 bg-card text-card-foreground hover:bg-muted md:hidden"
             aria-label="Open navigation menu"
           >
             <Menu className="h-5 w-5" />
