@@ -36,7 +36,7 @@ interface AuthState {
 const initialState = {
   user: null,
   isAuthenticated: false,
-  isLoading: true,
+  isLoading: false, // Start with loading false to prevent infinite loading
   rememberMe: false,
   lastTokenRefresh: null,
 }
@@ -101,7 +101,6 @@ export const useAuthStore = create<AuthState>()(
       checkAuth: async () => {
         set({ isLoading: true })
         try {
-          // Try to get user info using httpOnly cookies
           const user = await getCurrentUser()
           set({ 
             user, 
@@ -110,8 +109,12 @@ export const useAuthStore = create<AuthState>()(
             lastTokenRefresh: Date.now()
           })
         } catch (error: any) {
-          // Auth failed - mark as unauthenticated but don't redirect if we're already on login
-          console.warn('Auth check failed:', error)
+          // Auth failed - mark as unauthenticated
+          // Don't log network errors to reduce console noise
+          if (error?.status !== 0) {
+            console.warn('Auth check failed:', error.message || error)
+          }
+          
           set({
             user: null,
             isAuthenticated: false,
@@ -140,10 +143,24 @@ export const useAuthStore = create<AuthState>()(
           // The backend should automatically refresh the httpOnly cookie
           await getCurrentUser()
           set({ lastTokenRefresh: now })
-        } catch (error) {
-          console.warn('Token refresh failed:', error)
-          // If refresh fails, logout the user
-          get().logout()
+        } catch (error: any) {
+          // Only log non-network errors to reduce console noise
+          if (error?.status !== 0) {
+            console.warn('Token refresh failed:', error?.message || error)
+          }
+          // If refresh fails, logout the user silently
+          try {
+            await get().logout()
+          } catch {
+            // Silent logout failure - just reset state
+            set({
+              user: null,
+              isAuthenticated: false,
+              isLoading: false,
+              rememberMe: false,
+              lastTokenRefresh: null
+            })
+          }
         }
       },
       
@@ -163,15 +180,12 @@ export const useAuthStore = create<AuthState>()(
   )
 )
 
-// Hook to initialize auth check on app start
+// Hook to initialize auth check on app start - DISABLED to prevent loops
+// Authentication initialization is handled by AuthProvider component
 export const useAuthInit = () => {
-  const checkAuth = useAuthStore(state => state.checkAuth)
   const isLoading = useAuthStore(state => state.isLoading)
   
-  // Check auth on mount
-  React.useEffect(() => {
-    checkAuth()
-  }, [checkAuth])
+  // Auth initialization is handled by AuthProvider - no additional check needed
   
   return { isLoading }
 }

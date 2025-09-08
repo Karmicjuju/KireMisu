@@ -1,73 +1,47 @@
 "use client"
 
-import React, { useEffect } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import React from 'react'
+import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/auth-store'
 import { Card, CardContent } from '@/components/ui/card'
 
 interface ProtectedRouteProps {
   children: React.ReactNode
   fallback?: React.ReactNode
-  redirectTo?: string
 }
 
 export function ProtectedRoute({ 
   children, 
-  fallback,
-  redirectTo = '/login' 
+  fallback
 }: ProtectedRouteProps) {
+  const { isAuthenticated, isLoading } = useAuthStore()
   const router = useRouter()
-  const pathname = usePathname()
-  const { isAuthenticated, isLoading, checkAuth } = useAuthStore()
+  const hasRedirected = React.useRef(false)
   
-  useEffect(() => {
-    // Check auth on mount
-    checkAuth()
-  }, []) // Remove checkAuth dependency to prevent infinite calls
-  
-  useEffect(() => {
-    // Only redirect if we've finished loading and are definitely not authenticated
-    // Add a delay to prevent rapid redirects
-    if (!isLoading && !isAuthenticated) {
-      const timeoutId = setTimeout(() => {
-        // Allowlist of safe redirect paths to prevent open redirect vulnerability
-        const ALLOWED_REDIRECTS = [
-          '/',
-          '/dashboard', 
-          '/library',
-          '/profile', 
-          '/settings',
-          '/series',
-          '/chapter',
-          '/reader'
-        ]
-        
-        // Validate redirect path against allowlist
-        const isAllowedRedirect = (path: string) => {
-          return ALLOWED_REDIRECTS.some(allowed => path.startsWith(allowed)) || path === '/'
-        }
-        
-        // Only add redirect parameter if current path is in allowlist
-        let redirectUrl = redirectTo
-        if (isAllowedRedirect(pathname)) {
-          redirectUrl = `${redirectTo}?redirect=${encodeURIComponent(pathname)}`
-        }
-        
-        router.push(redirectUrl)
-      }, 1000) // 1 second delay to prevent rapid redirects
-      
-      return () => clearTimeout(timeoutId)
+  // Handle redirect to login page for unauthenticated users
+  React.useEffect(() => {
+    // Only redirect if loading is complete, user is not authenticated, and we haven't already redirected
+    if (!isLoading && !isAuthenticated && !hasRedirected.current) {
+      hasRedirected.current = true
+      router.push('/login')
     }
-  }, [isAuthenticated, isLoading, router, pathname, redirectTo])
+  }, [isAuthenticated, isLoading, router])
   
-  // Show loading state
+  // Reset redirect flag when authentication state changes
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      hasRedirected.current = false
+    }
+  }, [isAuthenticated])
+  
+  // Show loading state while AuthProvider initializes
   if (isLoading) {
     return fallback || <ProtectedRouteLoading />
   }
   
-  // Show nothing while redirecting
+  // If not authenticated, show loading state while redirect happens
   if (!isAuthenticated) {
-    return null
+    return fallback || <ProtectedRouteLoading />
   }
   
   // Show protected content
@@ -91,18 +65,32 @@ function ProtectedRouteLoading() {
   )
 }
 
+function NotAuthenticatedMessage() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <Card className="w-full max-w-md">
+        <CardContent className="pt-6">
+          <div className="flex flex-col items-center space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Please log in to access this page.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
 // Higher-order component version for easier usage
 export function withProtectedRoute<P extends object>(
   Component: React.ComponentType<P>,
   options?: {
     fallback?: React.ReactNode
-    redirectTo?: string
   }
 ) {
   const WrappedComponent = (props: P) => (
     <ProtectedRoute 
-      fallback={options?.fallback} 
-      redirectTo={options?.redirectTo}
+      fallback={options?.fallback}
     >
       <Component {...props} />
     </ProtectedRoute>

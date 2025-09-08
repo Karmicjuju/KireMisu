@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Always delete old containers before deploying new ones when there is a port conflict on 3000, 8000, or 5432
+
 ## Development Commands
 
 ### Backend (FastAPI)

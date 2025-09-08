@@ -16,7 +16,7 @@ export function NavigationLayout({ children, className }: NavigationLayoutProps)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const pathname = usePathname()
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated, isLoading } = useAuthStore()
   
   // Public routes that don't need authentication
   const isPublicRoute = pathname === '/login'
@@ -37,6 +37,16 @@ export function NavigationLayout({ children, className }: NavigationLayoutProps)
 
   // For public routes, show minimal layout
   if (isPublicRoute) {
+    return (
+      <div className="min-h-screen bg-background">
+        {children}
+      </div>
+    )
+  }
+
+  // For protected routes, only show navigation if user is authenticated
+  // If still loading or not authenticated, just render children (ProtectedRoute will handle redirect)
+  if (!isAuthenticated || isLoading) {
     return (
       <div className="min-h-screen bg-background">
         {children}

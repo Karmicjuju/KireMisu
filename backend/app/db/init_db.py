@@ -4,29 +4,26 @@ Database initialization module.
 This module handles database table creation and initial setup.
 """
 
+import asyncio
 from sqlalchemy import inspect
-from app.db.database import engine
-from app.models.user import Base as UserBase
+from app.db.database import engine, create_db_and_tables
+from app.models import User, Series, Chapter, StoragePath
+
+
+async def init_db_async():
+    """Initialize database with all tables (async)."""
+    print("Initializing database...")
+    
+    # Create all tables using the async function
+    await create_db_and_tables()
+    
+    print("✅ Database tables created successfully")
+    print("Database initialization complete!")
 
 
 def init_db():
-    """Initialize database with all tables."""
-    print("Initializing database...")
-    
-    # Create all tables
-    UserBase.metadata.create_all(bind=engine)
-    
-    # Verify tables were created
-    inspector = inspect(engine)
-    tables = inspector.get_table_names()
-    
-    if 'users' in tables:
-        print("✅ Users table created successfully")
-    else:
-        print("❌ Failed to create users table")
-        raise Exception("Database initialization failed")
-    
-    print("Database initialization complete!")
+    """Initialize database with all tables (sync wrapper)."""
+    asyncio.run(init_db_async())
 
 
 if __name__ == "__main__":

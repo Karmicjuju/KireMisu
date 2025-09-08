@@ -7,32 +7,57 @@ class ApiError extends Error {
   }
 }
 
-async function fetchWithAuth(url: string, options: RequestInit = {}) {
+async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<any> {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   }
   
-  const response = await fetch(`${API_BASE_URL}${url}`, {
-    ...options,
-    headers,
-    credentials: 'include', // Include cookies in requests
-  })
-  
-  // Handle 401 responses by redirecting to login (but not if already on login page)
-  if (response.status === 401) {
-    if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-      window.location.href = '/login'
+  try {
+    const response = await fetch(`${API_BASE_URL}${url}`, {
+      ...options,
+      headers,
+      credentials: 'include', // Include cookies in requests
+      // Add timeout and signal handling for better error management
+      signal: options.signal,
+    })
+    
+    // Handle 401 responses - don't auto-redirect, let components handle it
+    if (response.status === 401) {
+      throw new ApiError('Authentication required', 401)
     }
-    throw new ApiError('Authentication required', 401)
+    
+    if (!response.ok) {
+      let errorData
+      try {
+        errorData = await response.json()
+      } catch {
+        errorData = { detail: `HTTP ${response.status}: ${response.statusText}` }
+      }
+      throw new ApiError(errorData.detail || 'Request failed', response.status)
+    }
+    
+    // Handle empty responses (like 204 No Content)
+    const contentType = response.headers.get('content-type')
+    if (!contentType || !contentType.includes('application/json')) {
+      return {}
+    }
+    
+    return await response.json()
+  } catch (error) {
+    // Handle network errors, SSL issues, etc.
+    if (error instanceof ApiError) {
+      throw error
+    }
+    
+    // Handle fetch errors (network issues, SSL problems, etc.)
+    if (error instanceof TypeError) {
+      throw new ApiError('Network connection failed. Please check your connection and try again.', 0)
+    }
+    
+    // Handle other errors
+    throw new ApiError('An unexpected error occurred', 0)
   }
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: 'An error occurred' }))
-    throw new ApiError(errorData.detail || 'Request failed', response.status)
-  }
-  
-  return response.json()
 }
 
 export async function login(username: string, password: string) {
@@ -81,7 +106,21 @@ export async function logout() {
 }
 
 export async function getCurrentUser() {
-  return fetchWithAuth('/api/v1/users/me')
+  try {
+    return await fetchWithAuth('/api/v1/users/me')
+  } catch (error) {
+    // Add more specific error handling for auth failures
+    if (error instanceof ApiError && error.status === 401) {
+      throw new ApiError('Session expired or invalid', 401)
+    }
+    
+    // Handle network/connection errors quietly for auth checks
+    if (error instanceof ApiError && error.status === 0) {
+      throw new ApiError('Unable to connect to server', 0)
+    }
+    
+    throw error
+  }
 }
 
 export async function getLibrary() {
