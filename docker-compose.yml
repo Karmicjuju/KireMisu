@@ -15,6 +15,7 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-kiremisu}:${POSTGRES_PASSWORD:-development}@postgres:5432/${POSTGRES_DB:-kiremisu}
       - SECRET_KEY=${SECRET_KEY:-development-secret-key-change-in-production}
       - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
+      - RATE_LIMIT_ENABLED=${RATE_LIMIT_ENABLED:-false}
     volumes:
       - ./backend:/app
       - manga-library:/manga

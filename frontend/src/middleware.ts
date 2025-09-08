@@ -13,7 +13,7 @@ const PUBLIC_ROUTES = [
   '/login'
 ]
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   
   // Check if the current path is protected
@@ -26,10 +26,11 @@ export function middleware(request: NextRequest) {
     pathname === route || pathname.startsWith(route + '/')
   )
   
-  // Get token from cookies (we'll implement secure token storage)
-  const token = request.cookies.get('auth-token')?.value
+  // Get token from cookies (FastAPI-Users cookie name)
+  const token = request.cookies.get('kiremisu_auth')?.value
   
-  // If accessing a protected route without a token, redirect to login
+  // For protected routes, validate authentication by checking if token exists
+  // We can't easily verify the JWT in middleware, so we trust the presence of the httpOnly cookie
   if (isProtectedRoute && !token) {
     const loginUrl = new URL('/login', request.url)
     // Store the attempted URL to redirect back after login

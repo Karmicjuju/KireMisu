@@ -8,14 +8,14 @@ interface AuthProviderProps {
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  const { checkAuth } = useAuthStore()
+  const checkAuth = useAuthStore(state => state.checkAuth)
   
-  // Initialize auth check on mount
+  // Initialize auth check on mount only once
   useEffect(() => {
     checkAuth()
-  }, [checkAuth])
+  }, []) // Remove checkAuth dependency to prevent loops
   
-  // Set up automatic token refresh
+  // Set up automatic token refresh (currently disabled)
   useTokenRefresh()
   
   return <>{children}</>

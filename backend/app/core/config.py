@@ -1,6 +1,6 @@
 import os
 from typing import List, Optional
-from pydantic import validator
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -20,8 +20,28 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
+    # FastAPI-Users settings
+    USERS_RESET_PASSWORD_TOKEN_SECRET: str | None = None
+    USERS_VERIFICATION_TOKEN_SECRET: str | None = None
+    
+    @property
+    def reset_password_token_secret(self) -> str:
+        """Get reset password token secret, fallback to SECRET_KEY."""
+        return self.USERS_RESET_PASSWORD_TOKEN_SECRET or self.SECRET_KEY
+        
+    @property
+    def verification_token_secret(self) -> str:
+        """Get verification token secret, fallback to SECRET_KEY."""
+        return self.USERS_VERIFICATION_TOKEN_SECRET or self.SECRET_KEY
+    
     # CORS - restrictive defaults, override in production
-    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8080"]
+    # Include common dev ports (3000, 3001, 3002) for Next.js auto-port selection
+    BACKEND_CORS_ORIGINS: List[str] = [
+        "http://localhost:3000", 
+        "http://localhost:3001", 
+        "http://localhost:3002", 
+        "http://localhost:8080"
+    ]
     
     # Storage paths
     MANGA_LIBRARY_PATH: str = "/manga"
@@ -38,7 +58,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_SEARCH_REQUESTS: int = 100
     RATE_LIMIT_WINDOW_SECONDS: int = 3600
     
-    @validator("BACKEND_CORS_ORIGINS", pre=True)
+    @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     def assemble_cors_origins(cls, v: str | List[str]) -> List[str]:
         if isinstance(v, str) and not v.startswith("["):
             origins = [i.strip() for i in v.split(",")]
@@ -53,7 +73,7 @@ class Settings(BaseSettings):
             return v
         raise ValueError(v)
     
-    @validator("DATABASE_URL", pre=True)
+    @field_validator("DATABASE_URL", mode="before")
     def assemble_db_connection(cls, v: Optional[str]) -> str:
         if isinstance(v, str):
             return v

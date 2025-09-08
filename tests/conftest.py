@@ -3,7 +3,7 @@
 import asyncio
 import pytest
 import pytest_asyncio
-from fastapi.testclient import TestClient
+from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -58,8 +58,8 @@ async def async_session(test_engine):
         yield session
 
 
-@pytest.fixture
-def client(test_engine):
+@pytest_asyncio.fixture
+async def client(test_engine):
     """Create test client with test database."""
     TestingSessionLocal = sessionmaker(
         test_engine, class_=AsyncSession, expire_on_commit=False
@@ -71,8 +71,8 @@ def client(test_engine):
     
     app.dependency_overrides[get_async_session] = override_get_async_session
     
-    with TestClient(app) as client:
-        yield client
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        yield ac
     
     app.dependency_overrides.clear()
 
@@ -88,18 +88,18 @@ def test_user_data():
     }
 
 
-@pytest.fixture
-def registered_user(client: TestClient, test_user_data: dict):
+@pytest_asyncio.fixture
+async def registered_user(client: AsyncClient, test_user_data: dict):
     """Create a registered user for tests."""
-    response = client.post("/api/v1/auth/register", json=test_user_data)
+    response = await client.post("/api/v1/auth/register", json=test_user_data)
     assert response.status_code == 201
     return response.json()
 
 
-@pytest.fixture
-def authenticated_user(client: TestClient, test_user_data: dict, registered_user):
+@pytest_asyncio.fixture
+async def authenticated_user(client: AsyncClient, test_user_data: dict, registered_user):
     """Create an authenticated user session."""
-    login_response = client.post("/api/v1/auth/login", data={
+    login_response = await client.post("/api/v1/auth/login", data={
         "username": test_user_data["username"],
         "password": test_user_data["password"]
     })

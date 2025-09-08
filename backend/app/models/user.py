@@ -1,25 +1,33 @@
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, UniqueConstraint
+import uuid
+from datetime import datetime
+from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTable
+from sqlalchemy import Boolean, Column, DateTime, String, UniqueConstraint
 from sqlalchemy.sql import func
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.database import Base
 
 
-class User(Base):
-    """User model for authentication and authorization."""
-
+class User(SQLAlchemyBaseUserTable[uuid.UUID], Base):
+    """User model using FastAPI-Users with custom fields."""
+    
     __tablename__ = "users"
-
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(50), unique=True, index=True, nullable=False)
-    email = Column(String(255), unique=True, index=True, nullable=False)
-    full_name = Column(String(255), nullable=True)
-    hashed_password = Column(String(255), nullable=False)
-    is_active = Column(Boolean, default=True, nullable=False)
-    is_superuser = Column(Boolean, default=False, nullable=False)
-    created_at = Column(
+    
+    # Use UUID as primary key (FastAPI-Users default)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True
+    )
+    
+    # Custom fields
+    username: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
+    full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    
+    # Additional timestamps
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    updated_at = Column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),

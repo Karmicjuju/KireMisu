@@ -1,22 +1,26 @@
+import uuid
 from datetime import datetime
 from typing import Optional
 import re
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
+from fastapi_users import schemas
 
 # Password validation constants
 SPECIAL_CHARACTERS = r'[!@#$%^&*(),.?":{}|<>]'
 
 
-class UserBase(BaseModel):
-    """Base user schema with common fields."""
+class UserRead(schemas.BaseUser[uuid.UUID]):
+    """Schema for reading user data."""
     username: str = Field(..., min_length=3, max_length=50, description="Unique username")
-    email: EmailStr = Field(..., description="User email address")
     full_name: Optional[str] = Field(None, max_length=255, description="User's full name")
+    created_at: datetime
+    updated_at: datetime
 
 
-class UserCreate(UserBase):
-    """Schema for user creation requests."""
-    password: str = Field(..., min_length=1, max_length=255, description="User password")
+class UserCreate(schemas.BaseUserCreate):
+    """Schema for user creation requests with custom validation."""
+    username: str = Field(..., min_length=3, max_length=50, description="Unique username")
+    full_name: Optional[str] = Field(None, max_length=255, description="User's full name")
     
     @field_validator('password')
     @classmethod
@@ -40,42 +44,19 @@ class UserCreate(UserBase):
         return v
 
 
-class UserUpdate(BaseModel):
-    """Schema for user update requests."""
-    email: Optional[EmailStr] = Field(None, description="User email address")
+class UserUpdate(schemas.BaseUserUpdate):
+    """Schema for user update requests with custom fields."""
+    username: Optional[str] = Field(None, min_length=3, max_length=50, description="Unique username")
     full_name: Optional[str] = Field(None, max_length=255, description="User's full name")
-    is_active: Optional[bool] = Field(None, description="Whether user is active")
 
 
-class UserResponse(UserBase):
-    """Schema for user responses."""
-    id: int
-    is_active: bool
-    is_superuser: bool
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-class UserInDB(UserResponse):
-    """Schema for user data with hashed password (internal use)."""
-    hashed_password: str
-
-
-class UserLogin(BaseModel):
-    """Schema for user login requests."""
-    username: str = Field(..., description="Username")
-    password: str = Field(..., description="Password")
+# Legacy schemas for backward compatibility during migration
+class UserResponse(UserRead):
+    """Legacy schema for user responses (backward compatibility)."""
+    pass
 
 
 class Token(BaseModel):
     """Schema for authentication token responses."""
     access_token: str
     token_type: str = "bearer"
-
-
-class TokenData(BaseModel):
-    """Schema for token payload data."""
-    username: Optional[str] = None

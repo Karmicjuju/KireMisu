@@ -110,30 +110,33 @@ Features are organized into logical categories and prioritized for implementatio
 
 ### F2.1 - Basic User Authentication ✅ **COMPLETED**
 
-**Description:** Implement secure username/password authentication for single-user access.
+**Description:** Implement secure username/password authentication for single-user access with FastAPI-Users integration.
 
 **User Story:** As a server owner, I need secure login so that my manga library is protected from unauthorized access.
 
 **Acceptance Criteria:**
-- [x] User registration endpoint (limited to single user initially)
-- [x] Login endpoint with JWT token generation
-- [x] Password hashing using bcrypt
-- [x] JWT token validation middleware
-- [x] Logout functionality (token invalidation)
-- [x] Session timeout configuration
-- [x] Password strength requirements
+- [x] User registration endpoint with admin initialization
+- [x] Login endpoint with JWT token generation and httpOnly cookies
+- [x] Password hashing using bcrypt (via FastAPI-Users)
+- [x] JWT token validation middleware with FastAPI-Users
+- [x] Logout functionality with cookie clearing
+- [x] Session timeout configuration (1 week default)
+- [x] Password strength requirements (8+ chars, mixed case, numbers, special chars)
+- [x] Username/email dual authentication support
+- [x] Cookie-based session management with security headers
 
 **Priority:** High  
 **Complexity:** Medium  
 **Dependencies:** F1.1 ✅  
-**Technical Notes:** ✅ **FULLY COMPLETED** - JWT authentication system with comprehensive password validation (8+ chars, uppercase, lowercase, number, special character), single user registration limit, and complete API endpoints. All 19 tests passing.
+**Technical Notes:** ✅ **FULLY COMPLETED** - Complete FastAPI-Users authentication system with httpOnly cookies, JWT strategy, comprehensive security configuration, and dual username/email authentication support.
 
 **Implementation Details:**
-- **Registration Endpoint**: POST `/api/v1/auth/register` with single user enforcement
-- **Password Validation**: Comprehensive strength requirements with clear error messages
-- **Security**: bcrypt hashing, input sanitization, rate limiting integration
-- **Testing**: 100% test coverage with 19 passing test cases
-- **API Integration**: Seamlessly integrated with existing JWT authentication system
+- **Authentication System**: FastAPI-Users with JWT strategy and cookie transport
+- **Security**: httpOnly cookies, CORS protection, rate limiting, secure headers
+- **Admin Setup**: Automatic admin user initialization (admin@example.com / Admin123!)
+- **Dual Auth**: Supports both username and email authentication
+- **Cookie Security**: Domain configuration for cross-port development, SameSite protection
+- **Session Management**: 1-week expiration, secure logout with cookie clearing
 
 ---
 
@@ -441,33 +444,36 @@ Features are organized into logical categories and prioritized for implementatio
 
 ### F5.2 - Authentication UI ✅ **COMPLETED**
 
-**Description:** Create login and authentication-related user interface components.
+**Description:** Create login and authentication-related user interface components with FastAPI-Users integration.
 
 **User Story:** As a user, I need a login interface so that I can securely access my manga library.
 
 **Acceptance Criteria:**
-- [x] Login form with username/password fields
+- [x] Login form with username/email and password fields
+- [x] Password visibility toggle with eye icon
 - [x] Login validation and error handling
-- [x] JWT token storage and management
-- [x] Automatic token refresh
-- [x] Logout functionality
+- [x] Cookie-based authentication management
+- [x] Automatic authentication checking
+- [x] Logout functionality via user menu
 - [x] Protected route wrapper component
 - [x] Authentication loading states
 - [x] Remember me functionality
+- [x] Dark theme login interface
+- [x] Middleware-based route protection
 
 **Priority:** High  
 **Complexity:** Medium  
 **Dependencies:** F2.1 ✅, F5.1 ✅  
-**Technical Notes:** ✅ **FULLY COMPLETED** - Complete authentication UI system with Zustand state management, automatic token refresh (25-minute intervals), protected routes, user menu with logout, remember me functionality, and comprehensive security fixes applied.
+**Technical Notes:** ✅ **FULLY COMPLETED** - Complete authentication UI system with FastAPI-Users integration, cookie-based authentication, dark theme, password visibility toggle, user menu with logout, and comprehensive middleware protection.
 
 **Implementation Details:**
-- **Authentication Store**: Zustand with persistence and automatic token refresh
-- **Protected Routes**: ProtectedRoute component applied to all authenticated pages
-- **User Menu**: Dropdown menu with logout functionality in navigation
-- **Token Refresh**: Automatic refresh every 20 minutes (25-minute threshold)
-- **Remember Me**: Checkbox in login form with state persistence
-- **Security**: Fixed 2 Critical + 2 High vulnerabilities (open redirect, token timing, cookie security, logout security)
-- **UI Components**: Complete with shadcn/ui integration and proper TypeScript types
+- **Login Form**: Dark theme with password visibility toggle (Eye/EyeOff icons)
+- **Authentication Flow**: Cookie-based with FastAPI-Users backend integration
+- **Route Protection**: Next.js middleware checking httpOnly cookies
+- **User Menu**: Complete dropdown with user info and logout functionality
+- **Security**: Middleware protection, httpOnly cookies, CSRF consideration
+- **UI/UX**: Responsive dark theme, proper error handling, loading states
+- **Integration**: Seamless FastAPI-Users and Next.js App Router integration
 
 ---
 

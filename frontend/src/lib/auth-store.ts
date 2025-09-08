@@ -99,16 +99,9 @@ export const useAuthStore = create<AuthState>()(
       },
       
       checkAuth: async () => {
-        const { rememberMe } = get()
-        
-        // If not remembering login, don't auto-check auth on page reload
-        if (!rememberMe) {
-          set({ isLoading: false, isAuthenticated: false, user: null })
-          return
-        }
-        
         set({ isLoading: true })
         try {
+          // Try to get user info using httpOnly cookies
           const user = await getCurrentUser()
           set({ 
             user, 
@@ -116,14 +109,13 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false,
             lastTokenRefresh: Date.now()
           })
-        } catch (error) {
-          // Token might be expired or invalid
+        } catch (error: any) {
+          // Auth failed - mark as unauthenticated but don't redirect if we're already on login
           console.warn('Auth check failed:', error)
           set({
             user: null,
             isAuthenticated: false,
             isLoading: false,
-            rememberMe: false,
             lastTokenRefresh: null
           })
         }
@@ -184,19 +176,22 @@ export const useAuthInit = () => {
   return { isLoading }
 }
 
-// Auto token refresh hook
+// Auto token refresh hook - disabled to prevent loops
 export const useTokenRefresh = () => {
-  const refreshToken = useAuthStore(state => state.refreshToken)
-  const isAuthenticated = useAuthStore(state => state.isAuthenticated)
+  // Commenting out auto refresh to prevent continuous loops
+  // The backend cookies will handle token refresh automatically
   
-  React.useEffect(() => {
-    if (!isAuthenticated) return
+  // const refreshToken = useAuthStore(state => state.refreshToken)
+  // const isAuthenticated = useAuthStore(state => state.isAuthenticated)
+  
+  // React.useEffect(() => {
+  //   if (!isAuthenticated) return
     
-    // Set up interval to refresh token every 20 minutes (backend uses 30-minute expiry)
-    const interval = setInterval(() => {
-      refreshToken()
-    }, 20 * 60 * 1000) // 20 minutes
+  //   // Set up interval to refresh token every 20 minutes (backend uses 30-minute expiry)
+  //   const interval = setInterval(() => {
+  //     refreshToken()
+  //   }, 20 * 60 * 1000) // 20 minutes
     
-    return () => clearInterval(interval)
-  }, [refreshToken, isAuthenticated])
+  //   return () => clearInterval(interval)
+  // }, [refreshToken, isAuthenticated])
 }

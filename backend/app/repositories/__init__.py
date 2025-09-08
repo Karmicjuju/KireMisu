@@ -1,3 +1,3 @@
-from .user import UserRepository
+# User repository removed - using FastAPI-Users instead
 
-__all__ = ["UserRepository"]
+__all__ = []

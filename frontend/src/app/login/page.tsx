@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
+import { Eye, EyeOff } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
@@ -25,6 +26,7 @@ export default function LoginPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
   const { login: authLogin } = useAuthStore()
 
   const form = useForm<LoginFormValues>({
@@ -43,8 +45,8 @@ export default function LoginPage() {
     try {
       const response = await login(data.username, data.password)
       
-      // With httpOnly cookies, the token is automatically set by the server
-      if (response.access_token) {
+      // With httpOnly cookies, login is successful if no error was thrown
+      if (response.success) {
         // Get user data and store in auth store
         const { getCurrentUser } = await import('@/lib/api')
         try {
@@ -58,8 +60,10 @@ export default function LoginPage() {
         const searchParams = new URLSearchParams(window.location.search)
         const redirect = searchParams.get('redirect')
         
-        // Redirect to the intended page or default to home
-        router.push(redirect || "/")
+        console.log('Login successful, redirecting to:', redirect || "/")
+        
+        // Use router.replace for client-side navigation
+        router.replace(redirect || "/")
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid username or password")
@@ -69,11 +73,11 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
-      <Card className="w-full max-w-md">
+    <div className="flex min-h-screen items-center justify-center bg-gray-900 px-4 py-12 sm:px-6 lg:px-8">
+      <Card className="w-full max-w-md bg-gray-800 border-gray-700">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">Welcome to KireMisu</CardTitle>
-          <CardDescription className="text-center">
+          <CardTitle className="text-2xl font-bold text-center text-white">Welcome to KireMisu</CardTitle>
+          <CardDescription className="text-center text-gray-300">
             Enter your credentials to access your manga library
           </CardDescription>
         </CardHeader>
@@ -85,7 +89,7 @@ export default function LoginPage() {
                 name="username"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Username</FormLabel>
+                    <FormLabel className="text-white">Username</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="Enter your username"
@@ -106,16 +110,32 @@ export default function LoginPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password</FormLabel>
+                    <FormLabel className="text-white">Password</FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder="Enter your password"
-                        type="password"
-                        autoCapitalize="none"
-                        autoComplete="current-password"
-                        disabled={isLoading}
-                        {...field}
-                      />
+                      <div className="relative">
+                        <Input
+                          placeholder="Enter your password"
+                          type={showPassword ? "text" : "password"}
+                          autoCapitalize="none"
+                          autoComplete="current-password"
+                          disabled={isLoading}
+                          {...field}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent text-gray-400 hover:text-gray-200"
+                          onClick={() => setShowPassword(!showPassword)}
+                          disabled={isLoading}
+                        >
+                          {showPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -134,7 +154,7 @@ export default function LoginPage() {
                       />
                     </FormControl>
                     <div className="space-y-1 leading-none">
-                      <FormLabel className="text-sm font-normal">
+                      <FormLabel className="text-sm font-normal text-white">
                         Remember me
                       </FormLabel>
                     </div>

@@ -1,9 +1,9 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
-from app.db.database import get_db
+from app.db.database import get_async_session
 from app.services.series import SeriesService
 from app.schemas.series import (
     SeriesCreate, 
@@ -12,7 +12,7 @@ from app.schemas.series import (
     SeriesListResponse,
     SeriesWithChaptersResponse
 )
-from app.api.v1.endpoints.auth import get_current_active_user
+from app.users import current_active_user
 from app.core.rate_limit import create_rate_limit_dependency
 
 # Setup logging
@@ -27,7 +27,7 @@ search_rate_limit = create_rate_limit_dependency(max_requests=100, window_second
 router = APIRouter()
 
 
-def get_series_service(db: Session = Depends(get_db)) -> SeriesService:
+def get_series_service(db: AsyncSession = Depends(get_async_session)) -> SeriesService:
     """Dependency to get SeriesService instance."""
     return SeriesService(db)
 
@@ -40,7 +40,7 @@ async def get_series(
     search: Optional[str] = Query(None, description="Search query for title, author, or artist"),
     status: Optional[str] = Query(None, description="Filter by series status"),
     author: Optional[str] = Query(None, description="Filter by author"),
-    current_user = Depends(get_current_active_user),
+    current_user = Depends(current_active_user),
     series_service: SeriesService = Depends(get_series_service),
     _rate_limit = Depends(read_rate_limit),
 ):
@@ -77,7 +77,7 @@ async def get_series(
 async def create_series(
     request: Request,
     series_data: SeriesCreate,
-    current_user = Depends(get_current_active_user),
+    current_user = Depends(current_active_user),
     series_service: SeriesService = Depends(get_series_service),
     _rate_limit = Depends(write_rate_limit),
 ):
@@ -110,7 +110,7 @@ async def create_series(
 async def get_series_by_id(
     request: Request,
     series_id: int,
-    current_user = Depends(get_current_active_user),
+    current_user = Depends(current_active_user),
     series_service: SeriesService = Depends(get_series_service),
     _rate_limit = Depends(read_rate_limit),
 ):
@@ -134,7 +134,7 @@ async def update_series(
     request: Request,
     series_id: int,
     series_data: SeriesUpdate,
-    current_user = Depends(get_current_active_user),
+    current_user = Depends(current_active_user),
     series_service: SeriesService = Depends(get_series_service),
     _rate_limit = Depends(write_rate_limit),
 ):
@@ -168,7 +168,7 @@ async def update_series(
 async def delete_series(
     request: Request,
     series_id: int,
-    current_user = Depends(get_current_active_user),
+    current_user = Depends(current_active_user),
     series_service: SeriesService = Depends(get_series_service),
     _rate_limit = Depends(write_rate_limit),
 ):
@@ -200,7 +200,7 @@ async def delete_series(
 @router.get("/recent/", response_model=List[SeriesResponse])
 async def get_recent_series(
     limit: int = Query(10, ge=1, le=50, description="Number of recent series to return"),
-    current_user = Depends(get_current_active_user),
+    current_user = Depends(current_active_user),
     series_service: SeriesService = Depends(get_series_service),
 ):
     """
@@ -220,7 +220,7 @@ async def get_recent_series(
 @router.get("/updated/", response_model=List[SeriesResponse])
 async def get_updated_series(
     limit: int = Query(10, ge=1, le=50, description="Number of updated series to return"),
-    current_user = Depends(get_current_active_user),
+    current_user = Depends(current_active_user),
     series_service: SeriesService = Depends(get_series_service),
 ):
     """
@@ -239,7 +239,7 @@ async def get_updated_series(
 
 @router.get("/statistics/")
 async def get_series_statistics(
-    current_user = Depends(get_current_active_user),
+    current_user = Depends(current_active_user),
     series_service: SeriesService = Depends(get_series_service),
 ):
     """

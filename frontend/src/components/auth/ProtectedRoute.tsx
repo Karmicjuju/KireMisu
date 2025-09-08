@@ -21,36 +21,42 @@ export function ProtectedRoute({
   const { isAuthenticated, isLoading, checkAuth } = useAuthStore()
   
   useEffect(() => {
-    // Check authentication status
+    // Check auth on mount
     checkAuth()
-  }, [checkAuth])
+  }, []) // Remove checkAuth dependency to prevent infinite calls
   
   useEffect(() => {
+    // Only redirect if we've finished loading and are definitely not authenticated
+    // Add a delay to prevent rapid redirects
     if (!isLoading && !isAuthenticated) {
-      // Allowlist of safe redirect paths to prevent open redirect vulnerability
-      const ALLOWED_REDIRECTS = [
-        '/',
-        '/dashboard', 
-        '/library',
-        '/profile', 
-        '/settings',
-        '/series',
-        '/chapter',
-        '/reader'
-      ]
+      const timeoutId = setTimeout(() => {
+        // Allowlist of safe redirect paths to prevent open redirect vulnerability
+        const ALLOWED_REDIRECTS = [
+          '/',
+          '/dashboard', 
+          '/library',
+          '/profile', 
+          '/settings',
+          '/series',
+          '/chapter',
+          '/reader'
+        ]
+        
+        // Validate redirect path against allowlist
+        const isAllowedRedirect = (path: string) => {
+          return ALLOWED_REDIRECTS.some(allowed => path.startsWith(allowed)) || path === '/'
+        }
+        
+        // Only add redirect parameter if current path is in allowlist
+        let redirectUrl = redirectTo
+        if (isAllowedRedirect(pathname)) {
+          redirectUrl = `${redirectTo}?redirect=${encodeURIComponent(pathname)}`
+        }
+        
+        router.push(redirectUrl)
+      }, 1000) // 1 second delay to prevent rapid redirects
       
-      // Validate redirect path against allowlist
-      const isAllowedRedirect = (path: string) => {
-        return ALLOWED_REDIRECTS.some(allowed => path.startsWith(allowed)) || path === '/'
-      }
-      
-      // Only add redirect parameter if current path is in allowlist
-      let redirectUrl = redirectTo
-      if (isAllowedRedirect(pathname)) {
-        redirectUrl = `${redirectTo}?redirect=${encodeURIComponent(pathname)}`
-      }
-      
-      router.push(redirectUrl)
+      return () => clearTimeout(timeoutId)
     }
   }, [isAuthenticated, isLoading, router, pathname, redirectTo])
   
