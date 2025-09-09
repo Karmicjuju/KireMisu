@@ -1,26 +1,52 @@
-from typing import List, Optional, Tuple
-from sqlalchemy.orm import Session
+from typing import List, Optional, Tuple, Dict, Any
+from sqlalchemy.ext.asyncio import AsyncSession
 from math import ceil
 
 from app.models.series import Series
-from app.repositories.series import SeriesRepository
+from app.repositories.series_async import AsyncSeriesRepository
+from app.services.metadata_history import MetadataHistoryService
 from app.schemas.series import SeriesCreate, SeriesUpdate, SeriesListResponse, SeriesResponse
 
 
 class SeriesService:
     """Service layer for series management and business logic."""
 
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
-        self.series_repo = SeriesRepository(db)
+        self.series_repo = AsyncSeriesRepository(db)
+        self.history_service = MetadataHistoryService(db)
 
-    def create_series(self, series_data: SeriesCreate) -> Series:
-        """Create a new series with validation."""
+    async def create_series(
+        self, series_data: SeriesCreate, user_id: Optional[str] = None
+    ) -> Series:
+        """Create a new series with validation and history tracking."""
         # Check if title already exists
-        if self.series_repo.is_title_taken(series_data.title):
+        if await self.series_repo.is_title_taken(series_data.title):
             raise ValueError(f"Series with title '{series_data.title}' already exists")
         
-        return self.series_repo.create_series(series_data)
+        series = await self.series_repo.create_series(series_data)
+        
+        # Record creation in history
+        series_dict = {
+            "title": series.title,
+            "description": series.description,
+            "author": series.author,
+            "artist": series.artist,
+            "status": series.status,
+            "cover_path": series.cover_path,
+            "metadata_json": series.metadata_json,
+        }
+        
+        await self.history_service.record_change(
+            entity_type="series",
+            entity_id=series.id,
+            user_id=user_id,
+            action="create",
+            new_data=series_dict,
+            description=f"Created series '{series.title}'",
+        )
+        
+        return series
 
     def get_series_by_id(self, series_id: int) -> Optional[Series]:
         """Get series by ID."""
@@ -112,19 +138,66 @@ class SeriesService:
             pages=total_pages
         )
 
-    def update_series(self, series_id: int, series_data: SeriesUpdate) -> Optional[Series]:
-        """Update series with validation."""
+    async def update_series(
+        self,
+        series_id: int,
+        series_data: SeriesUpdate,
+        user_id: Optional[str] = None,
+        preview_mode: bool = False,
+    ) -> Optional[Series]:
+        """Update series with validation, history tracking, and preview mode."""
         # Check if series exists
-        existing_series = self.series_repo.get_series_by_id(series_id)
+        existing_series = await self.series_repo.get_series_by_id(series_id)
         if not existing_series:
             return None
 
-        # Check if title is being changed and already exists
-        if series_data.title and series_data.title != existing_series.title:
-            if self.series_repo.is_title_taken(series_data.title, exclude_id=series_id):
-                raise ValueError(f"Series with title '{series_data.title}' already exists")
+        # Get current data for history tracking
+        current_data = {
+            "title": existing_series.title,
+            "description": existing_series.description,
+            "author": existing_series.author,
+            "artist": existing_series.artist,
+            "status": existing_series.status,
+            "cover_path": existing_series.cover_path,
+            "metadata_json": existing_series.metadata_json,
+        }
 
-        return self.series_repo.update_series(series_id, series_data)
+        # Prepare update data (excluding unset fields)
+        update_dict = series_data.model_dump(exclude_unset=True)
+        
+        if not update_dict:
+            return existing_series
+
+        # Preview mode - return preview without saving
+        if preview_mode:
+            preview = await self.history_service.create_diff_preview(
+                current_data, update_dict
+            )
+            return {"preview": preview, "current": existing_series}
+
+        # Check if title is being changed and already exists
+        if "title" in update_dict and update_dict["title"] != existing_series.title:
+            if await self.series_repo.is_title_taken(update_dict["title"], exclude_id=series_id):
+                raise ValueError(f"Series with title '{update_dict['title']}' already exists")
+
+        # Update the series
+        updated_series = await self.series_repo.update_series(series_id, series_data)
+        if not updated_series:
+            return None
+
+        # Record change in history
+        new_data = {**current_data, **update_dict}
+        await self.history_service.record_change(
+            entity_type="series",
+            entity_id=series_id,
+            user_id=user_id,
+            action="update",
+            previous_data=current_data,
+            new_data=new_data,
+            description=f"Updated series '{updated_series.title}'",
+        )
+
+        return updated_series
 
     def delete_series(self, series_id: int) -> bool:
         """Delete series by ID."""
@@ -193,3 +266,82 @@ class SeriesService:
             "total_series": total_series,
             "status_counts": status_counts
         }
+
+    async def get_series_history(
+        self, series_id: int, limit: int = 50, offset: int = 0
+    ):
+        """Get change history for a series."""
+        return await self.history_service.get_entity_history(
+            entity_type="series",
+            entity_id=series_id,
+            limit=limit,
+            offset=offset,
+        )
+
+    async def restore_series_from_history(
+        self, series_id: int, history_id: int, user_id: Optional[str] = None
+    ) -> Optional[Series]:
+        """Restore a series to a previous state from history."""
+        restore_data = await self.history_service.get_restore_data(history_id)
+        if not restore_data:
+            raise ValueError(f"History entry {history_id} not found")
+
+        # Convert restore data to update format
+        update_data = SeriesUpdate(**restore_data)
+        
+        return await self.update_series(
+            series_id=series_id,
+            series_data=update_data,
+            user_id=user_id,
+            preview_mode=False,
+        )
+
+    async def bulk_update_series(
+        self,
+        series_ids: List[int],
+        update_data: SeriesUpdate,
+        user_id: Optional[str] = None,
+    ) -> List[Series]:
+        """Update multiple series with the same data."""
+        if len(series_ids) > 100:
+            raise ValueError("Cannot update more than 100 series at once")
+
+        if len(set(series_ids)) != len(series_ids):
+            raise ValueError("Series IDs must be unique")
+
+        # Validate that all series exist
+        updated_series = []
+        update_dict = update_data.model_dump(exclude_unset=True)
+        
+        if not update_dict:
+            # Return existing series without changes
+            for series_id in series_ids:
+                series = await self.series_repo.get_series_by_id(series_id)
+                if series:
+                    updated_series.append(series)
+            return updated_series
+
+        # Check for title conflicts if updating titles
+        if "title" in update_dict:
+            new_title = update_dict["title"]
+            existing_with_title = await self.series_repo.get_series_by_title(new_title)
+            if existing_with_title and existing_with_title.id not in series_ids:
+                raise ValueError(f"Series with title '{new_title}' already exists")
+
+        # Update each series individually to maintain proper history tracking
+        for series_id in series_ids:
+            try:
+                updated = await self.update_series(
+                    series_id=series_id,
+                    series_data=update_data,
+                    user_id=user_id,
+                    preview_mode=False,
+                )
+                if updated and not isinstance(updated, dict):  # Ensure it's not a preview
+                    updated_series.append(updated)
+            except Exception as e:
+                # Log the error but continue with other series
+                # In a production environment, you might want to rollback all changes
+                continue
+
+        return updated_series

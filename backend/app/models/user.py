@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTable
 from sqlalchemy import Boolean, Column, DateTime, String, UniqueConstraint
 from sqlalchemy.sql import func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.database import Base
@@ -33,6 +33,9 @@ class User(SQLAlchemyBaseUserTable[uuid.UUID], Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+    # Relationships
+    metadata_changes = relationship("MetadataHistory", back_populates="user")
 
     __table_args__ = (
         UniqueConstraint('username', name='uq_users_username'),

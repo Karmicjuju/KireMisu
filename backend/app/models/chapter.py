@@ -4,10 +4,13 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -27,8 +30,23 @@ class Chapter(Base):
     title = Column(String(500), nullable=True)
     file_path = Column(String(1000), nullable=False)
     read_status = Column(Boolean, default=False, nullable=False, index=True)
+    
+    # Extended metadata fields
+    volume = Column(Numeric(10, 2), nullable=True, index=True)
+    description = Column(Text, nullable=True)
+    release_date = Column(DateTime(timezone=True), nullable=True)
+    page_count = Column(Integer, nullable=True)
+    file_size = Column(Integer, nullable=True)  # Size in bytes
+    metadata_json = Column(JSON().with_variant(JSONB(), 'postgresql'), nullable=True)
+    
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )
 
     # Relationships

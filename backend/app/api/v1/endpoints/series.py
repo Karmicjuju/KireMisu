@@ -129,28 +129,40 @@ async def get_series_by_id(
     return SeriesResponse.model_validate(series)
 
 
-@router.put("/{series_id}", response_model=SeriesResponse)
+@router.patch("/{series_id}", response_model=SeriesResponse)
 async def update_series(
     request: Request,
     series_id: int,
     series_data: SeriesUpdate,
+    preview: bool = Query(False, description="Preview changes without saving"),
     current_user = Depends(current_active_user),
     series_service: SeriesService = Depends(get_series_service),
     _rate_limit = Depends(write_rate_limit),
 ):
     """
-    Update a series.
+    Update a series with partial update support.
     
     - **series_id**: The ID of the series to update
+    - **preview**: If true, returns preview of changes without saving
     - All fields are optional and will only be updated if provided
     """
     try:
-        updated_series = series_service.update_series(series_id, series_data)
+        updated_series = await series_service.update_series(
+            series_id=series_id,
+            series_data=series_data,
+            user_id=str(current_user.id),
+            preview_mode=preview,
+        )
+        
         if not updated_series:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Series with ID {series_id} not found"
             )
+        
+        # If in preview mode, return the preview data
+        if preview and isinstance(updated_series, dict):
+            return updated_series
         
         return SeriesResponse.model_validate(updated_series)
     except ValueError as e:
@@ -253,4 +265,116 @@ async def get_series_statistics(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while retrieving series statistics"
+        )
+
+
+@router.get("/{series_id}/history")
+async def get_series_history(
+    request: Request,
+    series_id: int,
+    limit: int = Query(50, ge=1, le=100, description="Number of history entries to return"),
+    offset: int = Query(0, ge=0, description="Number of entries to skip"),
+    current_user = Depends(current_active_user),
+    series_service: SeriesService = Depends(get_series_service),
+    _rate_limit = Depends(read_rate_limit),
+):
+    """
+    Get change history for a series.
+    
+    - **series_id**: The ID of the series
+    - **limit**: Number of history entries to return (max 100)
+    - **offset**: Number of entries to skip for pagination
+    """
+    try:
+        history = await series_service.get_series_history(
+            series_id=series_id,
+            limit=limit,
+            offset=offset,
+        )
+        return history
+    except Exception as e:
+        logger.error(f"Unexpected error in get_series_history: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while retrieving series history"
+        )
+
+
+@router.post("/{series_id}/restore/{history_id}", response_model=SeriesResponse)
+async def restore_series_from_history(
+    request: Request,
+    series_id: int,
+    history_id: int,
+    current_user = Depends(current_active_user),
+    series_service: SeriesService = Depends(get_series_service),
+    _rate_limit = Depends(write_rate_limit),
+):
+    """
+    Restore a series to a previous state from history.
+    
+    - **series_id**: The ID of the series to restore
+    - **history_id**: The ID of the history entry to restore from
+    """
+    try:
+        restored_series = await series_service.restore_series_from_history(
+            series_id=series_id,
+            history_id=history_id,
+            user_id=str(current_user.id),
+        )
+        
+        if not restored_series:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Series with ID {series_id} or history entry {history_id} not found"
+            )
+        
+        return SeriesResponse.model_validate(restored_series)
+    except ValueError as e:
+        logger.warning(f"Invalid request in restore_series_from_history: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error in restore_series_from_history: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while restoring the series"
+        )
+
+
+@router.patch("/bulk", response_model=List[SeriesResponse])
+async def bulk_update_series(
+    request: Request,
+    series_ids: List[int] = Query(..., description="List of series IDs to update"),
+    series_data: SeriesUpdate = ...,
+    current_user = Depends(current_active_user),
+    series_service: SeriesService = Depends(get_series_service),
+    _rate_limit = Depends(write_rate_limit),
+):
+    """
+    Update multiple series with the same data.
+    
+    - **series_ids**: List of series IDs to update (max 100)
+    - **series_data**: Updates to apply to all series
+    """
+    try:
+        if len(series_ids) > 100:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot update more than 100 series at once"
+            )
+        
+        updated_series = await series_service.bulk_update_series(
+            series_ids=series_ids,
+            update_data=series_data,
+            user_id=str(current_user.id),
+        )
+        
+        return [SeriesResponse.model_validate(series) for series in updated_series]
+    except ValueError as e:
+        logger.warning(f"Invalid request in bulk_update_series: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error in bulk_update_series: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while bulk updating series"
         )

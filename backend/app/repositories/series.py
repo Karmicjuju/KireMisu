@@ -1,8 +1,9 @@
 from typing import List, Optional
 import logging
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy import desc, or_, func
+from sqlalchemy import desc, or_, func, update, delete
+from sqlalchemy.future import select
 
 from app.models.series import Series
 from app.schemas.series import SeriesCreate, SeriesUpdate
@@ -14,10 +15,10 @@ logger = logging.getLogger(__name__)
 class SeriesRepository:
     """Repository layer for series data access operations."""
 
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
 
-    def create_series(self, series_data: SeriesCreate) -> Series:
+    async def create_series(self, series_data: SeriesCreate) -> Series:
         """Create a new series in the database."""
         db_series = Series(
             title=series_data.title,
@@ -31,11 +32,11 @@ class SeriesRepository:
 
         try:
             self.db.add(db_series)
-            self.db.commit()
-            self.db.refresh(db_series)
+            await self.db.commit()
+            await self.db.refresh(db_series)
             return db_series
         except IntegrityError as e:
-            self.db.rollback()
+            await self.db.rollback()
             # Log the actual error for debugging but don't expose sensitive details
             logger.error(f"Series creation failed with integrity error: {str(e)}")
             # Check for common integrity violations and provide safe error messages
