@@ -580,26 +580,26 @@ Features are organized into logical categories and prioritized for implementatio
 
 ## 6. Content Discovery
 
-### F6.1 - Library Search
+### F6.1 - Library Search ✅ **COMPLETED**
 
 **Description:** Implement full-text search across manga titles, authors, and metadata.
 
 **User Story:** As a user, I need to search my library so that I can quickly find specific manga or authors.
 
 **Acceptance Criteria:**
-- [ ] Search input with autocomplete
-- [ ] Full-text search across title, author, description
-- [ ] Tag and genre search support
-- [ ] Search result highlighting
-- [ ] Recent search history
-- [ ] Advanced search filters
-- [ ] Search performance optimization
-- [ ] Empty state handling
+- [x] Search input with autocomplete
+- [x] Full-text search across title, author, description
+- [x] Tag and genre search support
+- [x] Search result highlighting
+- [x] Recent search history
+- [x] Advanced search filters
+- [x] Search performance optimization
+- [x] Empty state handling
 
 **Priority:** High  
 **Complexity:** Medium  
-**Dependencies:** F4.1, F5.1  
-**Technical Notes:** Consider using PostgreSQL full-text search or separate search index
+**Dependencies:** F4.1 ✅, F5.1 ✅  
+**Technical Notes:** ✅ **FULLY COMPLETED** - PostgreSQL full-text search with GIN indexes, comprehensive search service with query parsing, autocomplete, and search history. Security hardened with input sanitization and rate limiting.
 
 ---
 
@@ -651,26 +651,26 @@ Features are organized into logical categories and prioritized for implementatio
 
 ## 7. Reading Experience
 
-### F7.1 - Manga Reader Core
+### F7.1 - Manga Reader Core ✅ **COMPLETED**
 
 **Description:** Implement the core manga reading interface with page navigation and display.
 
 **User Story:** As a reader, I need a manga reader so that I can read chapters comfortably in my browser.
 
 **Acceptance Criteria:**
-- [ ] Full-screen reading mode
-- [ ] Page-by-page navigation
-- [ ] Keyboard controls (arrow keys, space)
-- [ ] Mouse/touch navigation
-- [ ] Page zoom functionality
-- [ ] Reading progress tracking
-- [ ] Chapter boundaries handling
-- [ ] Image loading optimization
+- [x] Full-screen reading mode
+- [x] Page-by-page navigation
+- [x] Keyboard controls (arrow keys, space)
+- [x] Mouse/touch navigation
+- [x] Page zoom functionality
+- [x] Reading progress tracking
+- [x] Chapter boundaries handling
+- [x] Image loading optimization
 
 **Priority:** High  
 **Complexity:** Complex  
-**Dependencies:** F3.2, F5.1  
-**Technical Notes:** Handle different archive formats, implement proper image loading and caching
+**Dependencies:** F3.2 ✅, F5.1 ✅  
+**Technical Notes:** ✅ **FULLY COMPLETED** - Secure archive extraction service with ZIP bomb protection, comprehensive reader with keyboard/touch navigation, page preloading, zoom controls, and full-screen mode. Security hardened against path traversal and resource exhaustion attacks.
 
 ---
 
@@ -697,26 +697,26 @@ Features are organized into logical categories and prioritized for implementatio
 
 ---
 
-### F7.3 - Reading Progress Tracking
+### F7.3 - Reading Progress Tracking ✅ **COMPLETED**
 
 **Description:** Track and store reading progress for each chapter and series.
 
 **User Story:** As a reader, I need progress tracking so that I can resume reading where I left off.
 
 **Acceptance Criteria:**
-- [ ] Per-chapter read status (unread, reading, completed)
-- [ ] Page-level progress within chapters
-- [ ] Series completion percentage
-- [ ] Reading history timeline
-- [ ] Resume reading functionality
-- [ ] Progress sync across devices
-- [ ] Bulk mark as read/unread
-- [ ] Reading statistics dashboard
+- [x] Per-chapter read status (unread, reading, completed)
+- [x] Page-level progress within chapters
+- [x] Series completion percentage
+- [x] Reading history timeline
+- [x] Resume reading functionality
+- [x] Progress sync across devices
+- [x] Bulk mark as read/unread
+- [x] Reading statistics dashboard
 
 **Priority:** High  
 **Complexity:** Medium  
-**Dependencies:** F7.1, F1.1  
-**Technical Notes:** Store progress efficiently, consider real-time updates during reading
+**Dependencies:** F7.1 ✅, F1.1 ✅  
+**Technical Notes:** ✅ **FULLY COMPLETED** - Comprehensive progress tracking system with ReadingProgress and ReadingHistory models, complete API endpoints, bulk operations, statistics generation, and reading streak tracking. Includes device info for cross-device sync.
 
 ---
 
@@ -1264,7 +1264,7 @@ Features are organized into logical categories and prioritized for implementatio
 
 ## Current Implementation Status
 
-### ✅ **COMPLETED FEATURES (17/47)**
+### ✅ **COMPLETED FEATURES (20/47)**
 - **F1.1**: Database Schema & Models Setup ✅ **COMPLETED** (All models: User, Series, Chapter)
 - **F1.2**: Application Configuration System ✅ **COMPLETED**
 - **F1.3**: Docker Containerization ✅ **COMPLETED**
@@ -1279,6 +1279,9 @@ Features are organized into logical categories and prioritized for implementatio
 - **F5.3**: Navigation Structure ✅ **COMPLETED** (Full navigation with production-grade security)
 - **F5.4**: Library Grid View ✅ **COMPLETED** (Complete responsive grid with view toggles, keyboard navigation)
 - **F5.5**: Series Detail View ✅ **COMPLETED** (Complete detail pages with chapter management and progress tracking)
+- **F6.1**: Library Search ✅ **COMPLETED** (Full-text search with PostgreSQL, autocomplete, search history)
+- **F7.1**: Manga Reader Core ✅ **COMPLETED** (Secure archive extraction, full reader UI with navigation)
+- **F7.3**: Reading Progress Tracking ✅ **COMPLETED** (Complete progress system with history and statistics)
 
 ### 🏗️ **SECURITY INFRASTRUCTURE COMPLETED**
 - **Rate Limiting System**: Complete implementation with dependency-based rate limiting
@@ -1287,15 +1290,16 @@ Features are organized into logical categories and prioritized for implementatio
 - **Security Testing**: Comprehensive test suite validating all security measures
 
 ### 🚧 **NEXT PRIORITY FEATURES**
-- **F6.1**: Library Search
-- **F7.1**: Manga Reader Core
-- **F7.3**: Reading Progress Tracking
 - **F4.3**: Manual Metadata Editing
 - **F6.2**: Filtering System
+- **F6.3**: Sorting Options
+- **F7.2**: Reading Modes
+- **F8.1**: Custom Reading Lists
 
 ### 📊 **PROGRESS SUMMARY**
 - **Foundation Phase**: ~100% complete (17/17 core features implemented)
-- **Overall Progress**: ~36% complete (17/47 features + comprehensive security infrastructure)
+- **Core Functionality Phase**: ~100% complete (3/3 search and reader features)
+- **Overall Progress**: ~43% complete (20/47 features + comprehensive security infrastructure)
 - **Authentication System**: Complete end-to-end with UI, logout, protected routes, token refresh, and security hardening
 - **Frontend System**: Complete Next.js 15+ setup with dark/light theme toggle
 - **Navigation System**: Complete with production-grade security and responsive design
@@ -1303,7 +1307,9 @@ Features are organized into logical categories and prioritized for implementatio
 - **Series Management**: Complete end-to-end functionality with frontend integration
 - **Library UI**: Complete responsive grid view and detailed series pages with full interactivity
 - **Security Posture**: Production-ready with comprehensive security measures and vulnerability remediation
-- **Estimated remaining effort**: 12-14 weeks for full feature set
+- **Search & Discovery**: Complete full-text search with autocomplete, history, and advanced filters
+- **Reading Experience**: Complete manga reader with archive extraction, navigation, zoom, and full progress tracking
+- **Estimated remaining effort**: 10-12 weeks for full feature set
 
 ---
 
@@ -1311,6 +1317,6 @@ Features are organized into logical categories and prioritized for implementatio
 
 This atomic feature breakdown provides a comprehensive roadmap for implementing KireMisu incrementally. Each feature is designed to be independently implementable while contributing to the overall product vision. The prioritization ensures that core functionality is delivered first, with advanced features building upon the solid foundation.
 
-**Current Status**: The project has a strong foundation with Docker containerization, authentication, and frontend setup complete. The next phase should focus on implementing Series/Chapter database models and basic manga library functionality.
+**Current Status**: The project has achieved significant progress with 43% of features complete. Core reading and search functionality is fully operational with security hardening. The next phase should focus on metadata editing, filtering systems, and enhanced reading modes to provide a complete manga library experience.
 
 The development team can use this breakdown to plan sprints, estimate effort, and ensure that each implementation phase delivers meaningful user value while maintaining high code quality and system reliability.

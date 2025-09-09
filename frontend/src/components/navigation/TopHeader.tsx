@@ -1,43 +1,39 @@
 "use client"
 
 import React, { useState, useEffect } from 'react'
-import { Search } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+import { useRouter } from 'next/navigation'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { UserMenu } from '@/components/auth/UserMenu'
 import { useAuthStore } from '@/lib/auth-store'
 import { cn } from '@/lib/utils'
-import { z } from 'zod'
+import { useSearch } from '@/hooks/useSearch'
+import SearchAutocomplete from '@/components/search/SearchAutocomplete'
 
 interface TopHeaderProps {
   sidebarCollapsed?: boolean
   className?: string
 }
 
-// Schema for search input validation
-const searchSchema = z.object({
-  query: z
-    .string()
-    .max(200, 'Search query too long')
-    .regex(/^[a-zA-Z0-9\s\-_\.]+$/, 'Only letters, numbers, spaces, hyphens, underscores, and periods allowed')
-    .optional()
-})
-
-// Sanitize input to prevent XSS attacks
-function sanitizeSearchInput(input: string): string {
-  // Remove any HTML tags and dangerous characters
-  return input
-    .replace(/<[^>]*>/g, '') // Remove HTML tags
-    .replace(/[<>'"&]/g, '') // Remove potentially dangerous characters
-    .trim()
-    .slice(0, 200) // Limit length
-}
 
 export function TopHeader({ sidebarCollapsed = false, className }: TopHeaderProps) {
-  const [searchValue, setSearchValue] = useState('')
-  const [searchError, setSearchError] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(false)
   const { isAuthenticated } = useAuthStore()
+  const router = useRouter()
+  
+  // Search functionality
+  const {
+    query,
+    setQuery,
+    search,
+    suggestions,
+    loadingSuggestions,
+    getSuggestions,
+    clearSuggestions,
+    recentSearches,
+    getRecentSearches,
+    clearRecentSearches,
+    error
+  } = useSearch()
 
   useEffect(() => {
     const handleResize = () => {
@@ -49,33 +45,18 @@ export function TopHeader({ sidebarCollapsed = false, className }: TopHeaderProp
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  // Handle search input change with validation
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawValue = e.target.value
-    const sanitizedValue = sanitizeSearchInput(rawValue)
-    
-    // Validate the sanitized input
-    const validation = searchSchema.safeParse({ query: sanitizedValue })
-    
-    if (!validation.success && sanitizedValue.length > 0) {
-      setSearchError(validation.error.issues[0]?.message || 'Invalid search input')
-    } else {
-      setSearchError(null)
-    }
-    
-    setSearchValue(sanitizedValue)
-  }
-
   // Handle search submission
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSearchSubmit = async (searchQuery: string) => {
+    if (!searchQuery.trim()) return
     
-    if (searchError || !searchValue.trim()) {
-      return
-    }
+    // Perform search
+    await search(searchQuery)
     
-    // TODO: Implement search functionality
-    console.log('Searching for:', searchValue)
+    // Navigate to search results page
+    const params = new URLSearchParams({
+      q: searchQuery.trim(),
+    })
+    router.push(`/library?${params.toString()}`)
   }
 
   // Calculate left padding based on sidebar state
@@ -96,33 +77,20 @@ export function TopHeader({ sidebarCollapsed = false, className }: TopHeaderProp
 
         {/* Center section - Search bar */}
         <div className="flex-1 max-w-md mx-4">
-          <form onSubmit={handleSearchSubmit} className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search manga, series, or authors..."
-              value={searchValue}
-              onChange={handleSearchChange}
-              className={cn(
-                "pl-10 bg-input border-border text-foreground placeholder:text-muted-foreground",
-                "focus:border-primary focus:ring-primary/20",
-                "hover:border-accent transition-colors",
-                searchError && "border-destructive focus:border-destructive focus:ring-destructive/20"
-              )}
-              aria-label="Search manga library"
-              aria-invalid={!!searchError}
-              aria-describedby={searchError ? "search-error" : undefined}
-              maxLength={200}
-            />
-            {searchError && (
-              <div
-                id="search-error"
-                className="absolute top-full left-0 mt-1 text-xs text-destructive bg-background px-2 py-1 rounded border border-destructive/30"
-              >
-                {searchError}
-              </div>
-            )}
-          </form>
+          <SearchAutocomplete
+            value={query}
+            onChange={setQuery}
+            onSearch={handleSearchSubmit}
+            suggestions={suggestions}
+            loadingSuggestions={loadingSuggestions}
+            onGetSuggestions={getSuggestions}
+            onClearSuggestions={clearSuggestions}
+            recentSearches={recentSearches}
+            onGetRecentSearches={getRecentSearches}
+            onClearRecentSearches={clearRecentSearches}
+            placeholder="Search manga, series, or authors..."
+            error={error}
+          />
         </div>
 
         {/* Right section - Theme toggle and user menu */}

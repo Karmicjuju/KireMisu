@@ -134,3 +134,44 @@ export async function getSeries(seriesId: string) {
 export async function getChapter(chapterId: string) {
   return fetchWithAuth(`/api/v1/library/chapters/${chapterId}`)
 }
+
+// Reader API functions
+export async function getChapterPages(chapterId: number) {
+  return fetchWithAuth(`/api/v1/reader/chapters/${chapterId}/pages`)
+}
+
+export async function getPageImageUrl(chapterId: number, pageFilename: string, maxWidth?: number): string {
+  const params = new URLSearchParams()
+  if (maxWidth) {
+    params.append('max_width', maxWidth.toString())
+  }
+  const queryString = params.toString()
+  const url = `${API_BASE_URL}/api/v1/reader/chapters/${chapterId}/pages/${encodeURIComponent(pageFilename)}${queryString ? '?' + queryString : ''}`
+  return url
+}
+
+export async function updateReadingProgress(chapterId: number, pageNumber: number) {
+  return fetchWithAuth(`/api/v1/reader/chapters/${chapterId}/progress`, {
+    method: 'POST',
+    body: JSON.stringify({ page_number: pageNumber })
+  })
+}
+
+export async function getChapterNavigation(chapterId: number) {
+  return fetchWithAuth(`/api/v1/reader/chapters/${chapterId}/navigation`)
+}
+
+export async function navigatePages(chapterId: number, direction: string, currentPage: number) {
+  return fetchWithAuth(`/api/v1/reader/chapters/${chapterId}/navigate`, {
+    method: 'POST',
+    body: JSON.stringify({ direction, current_page: currentPage })
+  })
+}
+
+export async function getChapterInfo(chapterId: number) {
+  return fetchWithAuth(`/api/v1/reader/chapters/${chapterId}/info`)
+}
+
+export async function searchLibrary(query: string) {
+  return fetchWithAuth(`/api/v1/search?query=${encodeURIComponent(query)}`)
+}
