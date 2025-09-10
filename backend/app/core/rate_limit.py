@@ -117,7 +117,7 @@ def get_client_ip(request: Request) -> str:
 
 def rate_limit(max_requests: int = 100, window_seconds: int = 3600):
     """
-    Decorator for rate limiting API endpoints.
+    Decorator for rate limiting API endpoints with enhanced security.
     
     Args:
         max_requests: Maximum requests allowed per window (default: 100)
@@ -132,10 +132,20 @@ def rate_limit(max_requests: int = 100, window_seconds: int = 3600):
         def wrapper(request: Request, *args, **kwargs):
             client_ip = get_client_ip(request)
             rate_limiter = get_rate_limiter()
-            
-            # Create a unique key for this endpoint and client
             endpoint = request.url.path
-            rate_key = f"{client_ip}:{endpoint}"
+            
+            # Security Enhancement: Create composite key using IP + user ID
+            try:
+                # Try to get current user if available (for authenticated endpoints)
+                if hasattr(request.state, 'user') and request.state.user:
+                    user_id = str(request.state.user.id)
+                else:
+                    user_id = "anonymous"
+            except:
+                user_id = "anonymous"
+            
+            # Create composite rate limiting key: IP:UserID:Endpoint
+            rate_key = f"{client_ip}:{user_id}:{endpoint}"
             
             is_allowed, retry_after = rate_limiter.is_allowed(
                 rate_key, max_requests, window_seconds
@@ -154,13 +164,14 @@ def rate_limit(max_requests: int = 100, window_seconds: int = 3600):
     return decorator
 
 
-def create_rate_limit_dependency(max_requests: int = 100, window_seconds: int = 3600):
+def create_rate_limit_dependency(max_requests: int = 100, window_seconds: int = 3600, use_user_context: bool = True):
     """
-    Create a FastAPI dependency for rate limiting.
+    Create a FastAPI dependency for rate limiting with enhanced security.
     
     Args:
         max_requests: Maximum requests allowed per window
         window_seconds: Time window in seconds
+        use_user_context: Whether to include user ID in rate limiting key
     
     Returns:
         FastAPI dependency function
@@ -175,10 +186,41 @@ def create_rate_limit_dependency(max_requests: int = 100, window_seconds: int = 
     def rate_limit_dependency(request: Request):
         client_ip = get_client_ip(request)
         rate_limiter = get_rate_limiter()
-        
-        # Create a unique key for this endpoint and client
         endpoint = request.url.path
-        rate_key = f"{client_ip}:{endpoint}"
+        
+        # Security Enhancement: Create composite key for better granularity
+        if use_user_context:
+            # For authenticated endpoints, try to get user from JWT token
+            user_id = "anonymous"
+            auth_header = request.headers.get("Authorization")
+            
+            if auth_header and auth_header.startswith("Bearer "):
+                try:
+                    # Extract user info from token without full validation
+                    # This is for rate limiting purposes only
+                    token = auth_header.split(" ")[1]
+                    # Simple decode to get user ID (not verifying signature for rate limiting)
+                    import base64
+                    import json
+                    
+                    # Decode JWT payload (this is just for rate limiting, not auth)
+                    payload_part = token.split('.')[1]
+                    # Add padding if needed
+                    payload_part += '=' * (4 - len(payload_part) % 4)
+                    decoded = base64.urlsafe_b64decode(payload_part)
+                    payload = json.loads(decoded)
+                    
+                    if 'sub' in payload:
+                        user_id = str(payload['sub'])
+                except:
+                    # If token decode fails, fall back to anonymous
+                    user_id = "anonymous"
+            
+            # Create composite rate limiting key: IP:UserID:Endpoint
+            rate_key = f"{client_ip}:{user_id}:{endpoint}"
+        else:
+            # Use only IP and endpoint for unauthenticated endpoints
+            rate_key = f"{client_ip}:{endpoint}"
         
         is_allowed, retry_after = rate_limiter.is_allowed(
             rate_key, max_requests, window_seconds

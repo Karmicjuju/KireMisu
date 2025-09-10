@@ -2,11 +2,12 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Play, Check, Clock, Calendar, ChevronDown, ChevronRight } from 'lucide-react'
+import { Play, Check, Clock, Calendar, ChevronDown, ChevronRight, Edit } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
+import { ChapterEditDialog } from '@/components/metadata/ChapterEditDialog'
 
 interface Chapter {
   id: number
@@ -24,6 +25,7 @@ interface ChapterListProps {
   groupedChapters?: Record<string, Chapter[]>
   seriesId: number
   onChapterRead?: (chapterId: number) => void
+  onChapterEdit?: (chapter: Chapter) => void
   showReadChapters?: boolean
   className?: string
 }
@@ -32,15 +34,24 @@ interface ChapterItemProps {
   chapter: Chapter
   seriesId: number
   onChapterRead?: (chapterId: number) => void
+  onChapterEdit?: (chapter: Chapter) => void
   className?: string
 }
 
-function ChapterItem({ chapter, seriesId, onChapterRead, className }: ChapterItemProps) {
+function ChapterItem({ chapter, seriesId, onChapterRead, onChapterEdit, className }: ChapterItemProps) {
   const handleMarkAsRead = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     if (onChapterRead) {
       onChapterRead(chapter.id)
+    }
+  }
+
+  const handleEdit = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (onChapterEdit) {
+      onChapterEdit(chapter)
     }
   }
 
@@ -116,6 +127,16 @@ function ChapterItem({ chapter, seriesId, onChapterRead, className }: ChapterIte
           <Button
             size="sm"
             variant="ghost"
+            onClick={handleEdit}
+            className="text-xs"
+          >
+            <Edit className="h-3 w-3 mr-1" />
+            Edit
+          </Button>
+          
+          <Button
+            size="sm"
+            variant="ghost"
             onClick={handleMarkAsRead}
             className="text-xs"
           >
@@ -132,12 +153,14 @@ function VolumeGroup({
   chapters, 
   seriesId, 
   onChapterRead,
+  onChapterEdit,
   showReadChapters = true 
 }: {
   volume: string
   chapters: Chapter[]
   seriesId: number
   onChapterRead?: (chapterId: number) => void
+  onChapterEdit?: (chapter: Chapter) => void
   showReadChapters?: boolean
 }) {
   const [isExpanded, setIsExpanded] = useState(true)
@@ -194,6 +217,7 @@ function VolumeGroup({
               chapter={chapter}
               seriesId={seriesId}
               onChapterRead={onChapterRead}
+              onChapterEdit={onChapterEdit}
             />
           ))}
         </div>
@@ -207,9 +231,15 @@ export function ChapterList({
   groupedChapters,
   seriesId, 
   onChapterRead,
+  onChapterEdit,
   showReadChapters = true,
   className 
 }: ChapterListProps) {
+  const [editingChapter, setEditingChapter] = useState<Chapter | null>(null)
+
+  const handleChapterEdit = (chapter: Chapter) => {
+    setEditingChapter(chapter)
+  }
   if (chapters.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground">
@@ -222,34 +252,70 @@ export function ChapterList({
   // If grouped chapters are provided, use volume grouping
   if (groupedChapters && Object.keys(groupedChapters).length > 1) {
     return (
-      <div className={cn('space-y-4', className)}>
-        {Object.entries(groupedChapters)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([volume, volumeChapters]) => (
-            <VolumeGroup
-              key={volume}
-              volume={volume}
-              chapters={volumeChapters}
-              seriesId={seriesId}
-              onChapterRead={onChapterRead}
-              showReadChapters={showReadChapters}
-            />
-          ))}
-      </div>
+      <>
+        <div className={cn('space-y-4', className)}>
+          {Object.entries(groupedChapters)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([volume, volumeChapters]) => (
+              <VolumeGroup
+                key={volume}
+                volume={volume}
+                chapters={volumeChapters}
+                seriesId={seriesId}
+                onChapterRead={onChapterRead}
+                onChapterEdit={handleChapterEdit}
+                showReadChapters={showReadChapters}
+              />
+            ))}
+        </div>
+
+        {/* Chapter Edit Dialog */}
+        {editingChapter && (
+          <ChapterEditDialog
+            chapter={editingChapter}
+            open={!!editingChapter}
+            onOpenChange={(open) => !open && setEditingChapter(null)}
+            onSuccess={(updatedChapter) => {
+              console.log('Chapter updated:', updatedChapter)
+              if (onChapterEdit) {
+                onChapterEdit(updatedChapter)
+              }
+            }}
+          />
+        )}
+      </>
     )
   }
 
   // Regular flat list
   return (
-    <div className={cn('space-y-2', className)}>
-      {chapters.map((chapter) => (
-        <ChapterItem
-          key={chapter.id}
-          chapter={chapter}
-          seriesId={seriesId}
-          onChapterRead={onChapterRead}
+    <>
+      <div className={cn('space-y-2', className)}>
+        {chapters.map((chapter) => (
+          <ChapterItem
+            key={chapter.id}
+            chapter={chapter}
+            seriesId={seriesId}
+            onChapterRead={onChapterRead}
+            onChapterEdit={handleChapterEdit}
+          />
+        ))}
+      </div>
+
+      {/* Chapter Edit Dialog */}
+      {editingChapter && (
+        <ChapterEditDialog
+          chapter={editingChapter}
+          open={!!editingChapter}
+          onOpenChange={(open) => !open && setEditingChapter(null)}
+          onSuccess={(updatedChapter) => {
+            console.log('Chapter updated:', updatedChapter)
+            if (onChapterEdit) {
+              onChapterEdit(updatedChapter)
+            }
+          }}
         />
-      ))}
-    </div>
+      )}
+    </>
   )
 }

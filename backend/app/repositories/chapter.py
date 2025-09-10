@@ -1,12 +1,17 @@
 from typing import Dict, List, Optional, Any
 from decimal import Decimal
+import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy import and_, func, update
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.models.chapter import Chapter
 from app.models.series import Series
+
+# Setup logging for database operations
+logger = logging.getLogger(__name__)
 
 
 class ChapterRepository:
@@ -17,11 +22,28 @@ class ChapterRepository:
 
     async def create(self, chapter_data: Dict[str, Any]) -> Chapter:
         """Create a new chapter."""
-        chapter = Chapter(**chapter_data)
-        self.db.add(chapter)
-        await self.db.commit()
-        await self.db.refresh(chapter)
-        return chapter
+        try:
+            chapter = Chapter(**chapter_data)
+            self.db.add(chapter)
+            await self.db.commit()
+            await self.db.refresh(chapter)
+            return chapter
+        except IntegrityError as e:
+            await self.db.rollback()
+            # Log the actual error for debugging but don't expose sensitive details
+            logger.error(f"Chapter creation failed with integrity error: {str(e)}")
+            # Check for common integrity violations and provide safe error messages
+            error_msg = str(e.orig).lower() if hasattr(e, 'orig') else str(e).lower()
+            if 'foreign key' in error_msg:
+                raise ValueError("Invalid series reference for chapter")
+            elif 'duplicate' in error_msg or 'unique' in error_msg:
+                raise ValueError("Chapter with this number already exists for this series")
+            else:
+                raise ValueError("Chapter creation failed due to data constraints")
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"Database error during chapter creation: {str(e)}")
+            raise ValueError("Chapter creation failed due to database error")
 
     async def get_by_id(self, chapter_id: int) -> Optional[Chapter]:
         """Get a chapter by ID."""
@@ -117,21 +139,38 @@ class ChapterRepository:
         if not filtered_data:
             return await self.get_by_id(chapter_id)
         
-        query = (
-            update(Chapter)
-            .where(Chapter.id == chapter_id)
-            .values(**filtered_data)
-            .returning(Chapter)
-        )
-        
-        result = await self.db.execute(query)
-        await self.db.commit()
-        updated_chapter = result.scalar_one_or_none()
-        
-        if updated_chapter:
-            await self.db.refresh(updated_chapter)
-        
-        return updated_chapter
+        try:
+            query = (
+                update(Chapter)
+                .where(Chapter.id == chapter_id)
+                .values(**filtered_data)
+                .returning(Chapter)
+            )
+            
+            result = await self.db.execute(query)
+            await self.db.commit()
+            updated_chapter = result.scalar_one_or_none()
+            
+            if updated_chapter:
+                await self.db.refresh(updated_chapter)
+            
+            return updated_chapter
+        except IntegrityError as e:
+            await self.db.rollback()
+            # Log the actual error for debugging but don't expose sensitive details
+            logger.error(f"Chapter update failed with integrity error: {str(e)}")
+            # Check for common integrity violations and provide safe error messages
+            error_msg = str(e.orig).lower() if hasattr(e, 'orig') else str(e).lower()
+            if 'foreign key' in error_msg:
+                raise ValueError("Invalid series reference for chapter")
+            elif 'duplicate' in error_msg or 'unique' in error_msg:
+                raise ValueError("Chapter with this number already exists for this series")
+            else:
+                raise ValueError("Chapter update failed due to data constraints")
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"Database error during chapter update: {str(e)}")
+            raise ValueError("Chapter update failed due to database error")
 
     async def bulk_update(
         self, chapter_ids: List[int], update_data: Dict[str, Any]
@@ -146,23 +185,40 @@ class ChapterRepository:
             result = await self.db.execute(query)
             return result.scalars().all()
         
-        # Perform bulk update
-        query = (
-            update(Chapter)
-            .where(Chapter.id.in_(chapter_ids))
-            .values(**filtered_data)
-            .returning(Chapter)
-        )
-        
-        result = await self.db.execute(query)
-        await self.db.commit()
-        updated_chapters = result.scalars().all()
-        
-        # Refresh all updated chapters
-        for chapter in updated_chapters:
-            await self.db.refresh(chapter)
-        
-        return updated_chapters
+        try:
+            # Perform bulk update
+            query = (
+                update(Chapter)
+                .where(Chapter.id.in_(chapter_ids))
+                .values(**filtered_data)
+                .returning(Chapter)
+            )
+            
+            result = await self.db.execute(query)
+            await self.db.commit()
+            updated_chapters = result.scalars().all()
+            
+            # Refresh all updated chapters
+            for chapter in updated_chapters:
+                await self.db.refresh(chapter)
+            
+            return updated_chapters
+        except IntegrityError as e:
+            await self.db.rollback()
+            # Log the actual error for debugging but don't expose sensitive details
+            logger.error(f"Bulk chapter update failed with integrity error: {str(e)}")
+            # Check for common integrity violations and provide safe error messages
+            error_msg = str(e.orig).lower() if hasattr(e, 'orig') else str(e).lower()
+            if 'foreign key' in error_msg:
+                raise ValueError("Invalid series reference for one or more chapters")
+            elif 'duplicate' in error_msg or 'unique' in error_msg:
+                raise ValueError("Duplicate chapter numbers detected in update")
+            else:
+                raise ValueError("Bulk chapter update failed due to data constraints")
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"Database error during bulk chapter update: {str(e)}")
+            raise ValueError("Bulk chapter update failed due to database error")
 
     async def delete(self, chapter_id: int) -> bool:
         """Delete a chapter."""
@@ -170,9 +226,18 @@ class ChapterRepository:
         if not chapter:
             return False
         
-        await self.db.delete(chapter)
-        await self.db.commit()
-        return True
+        try:
+            await self.db.delete(chapter)
+            await self.db.commit()
+            return True
+        except IntegrityError as e:
+            await self.db.rollback()
+            logger.error(f"Chapter deletion failed with integrity error: {str(e)}")
+            raise ValueError("Cannot delete chapter: it may have associated data that must be removed first")
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"Database error during chapter deletion: {str(e)}")
+            raise ValueError("Chapter deletion failed due to database error")
 
     async def count_by_series(self, series_id: int) -> int:
         """Count chapters in a series."""

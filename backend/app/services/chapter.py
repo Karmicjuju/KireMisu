@@ -177,63 +177,72 @@ class ChapterService:
         bulk_data: BulkChapterUpdate,
         user_id: Optional[int] = None,
     ) -> List[Chapter]:
-        """Update multiple chapters with the same data."""
-        # Validate that all chapters exist
-        existing_chapters = []
-        for chapter_id in bulk_data.chapter_ids:
-            chapter = await self.repository.get_by_id(chapter_id)
-            if not chapter:
-                raise ValueError(f"Chapter with ID {chapter_id} not found")
-            existing_chapters.append(chapter)
+        """Update multiple chapters with the same data using atomic transaction."""
+        # Security Fix: Use atomic transaction to ensure data integrity
+        async with self.db.begin() as transaction:
+            try:
+                # Validate that all chapters exist
+                existing_chapters = []
+                for chapter_id in bulk_data.chapter_ids:
+                    chapter = await self.repository.get_by_id(chapter_id)
+                    if not chapter:
+                        raise ValueError(f"Chapter with ID {chapter_id} not found")
+                    existing_chapters.append(chapter)
 
-        update_dict = bulk_data.updates.model_dump(exclude_unset=True)
-        if not update_dict:
-            return existing_chapters
+                update_dict = bulk_data.updates.model_dump(exclude_unset=True)
+                if not update_dict:
+                    return existing_chapters
 
-        # Check for number conflicts if updating chapter numbers
-        if "number" in update_dict:
-            new_number = Decimal(str(update_dict["number"]))
-            for chapter in existing_chapters:
-                conflict = await self.repository.get_by_series_and_number(
-                    chapter.series_id, new_number
+                # Check for number conflicts if updating chapter numbers
+                if "number" in update_dict:
+                    new_number = Decimal(str(update_dict["number"]))
+                    for chapter in existing_chapters:
+                        conflict = await self.repository.get_by_series_and_number(
+                            chapter.series_id, new_number
+                        )
+                        if conflict and conflict.id != chapter.id:
+                            raise ValueError(
+                                f"Chapter {new_number} already exists for series {chapter.series_id}"
+                            )
+
+                # Perform bulk update
+                updated_chapters = await self.repository.bulk_update(
+                    bulk_data.chapter_ids, update_dict
                 )
-                if conflict and conflict.id != chapter.id:
-                    raise ValueError(
-                        f"Chapter {new_number} already exists for series {chapter.series_id}"
+
+                # Record history for each updated chapter
+                for chapter in updated_chapters:
+                    current_data = {
+                        "number": float(chapter.number) if chapter.number else None,
+                        "title": chapter.title,
+                        "volume": float(chapter.volume) if chapter.volume else None,
+                        "description": chapter.description,
+                        "release_date": chapter.release_date.isoformat() if chapter.release_date else None,
+                        "page_count": chapter.page_count,
+                        "file_size": chapter.file_size,
+                        "read_status": chapter.read_status,
+                        "metadata_json": chapter.metadata_json,
+                    }
+                    
+                    new_data = {**current_data, **update_dict}
+                    
+                    await self.history_service.record_change(
+                        entity_type="chapter",
+                        entity_id=chapter.id,
+                        user_id=user_id,
+                        action="bulk_update",
+                        previous_data=current_data,
+                        new_data=new_data,
+                        description=f"Bulk update applied to chapter {chapter.number}",
                     )
 
-        # Perform bulk update
-        updated_chapters = await self.repository.bulk_update(
-            bulk_data.chapter_ids, update_dict
-        )
-
-        # Record history for each updated chapter
-        for chapter in updated_chapters:
-            current_data = {
-                "number": float(chapter.number) if chapter.number else None,
-                "title": chapter.title,
-                "volume": float(chapter.volume) if chapter.volume else None,
-                "description": chapter.description,
-                "release_date": chapter.release_date.isoformat() if chapter.release_date else None,
-                "page_count": chapter.page_count,
-                "file_size": chapter.file_size,
-                "read_status": chapter.read_status,
-                "metadata_json": chapter.metadata_json,
-            }
-            
-            new_data = {**current_data, **update_dict}
-            
-            await self.history_service.record_change(
-                entity_type="chapter",
-                entity_id=chapter.id,
-                user_id=user_id,
-                action="bulk_update",
-                previous_data=current_data,
-                new_data=new_data,
-                description=f"Bulk update applied to chapter {chapter.number}",
-            )
-
-        return updated_chapters
+                # Commit transaction
+                await transaction.commit()
+                return updated_chapters
+                
+            except Exception as e:
+                # Transaction will be automatically rolled back on exception
+                raise e
 
     async def delete_chapter(
         self, chapter_id: int, user_id: Optional[int] = None

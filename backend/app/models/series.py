@@ -1,5 +1,5 @@
 from sqlalchemy import JSON, Column, DateTime, Integer, String, Text, Index
-from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
+from sqlalchemy.dialects.postgresql import JSONB  # , TSVECTOR  # TODO: Add when migration is ready
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -21,7 +21,7 @@ class Series(Base):
     metadata_json = Column(JSON().with_variant(JSONB(), 'postgresql'), nullable=True)
     
     # Full-text search vector for PostgreSQL
-    search_vector = Column(TSVECTOR, nullable=True)
+    # search_vector = Column(TSVECTOR, nullable=True)  # TODO: Add migration for search vector
     
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -40,11 +40,11 @@ class Series(Base):
     
     # Full-text search indexes
     __table_args__ = (
-        Index(
-            'ix_series_search_vector',
-            search_vector,
-            postgresql_using='gin'
-        ),
+        # Index(
+        #     'ix_series_search_vector',
+        #     search_vector,
+        #     postgresql_using='gin'
+        # ),  # TODO: Add migration for search vector
         Index(
             'ix_series_title_gin',
             'title',

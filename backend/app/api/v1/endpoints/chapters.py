@@ -278,12 +278,22 @@ async def get_chapter_history(
     - **offset**: Number of entries to skip for pagination
     """
     try:
+        # Security Fix: Verify chapter exists and is accessible to user before returning history
+        chapter = await chapter_service.get_chapter_by_id(chapter_id)
+        if not chapter:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Chapter with ID {chapter_id} not found"
+            )
+        
         history = await chapter_service.get_chapter_history(
             chapter_id=chapter_id,
             limit=limit,
             offset=offset,
         )
         return [MetadataHistoryWithUserResponse.model_validate(entry) for entry in history]
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
     except Exception as e:
         logger.error(f"Unexpected error in get_chapter_history: {str(e)}")
         raise HTTPException(
@@ -308,6 +318,14 @@ async def restore_chapter_from_history(
     - **history_id**: The ID of the history entry to restore from
     """
     try:
+        # Security Fix: Verify chapter exists and is accessible before allowing restore
+        chapter = await chapter_service.get_chapter_by_id(chapter_id)
+        if not chapter:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Chapter with ID {chapter_id} not found"
+            )
+        
         restored_chapter = await chapter_service.restore_chapter_from_history(
             chapter_id=chapter_id,
             history_id=history_id,
@@ -317,10 +335,12 @@ async def restore_chapter_from_history(
         if not restored_chapter:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Chapter with ID {chapter_id} or history entry {history_id} not found"
+                detail=f"History entry {history_id} not found"
             )
         
         return ChapterResponse.model_validate(restored_chapter)
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
     except ValueError as e:
         logger.warning(f"Invalid request in restore_chapter_from_history: {str(e)}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

@@ -1,11 +1,16 @@
 from typing import Dict, List, Optional, Any, Union
 import uuid
+import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy import func, delete
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.models.metadata_history import MetadataHistory
+
+# Setup logging for database operations
+logger = logging.getLogger(__name__)
 
 
 class MetadataHistoryRepository:
@@ -26,21 +31,36 @@ class MetadataHistoryRepository:
         description: Optional[str] = None,
     ) -> MetadataHistory:
         """Create a new metadata history entry."""
-        history = MetadataHistory(
-            entity_type=entity_type,
-            entity_id=entity_id,
-            user_id=user_id,
-            action=action,
-            previous_data=previous_data,
-            new_data=new_data,
-            changed_fields=changed_fields,
-            description=description,
-        )
-        
-        self.db.add(history)
-        await self.db.commit()
-        await self.db.refresh(history)
-        return history
+        try:
+            history = MetadataHistory(
+                entity_type=entity_type,
+                entity_id=entity_id,
+                user_id=user_id,
+                action=action,
+                previous_data=previous_data,
+                new_data=new_data,
+                changed_fields=changed_fields,
+                description=description,
+            )
+            
+            self.db.add(history)
+            await self.db.commit()
+            await self.db.refresh(history)
+            return history
+        except IntegrityError as e:
+            await self.db.rollback()
+            # Log the actual error for debugging but don't expose sensitive details
+            logger.error(f"History entry creation failed with integrity error: {str(e)}")
+            # Check for common integrity violations and provide safe error messages
+            error_msg = str(e.orig).lower() if hasattr(e, 'orig') else str(e).lower()
+            if 'foreign key' in error_msg:
+                raise ValueError("Invalid entity or user reference for history entry")
+            else:
+                raise ValueError("History entry creation failed due to data constraints")
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"Database error during history entry creation: {str(e)}")
+            raise ValueError("History entry creation failed due to database error")
 
     async def get_entity_history(
         self,
@@ -119,33 +139,42 @@ class MetadataHistoryRepository:
         keep_count: int = 100,
     ) -> int:
         """Delete old history entries, keeping only the most recent ones."""
-        # First get the IDs of entries to keep
-        keep_query = (
-            select(MetadataHistory.id)
-            .where(
-                MetadataHistory.entity_type == entity_type,
-                MetadataHistory.entity_id == entity_id,
+        try:
+            # First get the IDs of entries to keep
+            keep_query = (
+                select(MetadataHistory.id)
+                .where(
+                    MetadataHistory.entity_type == entity_type,
+                    MetadataHistory.entity_id == entity_id,
+                )
+                .order_by(MetadataHistory.created_at.desc())
+                .limit(keep_count)
             )
-            .order_by(MetadataHistory.created_at.desc())
-            .limit(keep_count)
-        )
-        
-        result = await self.db.execute(keep_query)
-        keep_ids = [row[0] for row in result.fetchall()]
-        
-        if not keep_ids:
-            return 0
-        
-        # Delete entries not in the keep list
-        delete_query = (
-            delete(MetadataHistory)
-            .where(
-                MetadataHistory.entity_type == entity_type,
-                MetadataHistory.entity_id == entity_id,
-                ~MetadataHistory.id.in_(keep_ids),
+            
+            result = await self.db.execute(keep_query)
+            keep_ids = [row[0] for row in result.fetchall()]
+            
+            if not keep_ids:
+                return 0
+            
+            # Delete entries not in the keep list
+            delete_query = (
+                delete(MetadataHistory)
+                .where(
+                    MetadataHistory.entity_type == entity_type,
+                    MetadataHistory.entity_id == entity_id,
+                    ~MetadataHistory.id.in_(keep_ids),
+                )
             )
-        )
-        
-        result = await self.db.execute(delete_query)
-        await self.db.commit()
-        return result.rowcount
+            
+            result = await self.db.execute(delete_query)
+            await self.db.commit()
+            return result.rowcount
+        except IntegrityError as e:
+            await self.db.rollback()
+            logger.error(f"History deletion failed with integrity error: {str(e)}")
+            raise ValueError("Cannot delete history entries: there may be dependencies that prevent deletion")
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"Database error during history deletion: {str(e)}")
+            raise ValueError("History deletion failed due to database error")

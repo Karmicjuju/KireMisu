@@ -48,11 +48,11 @@ class SeriesService:
         
         return series
 
-    def get_series_by_id(self, series_id: int) -> Optional[Series]:
+    async def get_series_by_id(self, series_id: int) -> Optional[Series]:
         """Get series by ID."""
-        return self.series_repo.get_series_by_id(series_id)
+        return await self.series_repo.get_series_by_id(series_id)
 
-    def get_all_series_paginated(
+    async def get_all_series_paginated(
         self, 
         page: int = 1, 
         size: int = 20
@@ -65,8 +65,8 @@ class SeriesService:
             size = 20
 
         skip = (page - 1) * size
-        series_list = self.series_repo.get_all_series(skip=skip, limit=size)
-        total_count = self.series_repo.get_series_count()
+        series_list = await self.series_repo.get_all_series(skip=skip, limit=size)
+        total_count = await self.series_repo.get_series_count()
         total_pages = ceil(total_count / size) if total_count > 0 else 1
 
         # Convert to response schema
@@ -80,7 +80,7 @@ class SeriesService:
             pages=total_pages
         )
 
-    def search_series_paginated(
+    async def search_series_paginated(
         self, 
         query: str, 
         page: int = 1, 
@@ -94,8 +94,8 @@ class SeriesService:
             size = 20
 
         skip = (page - 1) * size
-        series_list = self.series_repo.search_series(query, skip=skip, limit=size)
-        total_count = self.series_repo.search_series_count(query)
+        series_list = await self.series_repo.search_series(query, skip=skip, limit=size)
+        total_count = await self.series_repo.search_series_count(query)
         total_pages = ceil(total_count / size) if total_count > 0 else 1
 
         # Convert to response schema
@@ -109,7 +109,7 @@ class SeriesService:
             pages=total_pages
         )
 
-    def get_series_by_status_paginated(
+    async def get_series_by_status_paginated(
         self, 
         status: str, 
         page: int = 1, 
@@ -123,8 +123,8 @@ class SeriesService:
             size = 20
 
         skip = (page - 1) * size
-        series_list = self.series_repo.get_series_by_status(status, skip=skip, limit=size)
-        total_count = self.series_repo.get_series_by_status_count(status)
+        series_list = await self.series_repo.get_series_by_status(status, skip=skip, limit=size)
+        total_count = await self.series_repo.get_series_by_status_count(status)
         total_pages = ceil(total_count / size) if total_count > 0 else 1
 
         # Convert to response schema
@@ -199,9 +199,9 @@ class SeriesService:
 
         return updated_series
 
-    def delete_series(self, series_id: int) -> bool:
+    async def delete_series(self, series_id: int) -> bool:
         """Delete series by ID."""
-        return self.series_repo.delete_series(series_id)
+        return await self.series_repo.delete_series(series_id)
 
     def get_recent_series(self, limit: int = 10) -> List[SeriesResponse]:
         """Get recently created series."""
@@ -302,46 +302,57 @@ class SeriesService:
         update_data: SeriesUpdate,
         user_id: Optional[str] = None,
     ) -> List[Series]:
-        """Update multiple series with the same data."""
+        """Update multiple series with the same data using atomic transaction."""
         if len(series_ids) > 100:
             raise ValueError("Cannot update more than 100 series at once")
 
         if len(set(series_ids)) != len(series_ids):
             raise ValueError("Series IDs must be unique")
 
-        # Validate that all series exist
-        updated_series = []
-        update_dict = update_data.model_dump(exclude_unset=True)
-        
-        if not update_dict:
-            # Return existing series without changes
-            for series_id in series_ids:
-                series = await self.series_repo.get_series_by_id(series_id)
-                if series:
-                    updated_series.append(series)
-            return updated_series
-
-        # Check for title conflicts if updating titles
-        if "title" in update_dict:
-            new_title = update_dict["title"]
-            existing_with_title = await self.series_repo.get_series_by_title(new_title)
-            if existing_with_title and existing_with_title.id not in series_ids:
-                raise ValueError(f"Series with title '{new_title}' already exists")
-
-        # Update each series individually to maintain proper history tracking
-        for series_id in series_ids:
+        # Security Fix: Use atomic transaction to ensure data integrity
+        async with self.db.begin() as transaction:
             try:
-                updated = await self.update_series(
-                    series_id=series_id,
-                    series_data=update_data,
-                    user_id=user_id,
-                    preview_mode=False,
-                )
-                if updated and not isinstance(updated, dict):  # Ensure it's not a preview
-                    updated_series.append(updated)
-            except Exception as e:
-                # Log the error but continue with other series
-                # In a production environment, you might want to rollback all changes
-                continue
+                updated_series = []
+                update_dict = update_data.model_dump(exclude_unset=True)
+                
+                if not update_dict:
+                    # Return existing series without changes
+                    for series_id in series_ids:
+                        series = await self.series_repo.get_series_by_id(series_id)
+                        if series:
+                            updated_series.append(series)
+                    return updated_series
 
-        return updated_series
+                # Validate that all series exist before making any changes
+                existing_series = []
+                for series_id in series_ids:
+                    series = await self.series_repo.get_series_by_id(series_id)
+                    if not series:
+                        raise ValueError(f"Series with ID {series_id} not found")
+                    existing_series.append(series)
+
+                # Check for title conflicts if updating titles
+                if "title" in update_dict:
+                    new_title = update_dict["title"]
+                    existing_with_title = await self.series_repo.get_series_by_title(new_title)
+                    if existing_with_title and existing_with_title.id not in series_ids:
+                        raise ValueError(f"Series with title '{new_title}' already exists")
+
+                # Update each series individually to maintain proper history tracking
+                for series_id in series_ids:
+                    updated = await self.update_series(
+                        series_id=series_id,
+                        series_data=update_data,
+                        user_id=user_id,
+                        preview_mode=False,
+                    )
+                    if updated and not isinstance(updated, dict):  # Ensure it's not a preview
+                        updated_series.append(updated)
+
+                # Commit transaction
+                await transaction.commit()
+                return updated_series
+                
+            except Exception as e:
+                # Transaction will be automatically rolled back on exception
+                raise e

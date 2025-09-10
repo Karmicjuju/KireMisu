@@ -7,10 +7,39 @@ class ApiError extends Error {
   }
 }
 
+// CSRF Token Management
+let csrfToken: string | null = null
+
+function generateCSRFToken(): string {
+  // Generate a cryptographically secure random token
+  const array = new Uint8Array(32)
+  crypto.getRandomValues(array)
+  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function getCSRFToken(): string {
+  if (!csrfToken) {
+    csrfToken = generateCSRFToken()
+    // Store in a secure cookie that JavaScript can read
+    document.cookie = `csrf_token=${csrfToken}; SameSite=Strict; Secure=${location.protocol === 'https:'}; Path=/`
+  }
+  return csrfToken
+}
+
+function isStateChangingMethod(method: string): boolean {
+  return ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase())
+}
+
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<any> {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
+  }
+  
+  // Add CSRF token for state-changing operations
+  const method = options.method || 'GET'
+  if (typeof window !== 'undefined' && isStateChangingMethod(method)) {
+    headers['X-CSRF-Token'] = getCSRFToken()
   }
   
   try {
@@ -65,11 +94,18 @@ export async function login(username: string, password: string) {
   formData.append('username', username)
   formData.append('password', password)
   
+  const headers: HeadersInit = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+  }
+  
+  // Add CSRF token for login
+  if (typeof window !== 'undefined') {
+    headers['X-CSRF-Token'] = getCSRFToken()
+  }
+  
   const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
+    headers,
     body: formData.toString(),
     credentials: 'include', // Include cookies in requests
   })
@@ -85,9 +121,17 @@ export async function login(username: string, password: string) {
 
 export async function logout() {
   try {
+    const headers: HeadersInit = {}
+    
+    // Add CSRF token for logout
+    if (typeof window !== 'undefined') {
+      headers['X-CSRF-Token'] = getCSRFToken()
+    }
+    
     // Call backend logout endpoint to clear cookies
     await fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
       method: 'POST',
+      headers,
       credentials: 'include',
     })
     
@@ -174,4 +218,83 @@ export async function getChapterInfo(chapterId: number) {
 
 export async function searchLibrary(query: string) {
   return fetchWithAuth(`/api/v1/search?query=${encodeURIComponent(query)}`)
+}
+
+// Metadata editing API functions
+export async function updateSeries(seriesId: number, data: any, preview: boolean = false) {
+  const params = preview ? '?preview=true' : ''
+  return fetchWithAuth(`/api/v1/series/${seriesId}${params}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data)
+  })
+}
+
+export async function getSeriesHistory(seriesId: number) {
+  return fetchWithAuth(`/api/v1/series/${seriesId}/history`)
+}
+
+export async function restoreSeriesHistory(seriesId: number, historyId: number) {
+  return fetchWithAuth(`/api/v1/series/${seriesId}/restore/${historyId}`, {
+    method: 'POST'
+  })
+}
+
+export async function bulkUpdateSeries(seriesIds: number[], data: any) {
+  return fetchWithAuth('/api/v1/series/bulk', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      series_ids: seriesIds,
+      update_data: data
+    })
+  })
+}
+
+export async function getChapters(seriesId?: number) {
+  const params = seriesId ? `?series_id=${seriesId}` : ''
+  return fetchWithAuth(`/api/v1/chapters/${params}`)
+}
+
+export async function createChapter(data: any) {
+  return fetchWithAuth('/api/v1/chapters/', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+}
+
+export async function getChapterById(chapterId: number) {
+  return fetchWithAuth(`/api/v1/chapters/${chapterId}`)
+}
+
+export async function updateChapter(chapterId: number, data: any, preview: boolean = false) {
+  const params = preview ? '?preview=true' : ''
+  return fetchWithAuth(`/api/v1/chapters/${chapterId}${params}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data)
+  })
+}
+
+export async function deleteChapter(chapterId: number) {
+  return fetchWithAuth(`/api/v1/chapters/${chapterId}`, {
+    method: 'DELETE'
+  })
+}
+
+export async function bulkUpdateChapters(chapterIds: number[], data: any) {
+  return fetchWithAuth('/api/v1/chapters/bulk', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      chapter_ids: chapterIds,
+      update_data: data
+    })
+  })
+}
+
+export async function getChapterHistory(chapterId: number) {
+  return fetchWithAuth(`/api/v1/chapters/${chapterId}/history`)
+}
+
+export async function restoreChapterHistory(chapterId: number, historyId: number) {
+  return fetchWithAuth(`/api/v1/chapters/${chapterId}/restore/${historyId}`, {
+    method: 'POST'
+  })
 }

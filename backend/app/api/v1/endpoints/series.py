@@ -38,7 +38,7 @@ async def get_series(
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
     search: Optional[str] = Query(None, description="Search query for title, author, or artist"),
-    status: Optional[str] = Query(None, description="Filter by series status"),
+    series_status: Optional[str] = Query(None, description="Filter by series status", alias="status"),
     author: Optional[str] = Query(None, description="Filter by author"),
     current_user = Depends(current_active_user),
     series_service: SeriesService = Depends(get_series_service),
@@ -55,13 +55,13 @@ async def get_series(
     """
     try:
         if search:
-            return series_service.search_series_paginated(search, page, size)
-        elif status:
-            return series_service.get_series_by_status_paginated(status, page, size)
+            return await series_service.search_series_paginated(search, page, size)
+        elif series_status:
+            return await series_service.get_series_by_status_paginated(series_status, page, size)
         elif author:
-            return series_service.get_series_by_author_paginated(author, page, size)
+            return await series_service.get_series_by_author_paginated(author, page, size)
         else:
-            return series_service.get_all_series_paginated(page, size)
+            return await series_service.get_all_series_paginated(page, size)
     except ValueError as e:
         logger.warning(f"Invalid request in get_series: {str(e)}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -119,7 +119,7 @@ async def get_series_by_id(
     
     - **series_id**: The ID of the series to retrieve
     """
-    series = series_service.get_series_by_id(series_id)
+    series = await series_service.get_series_by_id(series_id)
     if not series:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -192,7 +192,7 @@ async def delete_series(
     This will also delete all associated chapters.
     """
     try:
-        success = series_service.delete_series(series_id)
+        success = await series_service.delete_series(series_id)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -286,12 +286,22 @@ async def get_series_history(
     - **offset**: Number of entries to skip for pagination
     """
     try:
+        # Security Fix: Verify series exists and is accessible to user before returning history
+        series = await series_service.get_series_by_id(series_id)
+        if not series:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Series with ID {series_id} not found"
+            )
+        
         history = await series_service.get_series_history(
             series_id=series_id,
             limit=limit,
             offset=offset,
         )
         return history
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
     except Exception as e:
         logger.error(f"Unexpected error in get_series_history: {str(e)}")
         raise HTTPException(
@@ -316,6 +326,14 @@ async def restore_series_from_history(
     - **history_id**: The ID of the history entry to restore from
     """
     try:
+        # Security Fix: Verify series exists and is accessible before allowing restore
+        series = await series_service.get_series_by_id(series_id)
+        if not series:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Series with ID {series_id} not found"
+            )
+        
         restored_series = await series_service.restore_series_from_history(
             series_id=series_id,
             history_id=history_id,
@@ -325,10 +343,12 @@ async def restore_series_from_history(
         if not restored_series:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Series with ID {series_id} or history entry {history_id} not found"
+                detail=f"History entry {history_id} not found"
             )
         
         return SeriesResponse.model_validate(restored_series)
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
     except ValueError as e:
         logger.warning(f"Invalid request in restore_series_from_history: {str(e)}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

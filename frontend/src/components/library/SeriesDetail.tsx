@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import Image from 'next/image'
-import { ArrowLeft, BookOpen, Clock, Star, MoreVertical, Play, Plus, Check, Eye, EyeOff } from 'lucide-react'
+import { ArrowLeft, BookOpen, Clock, Star, MoreVertical, Play, Plus, Check, Eye, EyeOff, Edit } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Toggle } from '@/components/ui/toggle'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ChapterList } from './ChapterList'
+import { SeriesEditDialog } from '@/components/metadata/SeriesEditDialog'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 
@@ -64,6 +65,7 @@ export function SeriesDetail({
   const [sortBy, setSortBy] = useState<SortOption>('number-asc')
   const [showReadChapters, setShowReadChapters] = useState(true)
   const [expandedDescription, setExpandedDescription] = useState(false)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
 
   // Calculate reading statistics
   const readingStats = useMemo(() => {
@@ -282,7 +284,8 @@ export function SeriesDetail({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
-                      <DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setEditDialogOpen(true)}>
+                        <Edit className="h-4 w-4 mr-2" />
                         Edit Metadata
                       </DropdownMenuItem>
                       <DropdownMenuItem>
@@ -427,6 +430,17 @@ export function SeriesDetail({
           </Card>
         </div>
       </div>
+
+      {/* Edit Dialog */}
+      <SeriesEditDialog
+        series={series}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onSuccess={(updatedSeries) => {
+          // You could update the local state here if needed
+          console.log('Series updated:', updatedSeries)
+        }}
+      />
     </div>
   )
 }
