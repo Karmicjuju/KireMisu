@@ -1,3 +1,12 @@
+import type { 
+  LibraryPathResponse, 
+  LibraryPathCreate, 
+  LibraryPathUpdate, 
+  PathValidationResult, 
+  StorageInfo, 
+  DirectoryBrowseResponse 
+} from './types'
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 class ApiError extends Error {
@@ -184,7 +193,7 @@ export async function getChapterPages(chapterId: number) {
   return fetchWithAuth(`/api/v1/reader/chapters/${chapterId}/pages`)
 }
 
-export async function getPageImageUrl(chapterId: number, pageFilename: string, maxWidth?: number): string {
+export async function getPageImageUrl(chapterId: number, pageFilename: string, maxWidth?: number): Promise<string> {
   const params = new URLSearchParams()
   if (maxWidth) {
     params.append('max_width', maxWidth.toString())
@@ -297,4 +306,67 @@ export async function restoreChapterHistory(chapterId: number, historyId: number
   return fetchWithAuth(`/api/v1/chapters/${chapterId}/restore/${historyId}`, {
     method: 'POST'
   })
+}
+
+// Library Path API functions
+export async function getLibraryPaths(includeInactive: boolean = false): Promise<LibraryPathResponse[]> {
+  const params = includeInactive ? '?include_inactive=true' : ''
+  return fetchWithAuth(`/api/v1/library-paths/${params}`)
+}
+
+export async function createLibraryPath(data: LibraryPathCreate): Promise<LibraryPathResponse> {
+  return fetchWithAuth('/api/v1/library-paths/', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+}
+
+export async function updateLibraryPath(pathId: number, data: LibraryPathUpdate): Promise<LibraryPathResponse> {
+  return fetchWithAuth(`/api/v1/library-paths/${pathId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  })
+}
+
+export async function deleteLibraryPath(pathId: number): Promise<void> {
+  return fetchWithAuth(`/api/v1/library-paths/${pathId}`, {
+    method: 'DELETE'
+  })
+}
+
+export async function validatePath(path: string): Promise<PathValidationResult> {
+  const params = `?path=${encodeURIComponent(path)}`
+  return fetchWithAuth(`/api/v1/library-paths/validate-path${params}`, {
+    method: 'POST'
+  })
+}
+
+export async function getStorageInfo(pathId: number): Promise<StorageInfo> {
+  return fetchWithAuth(`/api/v1/library-paths/${pathId}/storage-info`)
+}
+
+export async function browsePaths(path: string, showHidden: boolean = false): Promise<DirectoryBrowseResponse> {
+  const encodedPath = encodeURIComponent(path)
+  const params = showHidden ? '?show_hidden=true' : '?show_hidden=false'
+  return fetchWithAuth(`/api/v1/library-paths/browse/${encodedPath}${params}`)
+}
+
+// Directory browsing function
+export async function browseDirectory(path: string, showHidden: boolean = false): Promise<DirectoryBrowseResponse> {
+  const encodedPath = encodeURIComponent(path)
+  const params = showHidden ? '?show_hidden=true' : '?show_hidden=false'
+  return fetchWithAuth(`/api/v1/library-paths/browse/${encodedPath}${params}`)
+}
+
+// Convenience functions for library path management
+export async function activateLibraryPath(pathId: number): Promise<LibraryPathResponse> {
+  return updateLibraryPath(pathId, { is_active: true })
+}
+
+export async function deactivateLibraryPath(pathId: number): Promise<LibraryPathResponse> {
+  return updateLibraryPath(pathId, { is_active: false })
+}
+
+export async function updateLibraryPathPriority(pathId: number, priority: number): Promise<LibraryPathResponse> {
+  return updateLibraryPath(pathId, { priority })
 }
