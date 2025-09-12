@@ -135,12 +135,43 @@ export function ReaderControls({
                 <DropdownMenuSeparator />
                 
                 <DropdownMenuItem
+                  onClick={() => {
+                    const modes = ['single', 'double', 'vertical'] as const
+                    const currentIndex = modes.indexOf(settings.readingMode)
+                    const nextMode = modes[(currentIndex + 1) % modes.length]
+                    onSettingsChange({ readingMode: nextMode })
+                  }}
+                >
+                  Reading Mode: {settings.readingMode === 'single' ? 'Single Page' : 
+                                settings.readingMode === 'double' ? 'Double Page' : 
+                                'Vertical Scroll'}
+                </DropdownMenuItem>
+                
+                <DropdownMenuItem
+                  onClick={() => onSettingsChange({ 
+                    autoDetectMode: !settings.autoDetectMode 
+                  })}
+                >
+                  Auto-detect Mode: {settings.autoDetectMode ? 'On' : 'Off'}
+                </DropdownMenuItem>
+                
+                <DropdownMenuItem
                   onClick={() => onSettingsChange({ 
                     readingDirection: settings.readingDirection === 'ltr' ? 'rtl' : 'ltr' 
                   })}
                 >
                   Reading Direction: {settings.readingDirection.toUpperCase()}
                 </DropdownMenuItem>
+                
+                {settings.readingMode === 'double' && (
+                  <DropdownMenuItem
+                    onClick={() => onSettingsChange({ 
+                      doublePageOffset: !settings.doublePageOffset 
+                    })}
+                  >
+                    Start on: {settings.doublePageOffset ? 'Even Page' : 'Odd Page'}
+                  </DropdownMenuItem>
+                )}
                 
                 <DropdownMenuItem
                   onClick={() => {

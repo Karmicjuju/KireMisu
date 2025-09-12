@@ -4,6 +4,9 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useReaderStore } from '@/lib/reader-store'
 import { ReaderPage } from './ReaderPage'
 import { ReaderControls } from './ReaderControls'
+import { SinglePageMode } from './modes/SinglePageMode'
+import { DoublePageMode } from './modes/DoublePageMode'
+import { VerticalScrollMode } from './modes/VerticalScrollMode'
 import { cn } from '@/lib/utils'
 
 interface MangaReaderProps {
@@ -35,6 +38,8 @@ export function MangaReader({ onChapterChange }: MangaReaderProps) {
   const [lastActivity, setLastActivity] = useState(Date.now())
   
   const currentPage = pages[currentPageIndex]
+  const nextPageIndex = currentPageIndex + 1
+  const nextPage = nextPageIndex < pages.length ? pages[nextPageIndex] : null
   
   // Auto-hide controls after inactivity
   useEffect(() => {
@@ -151,23 +156,37 @@ export function MangaReader({ onChapterChange }: MangaReaderProps) {
   
   // Handle page navigation with chapter boundaries
   const handleNextPage = () => {
-    const success = nextPage()
-    if (!success && navigation?.nextChapter) {
+    // In double page mode, advance by 2 pages
+    const increment = settings.readingMode === 'double' ? 2 : 1
+    const nextIndex = currentPageIndex + increment
+    
+    if (nextIndex < pages.length) {
+      goToPage(nextIndex)
+      return true
+    } else if (navigation?.nextChapter) {
       // End of chapter, ask user or auto-navigate
       if (confirm(`End of chapter. Go to next chapter: ${navigation.nextChapter.title || navigation.nextChapter.number}?`)) {
         handleNextChapter()
       }
     }
+    return false
   }
   
   const handlePreviousPage = () => {
-    const success = previousPage()
-    if (!success && navigation?.previousChapter) {
+    // In double page mode, go back by 2 pages
+    const decrement = settings.readingMode === 'double' ? 2 : 1
+    const prevIndex = currentPageIndex - decrement
+    
+    if (prevIndex >= 0) {
+      goToPage(prevIndex)
+      return true
+    } else if (navigation?.previousChapter) {
       // Beginning of chapter, ask user or auto-navigate
       if (confirm(`Beginning of chapter. Go to previous chapter: ${navigation.previousChapter.title || navigation.previousChapter.number}?`)) {
         handlePreviousChapter()
       }
     }
+    return false
   }
   
   if (!chapterId || !currentPage) {
@@ -192,17 +211,52 @@ export function MangaReader({ onChapterChange }: MangaReaderProps) {
     >
       {/* Main reader content */}
       <div className="relative h-screen flex items-center justify-center">
-        <ReaderPage
-          chapterId={chapterId}
-          page={currentPage}
-          settings={settings}
-          onLoad={() => {
-            // Handle page load if needed
-          }}
-          onError={(error) => {
-            console.error('Page load error:', error)
-          }}
-        />
+        {settings.readingMode === 'single' && (
+          <SinglePageMode
+            chapterId={chapterId}
+            page={currentPage}
+            settings={settings}
+            onPageLoad={() => {
+              // Handle page load if needed
+            }}
+            onPageError={(error) => {
+              console.error('Page load error:', error)
+            }}
+          />
+        )}
+        
+        {settings.readingMode === 'double' && (
+          <DoublePageMode
+            chapterId={chapterId}
+            leftPage={settings.doublePageOffset && currentPageIndex === 0 ? null : currentPage}
+            rightPage={settings.doublePageOffset && currentPageIndex === 0 ? currentPage : nextPage}
+            settings={settings}
+            onPageLoad={(pageIndex) => {
+              // Handle page load if needed
+            }}
+            onPageError={(pageIndex, error) => {
+              console.error(`Page ${pageIndex} load error:`, error)
+            }}
+          />
+        )}
+        
+        {settings.readingMode === 'vertical' && (
+          <VerticalScrollMode
+            chapterId={chapterId}
+            pages={pages}
+            currentPageIndex={currentPageIndex}
+            settings={settings}
+            onPageChange={(pageIndex) => {
+              goToPage(pageIndex)
+            }}
+            onPageLoad={(pageIndex) => {
+              // Handle page load if needed
+            }}
+            onPageError={(pageIndex, error) => {
+              console.error(`Page ${pageIndex} load error:`, error)
+            }}
+          />
+        )}
       </div>
       
       {/* Reader controls overlay */}

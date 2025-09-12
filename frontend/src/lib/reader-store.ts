@@ -1,13 +1,18 @@
 import { create } from 'zustand'
 import { devtools, persist } from 'zustand/middleware'
 
+export type ReadingMode = 'single' | 'double' | 'vertical'
+
 export interface ReaderSettings {
+  readingMode: ReadingMode
   readingDirection: 'ltr' | 'rtl'
   pageFit: 'width' | 'height' | 'screen'
   zoomLevel: number
   preloadPages: number
   showPageNumbers: boolean
   fullscreenMode: boolean
+  autoDetectMode: boolean
+  doublePageOffset: boolean // For starting double page on even/odd pages
 }
 
 export interface ReadingProgress {
@@ -95,12 +100,15 @@ interface ReaderState {
 }
 
 const defaultSettings: ReaderSettings = {
+  readingMode: 'single',
   readingDirection: 'ltr',
   pageFit: 'width',
   zoomLevel: 1.0,
   preloadPages: 3,
   showPageNumbers: true,
   fullscreenMode: false,
+  autoDetectMode: true,
+  doublePageOffset: false,
 }
 
 export const useReaderStore = create<ReaderState>()(
@@ -133,12 +141,21 @@ export const useReaderStore = create<ReaderState>()(
             loaded: false,
           }))
           
+          // Apply suggested reading mode if auto-detect is enabled
+          const state = get()
+          const settings = { ...state.settings }
+          
+          if (settings.autoDetectMode && chapterData.suggested_reading_mode) {
+            settings.readingMode = chapterData.suggested_reading_mode
+          }
+          
           set({
             chapterId,
             chapterTitle: chapterData.chapter_title,
             seriesTitle: chapterData.series_title,
             pages,
             currentPageIndex: chapterData.current_page || 0,
+            settings,
             progress: chapterData.reading_progress ? {
               chapterId: chapterData.chapter_id,
               currentPage: chapterData.reading_progress.current_page,

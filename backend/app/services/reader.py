@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime, timedelta
 import logging
+from PIL import Image
+from io import BytesIO
 
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
@@ -144,6 +146,9 @@ class ReaderService:
             # Get or initialize reading progress
             progress = self._get_reading_progress(chapter_id, user_id, len(pages))
             
+            # Detect optimal reading mode
+            suggested_mode = self.detect_reading_mode(chapter.file_path)
+            
             return {
                 'chapter_id': chapter_id,
                 'chapter_number': str(chapter.number),
@@ -152,6 +157,7 @@ class ReaderService:
                 'pages': pages,
                 'page_count': len(pages),
                 'current_page': progress.current_page,
+                'suggested_reading_mode': suggested_mode,
                 'reading_progress': {
                     'current_page': progress.current_page,
                     'total_pages': progress.total_pages,
@@ -383,6 +389,64 @@ class ReaderService:
             self.progress_cache[progress_key] = progress
         
         return progress
+    
+    def detect_reading_mode(self, chapter_path: str, sample_pages: int = 3) -> str:
+        """
+        Detect the optimal reading mode based on image dimensions.
+        
+        Args:
+            chapter_path: Path to the chapter file
+            sample_pages: Number of pages to sample for detection
+            
+        Returns:
+            Reading mode: 'single', 'double', or 'vertical'
+        """
+        try:
+            # Get page list
+            pages = self.extractor.get_page_list(chapter_path)
+            if not pages:
+                return 'single'  # Default to single page
+            
+            # Sample first few pages
+            pages_to_check = pages[:min(sample_pages, len(pages))]
+            aspect_ratios = []
+            
+            for page_filename in pages_to_check:
+                try:
+                    # Extract page image
+                    image_data, _ = self.extractor.extract_page(chapter_path, page_filename)
+                    
+                    # Analyze image dimensions
+                    with Image.open(BytesIO(image_data)) as img:
+                        width, height = img.size
+                        aspect_ratio = width / height if height > 0 else 1.0
+                        aspect_ratios.append(aspect_ratio)
+                        
+                        # Check for webtoon format (very tall images)
+                        if height > width * 3:  # Height is more than 3x width
+                            return 'vertical'
+                
+                except Exception as e:
+                    logger.warning(f"Failed to analyze page {page_filename}: {e}")
+                    continue
+            
+            if not aspect_ratios:
+                return 'single'  # Default if no pages could be analyzed
+            
+            # Calculate average aspect ratio
+            avg_aspect_ratio = sum(aspect_ratios) / len(aspect_ratios)
+            
+            # Determine reading mode based on aspect ratio
+            if avg_aspect_ratio < 0.5:  # Very tall images (webtoon)
+                return 'vertical'
+            elif avg_aspect_ratio > 1.3:  # Wide images (likely double page spreads)
+                return 'double'
+            else:  # Standard manga pages
+                return 'single'
+                
+        except Exception as e:
+            logger.error(f"Error detecting reading mode: {e}")
+            return 'single'  # Default to single page on error
     
     async def preload_pages(
         self, 
