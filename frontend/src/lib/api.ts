@@ -4,7 +4,14 @@ import type {
   LibraryPathUpdate, 
   PathValidationResult, 
   StorageInfo, 
-  DirectoryBrowseResponse 
+  DirectoryBrowseResponse,
+  FilterOptions,
+  SeriesFilter,
+  SortOption,
+  FilterPreset,
+  FilterPresetCreate,
+  FilterPresetUpdate,
+  FilteredSeriesResponse
 } from './types'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -19,18 +26,26 @@ class ApiError extends Error {
 // CSRF Token Management
 let csrfToken: string | null = null
 
-function generateCSRFToken(): string {
-  // Generate a cryptographically secure random token
-  const array = new Uint8Array(32)
-  crypto.getRandomValues(array)
-  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('')
-}
-
-function getCSRFToken(): string {
+async function getCSRFToken(): Promise<string> {
   if (!csrfToken) {
-    csrfToken = generateCSRFToken()
-    // Store in a secure cookie that JavaScript can read
-    document.cookie = `csrf_token=${csrfToken}; SameSite=Strict; Secure=${location.protocol === 'https:'}; Path=/`
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/csrf-token`, {
+        method: 'GET',
+        credentials: 'include'
+      })
+      if (response.ok) {
+        const data = await response.json()
+        csrfToken = data.csrf_token
+      } else {
+        throw new Error('Failed to get CSRF token')
+      }
+    } catch (error) {
+      console.error('Failed to get CSRF token:', error)
+      // Fallback: generate a token locally (not ideal but prevents blocking)
+      const array = new Uint8Array(32)
+      crypto.getRandomValues(array)
+      csrfToken = Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('')
+    }
   }
   return csrfToken
 }
@@ -48,7 +63,7 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<an
   // Add CSRF token for state-changing operations
   const method = options.method || 'GET'
   if (typeof window !== 'undefined' && isStateChangingMethod(method)) {
-    headers['X-CSRF-Token'] = getCSRFToken()
+    headers['X-CSRF-Token'] = await getCSRFToken()
   }
   
   try {
@@ -369,4 +384,55 @@ export async function deactivateLibraryPath(pathId: number): Promise<LibraryPath
 
 export async function updateLibraryPathPriority(pathId: number, priority: number): Promise<LibraryPathResponse> {
   return updateLibraryPath(pathId, { priority })
+}
+
+// Filtering and Sorting API functions
+export async function filterSeries(
+  filters: SeriesFilter,
+  sortOptions?: SortOption[],
+  page: number = 1,
+  pageSize: number = 50
+): Promise<FilteredSeriesResponse> {
+  return fetchWithAuth('/api/v1/series/filter', {
+    method: 'POST',
+    body: JSON.stringify({
+      filters,
+      sort_options: sortOptions,
+      page,
+      page_size: pageSize
+    })
+  })
+}
+
+export async function getFilterOptions(): Promise<FilterOptions> {
+  return fetchWithAuth('/api/v1/series/filter/options')
+}
+
+// Filter Preset API functions
+export async function getFilterPresets(): Promise<FilterPreset[]> {
+  return fetchWithAuth('/api/v1/filter-presets/')
+}
+
+export async function createFilterPreset(data: FilterPresetCreate): Promise<FilterPreset> {
+  return fetchWithAuth('/api/v1/filter-presets/', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+}
+
+export async function getFilterPreset(presetId: number): Promise<FilterPreset> {
+  return fetchWithAuth(`/api/v1/filter-presets/${presetId}`)
+}
+
+export async function updateFilterPreset(presetId: number, data: FilterPresetUpdate): Promise<FilterPreset> {
+  return fetchWithAuth(`/api/v1/filter-presets/${presetId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  })
+}
+
+export async function deleteFilterPreset(presetId: number): Promise<void> {
+  return fetchWithAuth(`/api/v1/filter-presets/${presetId}`, {
+    method: 'DELETE'
+  })
 }

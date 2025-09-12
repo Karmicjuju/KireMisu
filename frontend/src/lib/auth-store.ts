@@ -170,9 +170,11 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'kiremisu-auth',
-      storage: createJSONStorage(() => localStorage),
-      // Only persist certain fields
+      storage: createJSONStorage(() => sessionStorage), // Use sessionStorage for session-based persistence
+      // Persist authentication state for the session - use localStorage only for "Remember me"
       partialize: (state) => ({ 
+        user: state.user,
+        isAuthenticated: state.isAuthenticated,
         rememberMe: state.rememberMe,
         lastTokenRefresh: state.lastTokenRefresh
       }),

@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator"
 import { 
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -350,6 +351,9 @@ export default function LibraryPathsPage() {
             <DialogTitle>
               {editingPath ? "Edit Library Path" : "Add Library Path"}
             </DialogTitle>
+            <DialogDescription>
+              {editingPath ? "Modify the library path settings." : "Create a new library path to organize your manga collection."}
+            </DialogDescription>
           </DialogHeader>
           
           <Form {...form}>

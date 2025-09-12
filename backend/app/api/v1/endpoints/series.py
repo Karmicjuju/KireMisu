@@ -1,5 +1,5 @@
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
@@ -11,6 +11,12 @@ from app.schemas.series import (
     SeriesResponse, 
     SeriesListResponse,
     SeriesWithChaptersResponse
+)
+from app.schemas.filters import (
+    SeriesFilterParams,
+    SeriesSortParams, 
+    SeriesFilterRequest,
+    SeriesFilterResponse
 )
 from app.users import current_active_user
 from app.core.rate_limit import create_rate_limit_dependency
@@ -397,4 +403,113 @@ async def bulk_update_series(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while bulk updating series"
+        )
+
+
+@router.post("/filter", response_model=SeriesFilterResponse)
+async def filter_and_sort_series(
+    request: Request,
+    filter_request: SeriesFilterRequest,
+    current_user = Depends(current_active_user),
+    series_service: SeriesService = Depends(get_series_service),
+    _rate_limit = Depends(search_rate_limit),
+):
+    """
+    Get series with comprehensive filtering and sorting capabilities.
+    
+    - **page**: Page number (starts from 1)
+    - **size**: Number of items per page (max 100)
+    - **filters**: Filter parameters (optional)
+    - **sorting**: Sort parameters (optional)
+    - **preset_id**: Use saved filter preset (optional)
+    
+    This endpoint supports advanced filtering by:
+    - Text search (title, author, artist, description)
+    - Status filters (ongoing, completed, hiatus, etc.)
+    - Author/artist filters
+    - Genre/tag filters (from JSONB metadata)
+    - Date range filters (created, updated, last_read)
+    - Rating filters
+    - Read status filters
+    
+    And comprehensive sorting by:
+    - Title (A-Z, Z-A)
+    - Author/artist
+    - Status
+    - Created/updated dates
+    - Rating
+    - Last read date
+    """
+    try:
+        return await series_service.get_filtered_and_sorted_series(
+            filters=filter_request.filters,
+            sorting=filter_request.sorting,
+            preset_id=filter_request.preset_id,
+            user_id=str(current_user.id),
+            page=filter_request.page,
+            size=filter_request.size
+        )
+    except ValueError as e:
+        logger.warning(f"Invalid request in filter_and_sort_series: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error in filter_and_sort_series: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while filtering and sorting series"
+        )
+
+
+@router.get("/filter/options", response_model=Dict[str, List[str]])
+async def get_series_filter_options(
+    request: Request,
+    current_user = Depends(current_active_user),
+    series_service: SeriesService = Depends(get_series_service),
+    _rate_limit = Depends(read_rate_limit),
+):
+    """
+    Get available filter options for building filter UI.
+    
+    Returns distinct values for:
+    - statuses: All unique series statuses
+    - authors: All unique authors
+    - artists: All unique artists
+    - genres: All unique genres from JSONB metadata
+    - tags: All unique tags from JSONB metadata
+    """
+    try:
+        return await series_service.get_series_filter_options()
+    except Exception as e:
+        logger.error(f"Unexpected error in get_series_filter_options: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while retrieving filter options"
+        )
+
+
+@router.post("/filter/clear", response_model=SeriesListResponse)
+async def clear_all_filters(
+    request: Request,
+    page: int = Query(1, ge=1, description="Page number"),
+    size: int = Query(20, ge=1, le=100, description="Page size"),
+    current_user = Depends(current_active_user),
+    series_service: SeriesService = Depends(get_series_service),
+    _rate_limit = Depends(read_rate_limit),
+):
+    """
+    Clear all filters and return all series (same as GET /).
+    
+    - **page**: Page number (starts from 1)
+    - **size**: Number of items per page (max 100)
+    """
+    try:
+        return await series_service.get_all_series_paginated(page, size)
+    except ValueError as e:
+        logger.warning(f"Invalid request in clear_all_filters: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error in clear_all_filters: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while clearing filters"
         )

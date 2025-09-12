@@ -5,6 +5,7 @@ import { Folder, ChevronRight, ArrowUp, HardDrive } from "lucide-react"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -121,6 +122,9 @@ export function FileBrowserDialog({
             <HardDrive className="h-5 w-5" />
             Choose a Folder
           </DialogTitle>
+          <DialogDescription>
+            Browse and select a folder to add as a library path.
+          </DialogDescription>
         </DialogHeader>
 
         {/* Path Input */}

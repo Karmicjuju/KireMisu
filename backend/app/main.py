@@ -141,6 +141,9 @@ class CSRFProtectionMiddleware(BaseHTTPMiddleware):
     # Endpoints that are exempt from CSRF protection (like CSRF token generation)
     EXEMPT_PATHS: Set[str] = {
         "/api/v1/auth/csrf-token",  # Token generation endpoint
+        "/api/v1/auth/login",       # Login endpoint
+        "/api/v1/auth/logout",      # Logout endpoint
+        "/api/v1/auth/register",    # Registration endpoint
         "/docs",
         "/openapi.json",
         "/redoc",

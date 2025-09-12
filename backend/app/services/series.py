@@ -5,7 +5,11 @@ from math import ceil
 from app.models.series import Series
 from app.repositories.series_async import AsyncSeriesRepository
 from app.services.metadata_history import MetadataHistoryService
+from app.services.filter_preset import FilterPresetService
 from app.schemas.series import SeriesCreate, SeriesUpdate, SeriesListResponse, SeriesResponse
+from app.schemas.filters import (
+    SeriesFilterParams, SeriesSortParams, SeriesFilterResponse
+)
 
 
 class SeriesService:
@@ -15,6 +19,7 @@ class SeriesService:
         self.db = db
         self.series_repo = AsyncSeriesRepository(db)
         self.history_service = MetadataHistoryService(db)
+        self.preset_service = FilterPresetService(db)
 
     async def create_series(
         self, series_data: SeriesCreate, user_id: Optional[str] = None
@@ -356,3 +361,67 @@ class SeriesService:
             except Exception as e:
                 # Transaction will be automatically rolled back on exception
                 raise e
+
+    async def get_filtered_and_sorted_series(
+        self,
+        filters: Optional[SeriesFilterParams] = None,
+        sorting: Optional[SeriesSortParams] = None,
+        preset_id: Optional[int] = None,
+        user_id: Optional[str] = None,
+        page: int = 1,
+        size: int = 20
+    ) -> SeriesFilterResponse:
+        """Get series with comprehensive filtering and sorting."""
+        # Validate pagination parameters
+        if page < 1:
+            page = 1
+        if size < 1 or size > 100:
+            size = 20
+
+        # Load preset filters if specified
+        preset_filters = None
+        preset_sorting = None
+        if preset_id and user_id:
+            preset_filters, preset_sorting = await self.preset_service.get_preset_filters_and_sorting(
+                preset_id, user_id
+            )
+        
+        # Use preset filters/sorting as defaults, override with provided parameters
+        final_filters = filters or preset_filters
+        final_sorting = sorting or preset_sorting
+
+        skip = (page - 1) * size
+        series_list, total_count = await self.series_repo.get_filtered_series(
+            filters=final_filters,
+            sorting=final_sorting,
+            skip=skip,
+            limit=size
+        )
+        
+        total_pages = ceil(total_count / size) if total_count > 0 else 1
+
+        # Convert to response format
+        series_responses = [SeriesResponse.model_validate(series) for series in series_list]
+        series_dict_responses = [response.model_dump() for response in series_responses]
+
+        # Prepare applied filters and sorting for response
+        applied_filters = final_filters.model_dump(exclude_unset=True, exclude_none=True) if final_filters else {}
+        applied_sorting = final_sorting.model_dump(exclude_unset=True, exclude_none=True) if final_sorting else {}
+
+        return SeriesFilterResponse(
+            items=series_dict_responses,
+            total=total_count,
+            page=page,
+            size=size,
+            pages=total_pages,
+            applied_filters=applied_filters,
+            applied_sorting=applied_sorting
+        )
+
+    async def get_series_filter_options(self) -> Dict[str, List[str]]:
+        """Get available filter options for dropdowns."""
+        return await self.series_repo.get_series_filter_options()
+
+    async def clear_all_filters(self) -> SeriesListResponse:
+        """Get all series without any filters (equivalent to get_all_series_paginated)."""
+        return await self.get_all_series_paginated()

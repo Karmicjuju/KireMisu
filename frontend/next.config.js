@@ -57,7 +57,24 @@ const nextConfig = {
           },
           {
             key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()'
+            value: [
+              'accelerometer=()',
+              'autoplay=()',
+              'camera=()',
+              'display-capture=()',
+              'encrypted-media=()',
+              'fullscreen=()',
+              'geolocation=()',
+              'gyroscope=()',
+              'magnetometer=()',
+              'microphone=()',
+              'midi=()',
+              'payment=()',
+              'picture-in-picture=()',
+              'usb=()',
+              'web-share=()',
+              'xr-spatial-tracking=()'
+            ].join(', ')
           }
         ],
       },

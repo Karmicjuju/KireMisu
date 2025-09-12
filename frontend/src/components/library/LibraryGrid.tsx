@@ -1,12 +1,16 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Grid, List, Search, SlidersHorizontal } from 'lucide-react'
+import { Grid, List, Search, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Toggle } from '@/components/ui/toggle'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SeriesCard } from './SeriesCard'
+import { FilterPanel } from './FilterPanel'
+import { QuickSort } from './SortControls'
+import { useFilterStore } from '@/lib/filter-store'
+import { filterSeries } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 interface Series {
@@ -23,10 +27,6 @@ interface Series {
 }
 
 interface LibraryGridProps {
-  series?: Series[]
-  isLoading?: boolean
-  error?: string | null
-  onSearch?: (query: string) => void
   onRefresh?: () => void
   className?: string
 }
@@ -35,18 +35,33 @@ type ViewMode = 'grid' | 'list'
 type GridDensity = 'comfortable' | 'compact' | 'cozy'
 
 export function LibraryGrid({
-  series = [],
-  isLoading = false,
-  error = null,
-  onSearch,
   onRefresh,
   className
 }: LibraryGridProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [gridDensity, setGridDensity] = useState<GridDensity>('comfortable')
-  const [searchQuery, setSearchQuery] = useState('')
   const [selectedSeries, setSelectedSeries] = useState<number[]>([])
   const [currentFocus, setCurrentFocus] = useState<number>(-1)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  // Get filter store state
+  const {
+    activeFilters,
+    sortOptions,
+    isLoading,
+    error,
+    updateFilter,
+    setFilteredResults,
+    setLoading,
+    setError,
+    currentPage,
+    setCurrentPage
+  } = useFilterStore()
+  
+  // Get filtered results from store - direct selectors to avoid re-renders
+  const filteredSeries = useFilterStore(state => state.filteredSeries)
+  const totalCount = useFilterStore(state => state.totalCount)
+  const filteredCount = useFilterStore(state => state.filteredCount)
 
   // Load preferences from localStorage
   useEffect(() => {
@@ -84,28 +99,64 @@ export function LibraryGrid({
     }
   }, [gridDensity])
 
-  // Filter series based on search query
-  const filteredSeries = useMemo(() => {
-    if (!searchQuery.trim()) return series
+  // Fetch filtered series when filters or sort options change
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout
     
-    const query = searchQuery.toLowerCase()
-    return series.filter(s => 
-      s.title.toLowerCase().includes(query) ||
-      s.author?.toLowerCase().includes(query) ||
-      s.artist?.toLowerCase().includes(query) ||
-      s.description?.toLowerCase().includes(query)
-    )
-  }, [series, searchQuery])
-
-  // Handle search with debouncing
-  const handleSearchChange = useCallback((value: string) => {
-    setSearchQuery(value)
-    if (onSearch) {
-      // Simple debouncing
-      const timeoutId = setTimeout(() => onSearch(value), 300)
-      return () => clearTimeout(timeoutId)
+    const fetchFilteredSeries = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        
+        const response = await filterSeries(
+          activeFilters,
+          sortOptions.length > 0 ? sortOptions : undefined,
+          currentPage,
+          50 // page size
+        )
+        
+        setFilteredResults(response)
+      } catch (error) {
+        console.error('Error fetching filtered series:', error)
+        setError('Failed to load series. Please try again.')
+      } finally {
+        setLoading(false)
+      }
     }
-  }, [onSearch])
+
+    // Debounce the filter requests
+    timeoutId = setTimeout(fetchFilteredSeries, 300)
+    
+    return () => clearTimeout(timeoutId)
+  }, [activeFilters, sortOptions, currentPage, setLoading, setError, setFilteredResults])
+
+  // Handle search with immediate filter update
+  const handleSearchChange = useCallback((value: string) => {
+    updateFilter('title_search', value || undefined)
+  }, [updateFilter])
+
+  // Handle refresh
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true)
+    try {
+      if (onRefresh) {
+        await onRefresh()
+      }
+      // Re-fetch current filters
+      const response = await filterSeries(
+        activeFilters,
+        sortOptions.length > 0 ? sortOptions : undefined,
+        currentPage,
+        50
+      )
+      setFilteredResults(response)
+    } catch (error) {
+      console.error('Error refreshing series:', error)
+      setError('Failed to refresh series. Please try again.')
+    } finally {
+      setIsRefreshing(false)
+    }
+  }, [onRefresh, activeFilters, sortOptions, currentPage, setFilteredResults, setError])
 
   // Handle series selection
   const handleSeriesSelect = useCallback((series: Series) => {
@@ -118,7 +169,7 @@ export function LibraryGrid({
 
   // Keyboard navigation
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (filteredSeries.length === 0) return
+    if (!filteredSeries || filteredSeries.length === 0) return
 
     const maxIndex = filteredSeries.length - 1
     
@@ -232,26 +283,30 @@ export function LibraryGrid({
         <Search className="h-12 w-12 text-muted-foreground" />
       </div>
       <h3 className="text-lg font-semibold mb-2">
-        {searchQuery ? 'No results found' : 'No series in your library'}
+        {filteredCount === 0 && totalCount > 0 ? 'No results found' : 'No series in your library'}
       </h3>
       <p className="text-muted-foreground mb-4 max-w-md">
-        {searchQuery 
-          ? `No series match "${searchQuery}". Try adjusting your search terms.`
+        {filteredCount === 0 && totalCount > 0
+          ? 'No series match your current filters. Try adjusting your filter criteria.'
           : 'Start building your manga collection by adding series to your library.'
         }
       </p>
-      {searchQuery ? (
+      {filteredCount === 0 && totalCount > 0 ? (
         <Button 
           variant="outline" 
-          onClick={() => setSearchQuery('')}
+          onClick={() => {
+            updateFilter('title_search', undefined)
+            // You could also clear all filters here if desired
+          }}
         >
           Clear search
         </Button>
-      ) : onRefresh ? (
-        <Button onClick={onRefresh}>
+      ) : (
+        <Button onClick={handleRefresh} disabled={isRefreshing}>
+          <RefreshCw className={cn("h-4 w-4 mr-2", isRefreshing && "animate-spin")} />
           Refresh Library
         </Button>
-      ) : null}
+      )}
     </div>
   )
 
@@ -268,11 +323,10 @@ export function LibraryGrid({
         <p className="text-muted-foreground mb-4 max-w-md">
           {error}
         </p>
-        {onRefresh && (
-          <Button variant="outline" onClick={onRefresh}>
-            Try again
-          </Button>
-        )}
+        <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing}>
+          <RefreshCw className={cn("h-4 w-4 mr-2", isRefreshing && "animate-spin")} />
+          Try again
+        </Button>
       </div>
     )
   }
@@ -290,7 +344,7 @@ export function LibraryGrid({
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
             <Input
               placeholder="Search manga by title, author, or artist..."
-              value={searchQuery}
+              value={activeFilters.title_search || ''}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-10"
             />
@@ -298,6 +352,9 @@ export function LibraryGrid({
         </div>
         
         <div className="flex items-center gap-2">
+          {/* Quick Sort */}
+          <QuickSort />
+          
           {/* Grid density selector */}
           {viewMode === 'grid' && (
             <div className="flex items-center border rounded-md">
@@ -338,10 +395,17 @@ export function LibraryGrid({
             </Toggle>
           </div>
 
-          {/* Filter button (future functionality) */}
-          <Button variant="outline" size="sm" disabled>
-            <SlidersHorizontal className="h-4 w-4 mr-2" />
-            Filter
+          {/* Filter Panel */}
+          <FilterPanel />
+          
+          {/* Refresh button */}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
           </Button>
         </div>
       </div>
@@ -351,7 +415,7 @@ export function LibraryGrid({
         {isLoading ? (
           'Loading...'
         ) : (
-          `${filteredSeries.length} of ${series.length} series`
+          `${filteredCount} of ${totalCount} series`
         )}
         {selectedSeries.length > 0 && (
           <span className="ml-2">
@@ -363,11 +427,11 @@ export function LibraryGrid({
       {/* Content */}
       {isLoading ? (
         renderLoadingSkeleton()
-      ) : filteredSeries.length === 0 ? (
+      ) : !filteredSeries || filteredSeries.length === 0 ? (
         renderEmptyState()
       ) : (
         <div className={viewMode === 'grid' ? getGridClasses() : 'space-y-4'}>
-          {filteredSeries.map((series, index) => (
+          {filteredSeries?.map((series, index) => (
             <SeriesCard
               key={series.id}
               series={series}

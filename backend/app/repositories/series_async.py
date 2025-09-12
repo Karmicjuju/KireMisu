@@ -1,12 +1,16 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy import desc, or_, func, update, delete
+from sqlalchemy import desc, or_, and_, func, update, delete, asc, cast, String, text
 from sqlalchemy.future import select
 
 from app.models.series import Series
 from app.schemas.series import SeriesCreate, SeriesUpdate
+from app.schemas.filters import (
+    SeriesFilterParams, SeriesSortParams, SortField, SortDirection, 
+    FilterLogic, SeriesStatus, ReadStatus
+)
 
 # Setup logging for database operations
 logger = logging.getLogger(__name__)
@@ -268,3 +272,232 @@ class AsyncSeriesRepository:
             await self.db.rollback()
             logger.error(f"Database error during bulk series update: {str(e)}")
             raise ValueError("Bulk update failed due to database error")
+
+    async def get_filtered_series(
+        self,
+        filters: Optional[SeriesFilterParams] = None,
+        sorting: Optional[SeriesSortParams] = None,
+        skip: int = 0,
+        limit: int = 20
+    ) -> Tuple[List[Series], int]:
+        """Get filtered and sorted series with count."""
+        query = select(Series)
+        count_query = select(func.count(Series.id))
+        
+        # Apply filters
+        if filters:
+            filter_conditions = self._build_filter_conditions(filters)
+            if filter_conditions is not None:
+                query = query.where(filter_conditions)
+                count_query = count_query.where(filter_conditions)
+        
+        # Apply sorting
+        if sorting and sorting.sort_by:
+            order_clauses = self._build_sort_clauses(sorting.sort_by)
+            query = query.order_by(*order_clauses)
+        else:
+            # Default sort by created_at desc
+            query = query.order_by(desc(Series.created_at))
+        
+        # Apply pagination
+        query = query.offset(skip).limit(limit)
+        
+        # Execute queries
+        result = await self.db.execute(query)
+        series_list = result.scalars().all()
+        
+        count_result = await self.db.execute(count_query)
+        total_count = count_result.scalar()
+        
+        return series_list, total_count
+
+    def _build_filter_conditions(self, filters: SeriesFilterParams):
+        """Build SQLAlchemy filter conditions from filter parameters."""
+        conditions = []
+        
+        # Text search
+        if filters.search:
+            search_condition = or_(
+                Series.title.ilike(f"%{filters.search}%"),
+                Series.author.ilike(f"%{filters.search}%"),
+                Series.artist.ilike(f"%{filters.search}%"),
+                Series.description.ilike(f"%{filters.search}%")
+            )
+            conditions.append(search_condition)
+        
+        # Status filters
+        if filters.status:
+            status_conditions = [Series.status == status.value for status in filters.status]
+            if len(status_conditions) == 1:
+                conditions.append(status_conditions[0])
+            else:
+                conditions.append(or_(*status_conditions))
+        
+        # Author filter
+        if filters.author:
+            conditions.append(Series.author.ilike(f"%{filters.author}%"))
+        
+        # Artist filter
+        if filters.artist:
+            conditions.append(Series.artist.ilike(f"%{filters.artist}%"))
+        
+        # Genre filters (using JSONB metadata)
+        if filters.genres:
+            genre_conditions = []
+            for genre in filters.genres:
+                genre_conditions.append(
+                    Series.metadata_json["genres"].astext.op("@>")([genre])
+                )
+            if genre_conditions:
+                if len(genre_conditions) == 1:
+                    conditions.append(genre_conditions[0])
+                else:
+                    # For multiple genres, use OR logic by default
+                    conditions.append(or_(*genre_conditions))
+        
+        # Tag filters (using JSONB metadata)
+        if filters.tags:
+            tag_conditions = []
+            for tag in filters.tags:
+                tag_conditions.append(
+                    Series.metadata_json["tags"].astext.op("@>")([tag])
+                )
+            if tag_conditions:
+                if len(tag_conditions) == 1:
+                    conditions.append(tag_conditions[0])
+                else:
+                    # For multiple tags, use OR logic by default
+                    conditions.append(or_(*tag_conditions))
+        
+        # Date range filters
+        if filters.created_date_range:
+            if filters.created_date_range.start_date:
+                conditions.append(Series.created_at >= filters.created_date_range.start_date)
+            if filters.created_date_range.end_date:
+                conditions.append(Series.created_at <= filters.created_date_range.end_date)
+        
+        if filters.updated_date_range:
+            if filters.updated_date_range.start_date:
+                conditions.append(Series.updated_at >= filters.updated_date_range.start_date)
+            if filters.updated_date_range.end_date:
+                conditions.append(Series.updated_at <= filters.updated_date_range.end_date)
+        
+        # Rating filters (using JSONB metadata)
+        if filters.rating_filter:
+            if filters.rating_filter.min_rating is not None:
+                conditions.append(
+                    cast(Series.metadata_json["rating"], String).cast(func.numeric) >= filters.rating_filter.min_rating
+                )
+            if filters.rating_filter.max_rating is not None:
+                conditions.append(
+                    cast(Series.metadata_json["rating"], String).cast(func.numeric) <= filters.rating_filter.max_rating
+                )
+        
+        # Read status filters (using JSONB metadata) 
+        if filters.read_status:
+            read_status_conditions = []
+            for status in filters.read_status:
+                read_status_conditions.append(
+                    Series.metadata_json["read_status"].astext == status.value
+                )
+            if read_status_conditions:
+                if len(read_status_conditions) == 1:
+                    conditions.append(read_status_conditions[0])
+                else:
+                    conditions.append(or_(*read_status_conditions))
+        
+        # Combine conditions based on filter logic
+        if not conditions:
+            return None
+        
+        if len(conditions) == 1:
+            return conditions[0]
+        
+        if filters.filter_logic == FilterLogic.OR:
+            return or_(*conditions)
+        else:
+            return and_(*conditions)
+
+    def _build_sort_clauses(self, sort_criteria: List) -> List:
+        """Build SQLAlchemy order clauses from sort criteria."""
+        order_clauses = []
+        
+        for criteria in sort_criteria:
+            field = criteria.field
+            direction = criteria.direction
+            
+            # Map sort fields to SQLAlchemy columns
+            column_mapping = {
+                SortField.TITLE: Series.title,
+                SortField.AUTHOR: Series.author,
+                SortField.ARTIST: Series.artist,
+                SortField.STATUS: Series.status,
+                SortField.CREATED_AT: Series.created_at,
+                SortField.UPDATED_AT: Series.updated_at,
+                SortField.RATING: cast(Series.metadata_json["rating"], String).cast(func.numeric),
+                SortField.LAST_READ: cast(Series.metadata_json["last_read"], String)
+            }
+            
+            column = column_mapping.get(field)
+            if column is not None:
+                if direction == SortDirection.DESC:
+                    order_clauses.append(desc(column))
+                else:
+                    order_clauses.append(asc(column))
+        
+        return order_clauses
+
+    async def get_series_filter_options(self) -> Dict[str, List[str]]:
+        """Get available filter options (statuses, authors, artists, genres, tags)."""
+        # Get distinct values for dropdown filters
+        status_query = select(Series.status).distinct().where(Series.status.is_not(None))
+        author_query = select(Series.author).distinct().where(Series.author.is_not(None))
+        artist_query = select(Series.artist).distinct().where(Series.artist.is_not(None))
+        
+        status_result = await self.db.execute(status_query)
+        author_result = await self.db.execute(author_query)
+        artist_result = await self.db.execute(artist_query)
+        
+        statuses = [row[0] for row in status_result.fetchall() if row[0]]
+        authors = [row[0] for row in author_result.fetchall() if row[0]]
+        artists = [row[0] for row in artist_result.fetchall() if row[0]]
+        
+        # Get genres and tags from JSONB metadata
+        # This is a more complex query to extract distinct values from JSON arrays
+        genres_query = text("""
+            SELECT DISTINCT jsonb_array_elements_text(metadata_json->'genres') as genre
+            FROM series 
+            WHERE metadata_json ? 'genres' 
+            AND jsonb_typeof(metadata_json->'genres') = 'array'
+            ORDER BY genre
+        """)
+        
+        tags_query = text("""
+            SELECT DISTINCT jsonb_array_elements_text(metadata_json->'tags') as tag
+            FROM series 
+            WHERE metadata_json ? 'tags' 
+            AND jsonb_typeof(metadata_json->'tags') = 'array'
+            ORDER BY tag
+        """)
+        
+        try:
+            genres_result = await self.db.execute(genres_query)
+            genres = [row[0] for row in genres_result.fetchall() if row[0]]
+        except Exception as e:
+            logger.warning(f"Could not fetch genres: {e}")
+            genres = []
+        
+        try:
+            tags_result = await self.db.execute(tags_query)
+            tags = [row[0] for row in tags_result.fetchall() if row[0]]
+        except Exception as e:
+            logger.warning(f"Could not fetch tags: {e}")
+            tags = []
+        
+        return {
+            "statuses": sorted(statuses),
+            "authors": sorted(authors),
+            "artists": sorted(artists),
+            "genres": genres,  # Already sorted in query
+            "tags": tags,     # Already sorted in query
+        }

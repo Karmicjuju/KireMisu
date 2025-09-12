@@ -106,10 +106,6 @@ export default function LibraryPage() {
           />
         ) : (
           <LibraryGrid
-            series={series}
-            isLoading={seriesLoading}
-            error={seriesError}
-            onSearch={setSearch}
             onRefresh={refetch}
           />
         )}
