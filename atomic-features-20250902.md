@@ -3,7 +3,7 @@
 **Product Name:** KireMisu  
 **PRD Version:** Current (as of 2025-09-02)  
 **Analysis Date:** September 2, 2025  
-**Total Features:** 47
+**Total Features:** 48 (includes F1.4 Test Data Infrastructure)
 
 ---
 
@@ -103,6 +103,31 @@ Features are organized into logical categories and prioritized for implementatio
 **Complexity:** Medium  
 **Dependencies:** F1.1, F1.2  
 **Technical Notes:** Complete Docker setup with dev and prod configurations
+
+---
+
+### F1.4 - Test Data Infrastructure
+
+**Description:** Provide comprehensive test data (sample manga files, archives) and testing utilities for validating file processing, reading, and archive extraction features.
+
+**User Story:** As a developer/tester, I need sample manga files so that I can properly test archive extraction, reading modes, and file processing functionality.
+
+**Acceptance Criteria:**
+- [ ] Sample CBZ/CBR archives with various manga formats
+- [ ] Test files for different reading modes (standard, double-page, webtoon)
+- [ ] Corrupted/invalid files for error handling testing
+- [ ] Test data setup scripts and documentation
+- [ ] Integration test suite using real files
+- [ ] Performance test data (large archives, many pages)
+- [ ] Playwright integration tests for complete reading flows
+- [ ] Test data cleanup and management utilities
+
+**Priority:** High  
+**Complexity:** Simple  
+**Dependencies:** None  
+**Technical Notes:** Essential for validating F3.2, F3.3, F7.1, F7.2, and all file-processing features. Currently these features only have unit tests with mocked data.
+
+**Blocks:** Integration testing for F3.2, F3.3, F7.1, F7.2, F4.5, F7.4, F9.3, F11.1, F11.2
 
 ---
 
@@ -681,7 +706,7 @@ Features are organized into logical categories and prioritized for implementatio
 
 ---
 
-### F7.2 - Reading Modes ✅ **COMPLETED**
+### F7.2 - Reading Modes 🚧 **PARTIALLY COMPLETE**
 
 **Description:** Support multiple reading modes (single page, double page, vertical scroll).
 
@@ -696,20 +721,21 @@ Features are organized into logical categories and prioritized for implementatio
 - [x] Mode switching during reading
 - [x] Reading direction (left-to-right, right-to-left)
 - [x] Full-screen toggle
+- [ ] **Integration testing with real manga files** (requires F1.4)
 
 **Priority:** Medium  
 **Complexity:** Complex  
-**Dependencies:** F7.1 ✅  
-**Technical Notes:** ✅ **FULLY COMPLETED** - Comprehensive reading modes system with single page, double page spread, and vertical scroll modes. Includes automatic format detection based on image dimensions, mode persistence, and seamless switching during reading.
+**Dependencies:** F7.1 ✅, F1.4 (for full testing)  
+**Technical Notes:** 🚧 **ARCHITECTURALLY COMPLETE** - All components, logic, and UI implemented. Requires real manga files for integration testing and validation.
 
-**Implementation Details:**
-- **Reading Modes**: Three distinct components for single, double page, and vertical scroll modes
-- **Auto-Detection**: Backend analyzes image dimensions to suggest optimal reading mode
-- **Mode Persistence**: User preferences saved in Zustand store with localStorage persistence
-- **Double Page Features**: Configurable page offset for even/odd page starts, RTL/LTR support
-- **Vertical Scroll**: Lazy loading with intersection observer, smooth scrolling, page tracking
-- **UI Controls**: Mode selector in reader controls with auto-detect toggle
-- **Test Coverage**: 100% test coverage with 10 passing tests for all reading mode scenarios
+**Implementation Status:**
+- **✅ Code Complete**: SinglePageMode, DoublePageMode, VerticalScrollMode components
+- **✅ Auto-Detection**: Backend analyzes image dimensions to suggest optimal reading mode
+- **✅ Mode Persistence**: User preferences saved in Zustand store with localStorage persistence
+- **✅ RTL/LTR Support**: Complete right-to-left and left-to-right reading direction support
+- **✅ UI Controls**: Mode selector in reader controls with auto-detect toggle
+- **✅ Unit Tests**: 100% test coverage with mocked data (10 passing tests)
+- **⚠️ Integration Tests**: Needs real manga files for end-to-end validation (blocked by F1.4)
 
 ---
 
@@ -1280,7 +1306,7 @@ Features are organized into logical categories and prioritized for implementatio
 
 ## Current Implementation Status
 
-### ✅ **COMPLETED FEATURES (24/47)**
+### ✅ **COMPLETED FEATURES (23/48)**
 - **F1.1**: Database Schema & Models Setup ✅ **COMPLETED** (All models: User, Series, Chapter)
 - **F1.2**: Application Configuration System ✅ **COMPLETED**
 - **F1.3**: Docker Containerization ✅ **COMPLETED**
@@ -1299,7 +1325,7 @@ Features are organized into logical categories and prioritized for implementatio
 - **F6.2**: Filtering System ✅ **COMPLETED** (Complete filtering system with presets and multiselect filters)
 - **F6.3**: Sorting Options ✅ **COMPLETED** (Complete sorting system with persistence and direction indicators)
 - **F7.1**: Manga Reader Core ✅ **COMPLETED** (Secure archive extraction, full reader UI with navigation)
-- **F7.2**: Reading Modes ✅ **COMPLETED** (Single, double page, vertical scroll with auto-detection)
+- **F7.2**: Reading Modes 🚧 **PARTIALLY COMPLETE** (Code complete, needs integration testing)
 - **F7.3**: Reading Progress Tracking ✅ **COMPLETED** (Complete progress system with history and statistics)
 - **F4.3**: Manual Metadata Editing ✅ **COMPLETED** (Full metadata editing UI with history and preview)
 
@@ -1309,16 +1335,19 @@ Features are organized into logical categories and prioritized for implementatio
 - **Error Handling**: Sanitized error messages, proper logging separation
 - **Security Testing**: Comprehensive test suite validating all security measures
 
+### 🚧 **PARTIALLY COMPLETE FEATURES (1/48)**
+- **F7.2**: Reading Modes 🚧 (Code complete, blocked by F1.4 Test Data Infrastructure)
+
 ### 🚧 **NEXT PRIORITY FEATURES**
-- **F8.1**: Custom Reading Lists
+- **F1.4**: Test Data Infrastructure (HIGH - unblocks integration testing)
+- **F8.1**: Custom Reading Lists  
 - **F4.2**: MangaDex Metadata Enrichment
 - **F3.4**: Scheduled Library Sync
-- **F9.1**: MangaDex API Client
 
 ### 📊 **PROGRESS SUMMARY**
 - **Foundation Phase**: ~100% complete (17/17 core features implemented)
 - **Core Functionality Phase**: ~100% complete (5/5 search, filtering, and reader features)
-- **Overall Progress**: ~51% complete (24/47 features + comprehensive security infrastructure)
+- **Overall Progress**: ~48% complete (23/48 features complete, 1 partially complete + comprehensive security infrastructure)
 - **Authentication System**: Complete end-to-end with UI, logout, protected routes, token refresh, and security hardening
 - **Frontend System**: Complete Next.js 15+ setup with dark/light theme toggle
 - **Navigation System**: Complete with production-grade security and responsive design
